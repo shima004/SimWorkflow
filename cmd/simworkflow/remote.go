@@ -66,8 +66,14 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 				for _, run := range plan.Runs {
 					var summary worker.Summary
 					if err := store.GetJSON(ctx, prefix+"/"+run.ID+"/summary.json", &summary); err != nil {
-						return fmt.Errorf("result for %s is not available: %w", run.ID, err)
+						if !storage.IsNotFound(err) {
+							return fmt.Errorf("result for %s is not available: %w", run.ID, err)
+						}
+						if err := store.GetJSON(ctx, prefix+"/"+run.ID+"/precompute/summary.json", &summary); err != nil {
+							return fmt.Errorf("result for %s is not available: %w", run.ID, err)
+						}
 					}
+					summary.WorkflowPhase = snapshot.Status.Phase
 					summaries = append(summaries, summary)
 				}
 				return encoder.Encode(summaries)
@@ -125,7 +131,7 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 		return errors.New("execution timeout must be at most 20h for signed transfers")
 	}
 	waves := (plan.TotalRuns-1)/plan.MaxParallelRuns + 1
-	if int64(waves) > int64((23*time.Hour)/timeout) {
+	if int64(waves) > int64((23*time.Hour)/(timeout+360*time.Second)) {
 		return errors.New("estimated experiment duration exceeds signed URL validity; split the experiment")
 	}
 	var random [16]byte
@@ -135,7 +141,7 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	executionID := hex.EncodeToString(random[:])
 	prefix := "experiments/" + executionID
 	store := storage.New(c)
-	configs := make([]worker.Config, 0, len(plan.Runs))
+	configs := make([]workflow.RunConfig, 0, len(plan.Runs))
 	downloads := map[string]storage.Transfer{}
 	for _, run := range plan.Runs {
 		mapTransfer, ok := downloads[run.Map.Source]
@@ -147,15 +153,39 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 			downloads[run.Map.Source] = mapTransfer
 		}
 		resultPrefix := prefix + "/" + run.ID
-		bundle, err := store.Upload(ctx, resultPrefix+"/bundle.tar.gz")
-		if err != nil {
-			return err
+		pair := workflow.RunConfig{}
+		for _, stage := range []string{worker.Precompute, worker.Simulation} {
+			stagePrefix := resultPrefix
+			if stage == worker.Precompute {
+				stagePrefix += "/precompute"
+			}
+			bundle, err := store.Upload(ctx, stagePrefix+"/bundle.tar.gz")
+			if err != nil {
+				return err
+			}
+			summary, err := store.Upload(ctx, stagePrefix+"/summary.json")
+			if err != nil {
+				return err
+			}
+			c := worker.Config{Stage: stage, ExecutionID: executionID, Experiment: plan.Experiment.Name, Run: run, TimeoutSeconds: int64(timeout / time.Second), Map: mapTransfer, Bundle: bundle, Summary: summary, ResultPrefix: stagePrefix, Collect: plan.Collect}
+			key := resultPrefix + "/precompute/data.zip"
+			if stage == worker.Precompute {
+				transfer, err := store.Upload(ctx, key)
+				if err != nil {
+					return err
+				}
+				c.PrecomputeUpload = &transfer
+				pair.Precompute = c
+			} else {
+				transfer, err := store.SignDownload(ctx, store.Bucket, key)
+				if err != nil {
+					return err
+				}
+				c.PrecomputeDownload = &transfer
+				pair.Simulation = c
+			}
 		}
-		summary, err := store.Upload(ctx, resultPrefix+"/summary.json")
-		if err != nil {
-			return err
-		}
-		configs = append(configs, worker.Config{ExecutionID: executionID, Experiment: plan.Experiment.Name, Run: run, TimeoutSeconds: int64(timeout / time.Second), Map: mapTransfer, Bundle: bundle, Summary: summary, ResultPrefix: resultPrefix, Collect: plan.Collect})
+		configs = append(configs, pair)
 	}
 	wf, err := workflow.Build(plan, configs, workflow.Options{Namespace: c.Argo.Namespace, HelperImage: *helper, ServiceAccount: *account, ExecutionID: executionID, ResultPrefix: prefix})
 	if err != nil {

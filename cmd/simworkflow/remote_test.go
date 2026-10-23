@@ -22,6 +22,7 @@ func TestRemoteCommands(t *testing.T) {
 	objects := map[string][]byte{}
 	var annotations map[string]string
 	submitted := false
+	precomputeOnly := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -60,8 +61,12 @@ func TestRemoteCommands(t *testing.T) {
 			w.Write(data)
 			return
 		}
+		if precomputeOnly && strings.HasSuffix(r.URL.Path, "/summary.json") && !strings.HasSuffix(r.URL.Path, "/precompute/summary.json") {
+			w.WriteHeader(404)
+			return
+		}
 		if strings.HasSuffix(r.URL.Path, "/summary.json") {
-			json.NewEncoder(w).Encode(worker.Summary{Phase: "Succeeded"})
+			json.NewEncoder(w).Encode(worker.Summary{Stage: worker.Precompute, Phase: "Succeeded"})
 			return
 		}
 		w.WriteHeader(404)
@@ -113,6 +118,19 @@ func TestRemoteCommands(t *testing.T) {
 	var summaries []worker.Summary
 	if err := json.Unmarshal(out.Bytes(), &summaries); err != nil || len(summaries) != 9 {
 		t.Fatalf("expected nine JSON summaries: %v", err)
+	}
+	mu.Lock()
+	precomputeOnly = true
+	mu.Unlock()
+	out.Reset()
+	if err := run([]string{"experiment", "results", "smoke-run"}, lookup, &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(out.Bytes(), &summaries); err != nil {
+		t.Fatal(err)
+	}
+	if summaries[0].Stage != worker.Precompute || summaries[0].WorkflowPhase != "Succeeded" {
+		t.Fatal("results must expose which stage the available summary describes")
 	}
 	mu.Lock()
 	defer mu.Unlock()
