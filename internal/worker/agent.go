@@ -53,7 +53,7 @@ func scenarioCounts(path string) ([]int, error) {
 	return counts, nil
 }
 
-func prepareAgent(root string, c Config) (string, error) {
+func prepareAgent(root string, c Config, role string) (string, error) {
 	runtime := c.Run.Configuration.Runtime
 	extension := "cfg"
 	precompute := "precomp_data"
@@ -70,7 +70,7 @@ func prepareAgent(root string, c Config) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	output := filepath.Join(root, "modules", "module."+extension)
+	output := filepath.Join(root, "modules", role, "module."+extension)
 	if err := os.WriteFile(output, rendered, 0644); err != nil {
 		return "", err
 	}
@@ -97,7 +97,7 @@ func prepareAgent(root string, c Config) (string, error) {
 			node[keys[len(keys)-1]] = value
 		}
 		set([]string{"adf", "agent", "moduleconfig", "filename"}, output)
-		set([]string{"adf", "agent", "precompute", "dir_name"}, filepath.Join(root, "precompute"))
+		set([]string{"adf", "agent", "precompute", "dir_name"}, rolePrecompute(root, role))
 		set([]string{"team", "name"}, c.Run.Configuration.Agent)
 		encoded, err := yaml.Marshal(launcher)
 		if err != nil {
@@ -117,14 +117,14 @@ func prepareAgent(root string, c Config) (string, error) {
 				return "", errors.New("agent precompute path already exists")
 			}
 		}
-		if err := os.Symlink(filepath.Join(root, "precompute"), path); err != nil {
+		if err := os.Symlink(rolePrecompute(root, role), path); err != nil {
 			return "", err
 		}
 	}
 	return output, nil
 }
 
-func agentCommand(c Config, phase, module string, counts []int, root string) []string {
+func agentCommand(c Config, phase, module string, counts []int, root, role string) []string {
 	counts = append([]int(nil), counts...)
 	if phase == "precompute" {
 		for i, n := range counts {
@@ -136,7 +136,7 @@ func agentCommand(c Config, phase, module string, counts []int, root string) []s
 		}
 	}
 	if c.Run.Configuration.Runtime == "python" {
-		args := []string{"python", "main.py", "--host", "localhost", "--port", "27931", "-a", strconv.Itoa(counts[4]), "-f", strconv.Itoa(counts[0]), "-p", strconv.Itoa(counts[2]), "-ac", strconv.Itoa(counts[5]), "-fs", strconv.Itoa(counts[1]), "-po", strconv.Itoa(counts[3]), "--logger-file-name", filepath.Join(root, "logs", phase, "agent-internal.log"), "--logger-file-level", "INFO", "--logger-stream-level", "INFO"}
+		args := []string{"python", "main.py", "--host", "localhost", "--port", "27931", "-a", strconv.Itoa(counts[4]), "-f", strconv.Itoa(counts[0]), "-p", strconv.Itoa(counts[2]), "-ac", strconv.Itoa(counts[5]), "-fs", strconv.Itoa(counts[1]), "-po", strconv.Itoa(counts[3]), "--logger-file-name", filepath.Join(root, "logs", phase, AgentActor(role)+"-internal.log"), "--logger-file-level", "INFO", "--logger-stream-level", "INFO"}
 		if phase == "precompute" {
 			args = append(args, "--precompute")
 		}
@@ -154,18 +154,38 @@ func agentCommand(c Config, phase, module string, counts []int, root string) []s
 	return []string{"./gradlew", "--offline", "--no-daemon", "launch", "--args=" + strings.Join(arguments, " ")}
 }
 
-func runAgent(ctx context.Context, root string, c Config) error {
-	module, err := prepareAgent(root, c)
-	if err != nil {
-		return err
-	}
+func runAgent(ctx context.Context, root string, c Config, role string) error {
 	counts, err := scenarioCounts(filepath.Join(root, "scenario/map/scenario.xml"))
 	if err != nil {
 		return err
 	}
+	counts = countsForRole(counts, role)
+	actor := AgentActor(role)
+	platoons := counts[0] + counts[2] + counts[4]
+	total := platoons + counts[1] + counts[3] + counts[5]
+	// Roles absent from a scenario still publish their barrier states.
+	if total == 0 {
+		for _, phase := range []string{"precompute", "simulation"} {
+			if err := writeJSON(statePath(root, phase+"."+actor), State{Success: true}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	module, err := prepareAgent(root, c, role)
+	if err != nil {
+		return err
+	}
 	for _, phase := range []string{"precompute", "simulation"} {
+		// Centres share their platoon's container but do not precompute.
+		if phase == "precompute" && platoons == 0 {
+			if err := writeJSON(statePath(root, phase+"."+actor), State{Success: true}); err != nil {
+				return err
+			}
+			continue
+		}
 		if phase == "simulation" {
-			state, err := waitState(ctx, root, "precompute.server")
+			state, err := waitServerPhase(ctx, root, "precompute")
 			if err != nil {
 				return err
 			}
@@ -178,6 +198,9 @@ func runAgent(ctx context.Context, root string, c Config) error {
 			if _, ok := readState(root, phase+".ready"); ok {
 				break
 			}
+			if state, _, _ := agentStates(root, ""); state.Error != "" {
+				return errors.New("another agent role failed")
+			}
 			if state, ok := readState(root, "server"); ok && !state.Success {
 				return errors.New("server failed before agent startup")
 			}
@@ -187,7 +210,7 @@ func runAgent(ctx context.Context, root string, c Config) error {
 			case <-time.After(100 * time.Millisecond):
 			}
 		}
-		p, err := start(root, phase, "agent", "/app", agentCommand(c, phase, module, counts, root), false)
+		p, err := start(root, phase, actor, "/app", agentCommand(c, phase, module, counts, root, role), false)
 		if err != nil {
 			return err
 		}
@@ -198,7 +221,7 @@ func runAgent(ctx context.Context, root string, c Config) error {
 			case err := <-p.done:
 				if err != nil {
 					ticker.Stop()
-					return fmt.Errorf("%s agent failed; inspect agent.log", phase)
+					return fmt.Errorf("%s agent failed; inspect %s.log", phase, actor)
 				}
 				finished = true
 			case <-ctx.Done():
@@ -206,6 +229,11 @@ func runAgent(ctx context.Context, root string, c Config) error {
 				ticker.Stop()
 				return errors.New("agent run deadline reached")
 			case <-ticker.C:
+				if state, _, _ := agentStates(root, ""); state.Error != "" {
+					p.stop()
+					ticker.Stop()
+					return errors.New("another agent role failed")
+				}
 				if state, ok := readState(root, "server"); ok && !state.Success {
 					p.stop()
 					ticker.Stop()
@@ -229,7 +257,7 @@ func runAgent(ctx context.Context, root string, c Config) error {
 		}
 		ticker.Stop()
 		if phase == "precompute" {
-			files, err := precomputeFiles(root)
+			files, err := precomputeFilesIn(rolePrecompute(root, role))
 			if err != nil {
 				return err
 			}
@@ -237,15 +265,15 @@ func runAgent(ctx context.Context, root string, c Config) error {
 				return errors.New("precompute agent produced no data")
 			}
 		}
-		if phase == "simulation" {
-			if err := verifyResumed(root, c.Run.Configuration.Runtime, counts); err != nil {
+		if phase == "simulation" && platoons > 0 {
+			if err := verifyResumed(root, c.Run.Configuration.Runtime, counts, role); err != nil {
 				return err
 			}
 		}
-		if err := writeJSON(statePath(root, phase+".agent"), State{Success: true}); err != nil {
+		if err := writeJSON(statePath(root, phase+"."+actor), State{Success: true}); err != nil {
 			return err
 		}
-		fmt.Printf("agent: %s completed\n", phase)
+		fmt.Printf("%s: %s completed\n", actor, phase)
 	}
 	return nil
 }
@@ -253,10 +281,10 @@ func runAgent(ctx context.Context, root string, c Config) error {
 var pythonPlatoon = regexp.MustCompile(`Connected to kernel: (PlatoonAmbulance|PlatoonFire|PlatoonPolice) \(`)
 var pythonResumed = regexp.MustCompile(`mode:\s*(1|Mode\.PRECOMPUTED|PRECOMPUTED)\)`)
 
-func verifyResumed(root, runtime string, counts []int) error {
-	name := "agent.log"
+func verifyResumed(root, runtime string, counts []int, role string) error {
+	name := AgentActor(role) + ".log"
 	if runtime == "python" {
-		name = "agent-internal.log"
+		name = AgentActor(role) + "-internal.log"
 	}
 	f, err := os.Open(filepath.Join(root, "logs/simulation", name))
 	if err != nil {

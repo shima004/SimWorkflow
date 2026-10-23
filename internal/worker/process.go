@@ -119,12 +119,12 @@ func runServer(ctx context.Context, root string, c Config) error {
 				ticker.Stop()
 				return errors.New("server run deadline reached")
 			case <-ticker.C:
-				if state, ok := readState(root, "agent"); ok && !state.Success {
+				if state, _, _ := agentStates(root, ""); state.Error != "" {
 					p.stop()
 					ticker.Stop()
 					return errors.New("agent failed; server stopped")
 				}
-				if state, ok := readState(root, phase+".agent"); ok {
+				if state, _, ok := agentStates(root, phase); ok {
 					if !state.Success {
 						p.stop()
 						ticker.Stop()
@@ -141,7 +141,7 @@ func runServer(ctx context.Context, root string, c Config) error {
 		if err := writeJSON(statePath(root, phase+".server"), State{Success: true}); err != nil {
 			return err
 		}
-		if _, err := waitState(ctx, root, phase+".agent"); err != nil {
+		if err := waitAgents(ctx, root, phase); err != nil {
 			return err
 		}
 		fmt.Printf("server: %s completed\n", phase)

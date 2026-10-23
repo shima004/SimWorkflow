@@ -13,6 +13,7 @@ func TestBuildTwoPhaseWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	e.Spec.Agents[0].ResourcesByRole = map[string]experiment.Resources{"fireBrigade": {CPU: "0.5", Memory: "1Gi"}}
 	plan, err := experiment.BuildPlan(e, 100)
 	if err != nil {
 		t.Fatal(err)
@@ -40,11 +41,30 @@ func TestBuildTwoPhaseWorkflow(t *testing.T) {
 			t.Fatal("deadline must include artifact-upload grace")
 		}
 		containers := template["containerSet"].(map[string]any)["containers"].([]any)
-		if len(containers) != 3 {
-			t.Fatal("one simulator and one agent must restart their processes across the two phases without doubling resource allocation")
+		if len(containers) != 5 {
+			t.Fatal("one simulator, three agent roles and one collector are required")
 		}
+		seen := map[string]bool{}
 		for _, container := range containers {
 			container := container.(map[string]any)
+			for _, role := range experiment.Roles() {
+				if container["name"] != worker.AgentActor(role) {
+					continue
+				}
+				seen[role] = true
+				command := container["command"].([]string)
+				if len(command) != 5 || command[3] != "--role" || command[4] != role {
+					t.Fatal("missing role selector")
+				}
+				resources := container["resources"].(map[string]any)
+				want := plan.Runs[0].Configuration.ResourcesForRole(role)
+				for _, key := range []string{"requests", "limits"} {
+					got := resources[key].(map[string]any)
+					if got["cpu"] != string(want.CPU) || got["memory"] != want.Memory {
+						t.Fatalf("wrong resources for %s: %v", role, got)
+					}
+				}
+			}
 			if container["name"] == "simulator" {
 				resources := container["resources"].(map[string]any)
 				requests, _ := json.Marshal(resources["requests"])
@@ -53,6 +73,9 @@ func TestBuildTwoPhaseWorkflow(t *testing.T) {
 					t.Fatal("limits and requests must match the declared quantities")
 				}
 			}
+		}
+		if len(seen) != 3 {
+			t.Fatal("missing role containers")
 		}
 	}
 	configs[0].Run.ID = "mismatch"

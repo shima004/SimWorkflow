@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 
+	"simworkflow/internal/experiment"
 	"simworkflow/internal/storage"
 )
 
@@ -35,6 +36,17 @@ func Prepare(ctx context.Context, root string, c Config) error {
 		}
 		if err := os.Chmod(path, 0777); err != nil {
 			return err
+		}
+	}
+	for _, role := range experiment.Roles() {
+		for _, directory := range []string{"modules", "precompute"} {
+			path := filepath.Join(root, directory, role)
+			if err := os.MkdirAll(path, 0777); err != nil {
+				return err
+			}
+			if err := os.Chmod(path, 0777); err != nil {
+				return err
+			}
 		}
 	}
 	if err := writeJSON(filepath.Join(root, "run.json"), c); err != nil {

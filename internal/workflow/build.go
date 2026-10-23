@@ -46,8 +46,10 @@ func Build(plan *experiment.Plan, configs []worker.Config, options Options) (map
 		tasks = append(tasks, map[string]any{"name": run.ID, "template": run.ID})
 		containers := []any{
 			map[string]any{"name": "simulator", "image": run.Simulator.Image, "command": []string{"/tools/simworkflow", "worker", "server"}, "resources": resource(run.Simulator.Resources)},
-			map[string]any{"name": "agent", "image": run.Configuration.Image, "command": []string{"/tools/simworkflow", "worker", "agent"}, "resources": resource(run.Configuration.Resources)},
 			map[string]any{"name": "main", "image": options.HelperImage, "command": []string{"/tools/simworkflow", "worker", "collect"}, "resources": resource(experiment.Resources{CPU: "0.1", Memory: "256Mi"})},
+		}
+		for _, role := range experiment.Roles() {
+			containers = append(containers, map[string]any{"name": worker.AgentActor(role), "image": run.Configuration.Image, "command": []string{"/tools/simworkflow", "worker", "agent", "--role", role}, "resources": resource(run.Configuration.ResourcesForRole(role))})
 		}
 		templates = append(templates, map[string]any{
 			"name": run.ID, "activeDeadlineSeconds": configs[i].TimeoutSeconds + 180,

@@ -22,8 +22,12 @@ import (
 )
 
 func precomputeFiles(root string) ([]string, error) {
+	return precomputeFilesIn(filepath.Join(root, "precompute"))
+}
+
+func precomputeFilesIn(directory string) ([]string, error) {
 	files := []string{}
-	err := filepath.WalkDir(filepath.Join(root, "precompute"), func(path string, entry fs.DirEntry, err error) error {
+	err := filepath.WalkDir(directory, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -41,7 +45,7 @@ func precomputeFiles(root string) ([]string, error) {
 			return errors.New("precompute data must contain regular files")
 		}
 		if info.Size() > 0 {
-			relative, _ := filepath.Rel(filepath.Join(root, "precompute"), path)
+			relative, _ := filepath.Rel(directory, path)
 			files = append(files, filepath.ToSlash(relative))
 		}
 		return nil
@@ -77,11 +81,12 @@ func collect(ctx context.Context, root string, c Config) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	var server, agent State
+	var agents map[string]State
 	var serverDone, agentDone bool
 waiting:
 	for {
 		server, serverDone = readState(root, "server")
-		agent, agentDone = readState(root, "agent")
+		agent, agents, agentDone = agentStates(root, "")
 		if serverDone && agentDone {
 			break
 		}
@@ -101,7 +106,7 @@ waiting:
 	if err != nil {
 		files = []string{}
 	}
-	summary := Summary{ExecutionID: c.ExecutionID, Experiment: c.Experiment, Run: c.Run, Phase: "Failed", Server: server, Agent: agent, PrecomputeFiles: files, ResultPrefix: c.ResultPrefix, FinishedAt: time.Now().UTC()}
+	summary := Summary{ExecutionID: c.ExecutionID, Experiment: c.Experiment, Run: c.Run, Phase: "Failed", Server: server, Agent: agent, Agents: agents, PrecomputeFiles: files, ResultPrefix: c.ResultPrefix, FinishedAt: time.Now().UTC()}
 	if server.Success && agent.Success {
 		summary.Phase = "Succeeded"
 	}

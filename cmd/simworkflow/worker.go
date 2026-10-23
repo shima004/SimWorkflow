@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"simworkflow/internal/experiment"
 	"simworkflow/internal/worker"
 )
 
@@ -20,6 +21,7 @@ func runWorker(args []string, errOut io.Writer) error {
 	}
 	flags := flag.NewFlagSet("worker "+args[0], flag.ContinueOnError)
 	flags.SetOutput(errOut)
+	role := flags.String("role", "", "agent role: fireBrigade, policeForce or ambulanceTeam (required for agent)")
 	root := flags.String("work-dir", "/work", "shared run directory")
 	tools := flags.String("tools-dir", "/tools", "binary installation directory for prepare")
 	if err := flags.Parse(args[1:]); err != nil {
@@ -61,5 +63,14 @@ func runWorker(args []string, errOut io.Writer) error {
 		}
 		return worker.Prepare(ctx, *root, c)
 	}
-	return worker.Run(ctx, *root, args[0])
+	actor := args[0]
+	if actor == "agent" {
+		if !experiment.ValidRole(*role) {
+			return errors.New("agent requires --role fireBrigade, policeForce or ambulanceTeam")
+		}
+		actor = worker.AgentActor(*role)
+	} else if *role != "" {
+		return errors.New("--role is only supported for agent")
+	}
+	return worker.Run(ctx, *root, actor)
 }

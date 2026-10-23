@@ -31,16 +31,17 @@ type State struct {
 }
 
 type Summary struct {
-	ExecutionID     string         `json:"executionId"`
-	Experiment      string         `json:"experiment"`
-	Run             experiment.Run `json:"run"`
-	Phase           string         `json:"phase"`
-	Server          State          `json:"server"`
-	Agent           State          `json:"agent"`
-	PrecomputeFiles []string       `json:"precomputeFiles"`
-	Score           *float64       `json:"score,omitempty"`
-	ResultPrefix    string         `json:"resultPrefix"`
-	FinishedAt      time.Time      `json:"finishedAt"`
+	ExecutionID     string           `json:"executionId"`
+	Experiment      string           `json:"experiment"`
+	Run             experiment.Run   `json:"run"`
+	Phase           string           `json:"phase"`
+	Server          State            `json:"server"`
+	Agent           State            `json:"agent"`
+	Agents          map[string]State `json:"agents,omitempty"`
+	PrecomputeFiles []string         `json:"precomputeFiles"`
+	Score           *float64         `json:"score,omitempty"`
+	ResultPrefix    string           `json:"resultPrefix"`
+	FinishedAt      time.Time        `json:"finishedAt"`
 }
 
 func Load(root string) (Config, error) {
@@ -93,21 +94,6 @@ func readState(root, name string) (State, bool) {
 	return state, true
 }
 
-func waitState(ctx context.Context, root, name string) (State, error) {
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		if state, ok := readState(root, name); ok {
-			return state, nil
-		}
-		select {
-		case <-ctx.Done():
-			return State{}, errors.New("run deadline reached while waiting for " + name)
-		case <-ticker.C:
-		}
-	}
-}
-
 func Run(ctx context.Context, root, actor string) (err error) {
 	c, err := Load(root)
 	if err != nil {
@@ -118,8 +104,14 @@ func Run(ctx context.Context, root, actor string) (err error) {
 	if actor == "collect" {
 		return collect(ctx, root, c)
 	}
-	if actor != "server" && actor != "agent" {
-		return errors.New("worker actor must be server, agent or collect")
+	role := ""
+	for _, candidate := range experiment.Roles() {
+		if actor == AgentActor(candidate) {
+			role = candidate
+		}
+	}
+	if actor != "server" && role == "" {
+		return errors.New("worker actor must be server, a role-specific agent or collect")
 	}
 	defer func() {
 		state := State{Success: err == nil}
@@ -133,5 +125,5 @@ func Run(ctx context.Context, root, actor string) (err error) {
 	if actor == "server" {
 		return runServer(ctx, root, c)
 	}
-	return runAgent(ctx, root, c)
+	return runAgent(ctx, root, c, role)
 }
