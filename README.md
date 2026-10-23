@@ -1,0 +1,87 @@
+# SimWorkflow CLI
+
+Go製のCLIの土台です。Argo Workflows、S3互換サービス、コンテナイメージレジストリの接続設定を環境変数から読み込みます。
+現在の実装範囲は設定の読み込みと検証です。APIへの接続、認証の成否確認、Workflow操作やイメージ転送は今後実装します。
+
+Go 1.24以降が必要です。外部ライブラリへの依存はありません。
+
+## 実験定義の設計
+
+実験用YAMLは、エージェントのモジュール候補を `matrix.modules` に指定し、直積で組み合わせを生成する設計です。
+`matrix.exclude` で特定の組み合わせを除外し、各構成をマップ・シードごとに実行します。
+シミュレータと各エージェントには、それぞれ `resources.cpu`（コア相当の数値）と `resources.memory`（`4Gi` など）を指定します。
+
+- [実験定義YAMLの仕様](docs/experiment-yaml.md)
+- [モジュール比較のサンプル](examples/experiments/module-comparison.yaml)（除外後3構成 × マップ1件 × シード3件 = 9回）
+
+現在は仕様とサンプルのみで、YAMLからの実行処理は未実装です。
+
+## エージェント用コンテナテンプレート
+
+各ディレクトリの `Dockerfile` と `.dockerignore` を、エージェントリポジトリのルートへコピーして使います。
+ビルド・レジストリへの登録方法と、実験用モジュール設定をマウントして起動する例を同梱しています。
+
+- [Java版](templates/agents/java/README.md)
+- [Python版（pip / uv）](templates/agents/python/README.md)
+
+テンプレートにはエージェント本体を含みません。Dockerビルドと実サービス接続は未検証です。
+
+## 動作確認
+
+```sh
+cp .env.example .env
+chmod 600 .env
+# .env を編集して接続先と認証情報を設定
+go run ./cmd/simworkflow -env-file .env config check
+```
+
+`.env.example` の値のままでも設定形式の検証はできます。実サービスを操作する際には実際の接続情報に置き換えてください。
+`config check` はネットワーク通信を行わず、設定の不足や形式を検証します。認証情報や接続先の値は表示しません。
+
+本番では環境変数を直接渡します。`.env` は `-env-file` を指定した場合のみ読み込みます。
+
+```sh
+go build -o bin/simworkflow ./cmd/simworkflow
+# 必須の環境変数を設定したシェルで実行
+./bin/simworkflow config check
+```
+
+優先順位は **環境変数 > 指定した .env > デフォルト値** です。環境変数を明示的に空に設定した場合も `.env` より優先されます。
+`.env` は `KEY=value`、`export KEY=value`、単一引用符・二重引用符、コメントに対応します。値はリテラルとして扱い、変数展開・コマンド実行・エスケープ変換・複数行の値には対応しません。引用符を含む値はもう一方の引用符で囲んでください。
+`.env` と `.env.*` はGit管理対象から除外しています（`.env.example` を除く）。
+
+## 設定項目
+
+| 環境変数                  | 必須 | デフォルト / 用途                                                 |
+| ------------------------- | ---- | ----------------------------------------------------------------- |
+| `ARGO_WORKFLOW_SERVER`    | 必須 | Argo ServerのURL（`https://argo.example.com` など）               |
+| `ARGO_WORKFLOW_NAMESPACE` | 任意 | `argo`                                                            |
+| `ARGO_WORKFLOW_TOKEN`     | 任意 | Bearer認証用のトークン。`Bearer` 接頭辞なし。未指定は匿名アクセス |
+| `S3_ENDPOINT`             | 必須 | S3互換サービスのURL                                               |
+| `S3_REGION`               | 任意 | `us-east-1`                                                       |
+| `S3_BUCKET`               | 必須 | バケット名                                                        |
+| `S3_ACCESS_KEY_ID`        | 必須 | アクセスキーID                                                    |
+| `S3_SECRET_ACCESS_KEY`    | 必須 | シークレットアクセスキー                                          |
+| `S3_SESSION_TOKEN`        | 任意 | 一時認証情報のセッショントークン                                  |
+| `S3_FORCE_PATH_STYLE`     | 任意 | `true`。パス形式のバケットアクセスを使用する設定                  |
+| `REGISTRY_URL`            | 必須 | イメージレジストリのURL                                           |
+| `REGISTRY_USERNAME`       | 任意 | パスワードと組み合わせて設定                                      |
+| `REGISTRY_PASSWORD`       | 任意 | ユーザー名と組み合わせて設定                                      |
+| `REGISTRY_TOKEN`          | 任意 | ユーザー名・パスワードと併用不可。`Bearer` 接頭辞なし             |
+| `HTTP_TIMEOUT`            | 任意 | `30s`。将来のHTTPリクエスト用。正の期間を指定                     |
+
+URLは `http://` または `https://` が必須です。URL内のユーザー情報、クエリ、フラグメントは受け付けません。
+レジストリの認証は匿名・ユーザー名とパスワード・トークンのいずれかを選択できます。
+`ARGO_WORKFLOW_NAMESPACE` と `S3_REGION` は省略するとデフォルト値を使い、明示的な空文字はエラーになります。
+
+## 検証と構成
+
+```sh
+go test ./...
+go vet ./...
+```
+
+- `cmd/simworkflow`: CLIのエントリーポイントと `config check`
+- `internal/config`: 接続設定の型、環境変数の読み込み・検証、`.env` の読み込み
+
+接続処理の実装時には `config.Load(os.LookupEnv)` が返す設定を使用できます。`.env` を併用する場合は `config.WithFallback` で環境変数の読み込みに重ねます。

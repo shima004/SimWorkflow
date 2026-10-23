@@ -1,0 +1,48 @@
+apiVersion: simworkflow/v1alpha1
+kind: Experiment
+
+metadata:
+  name: module-comparison
+  description: 同じマップとシードでモジュールの組み合わせを比較する
+
+spec:
+  simulator:
+    image: registry.example.com/rescue-simulator:v1
+    resources:
+      cpu: 2
+      memory: 4Gi
+
+  agents:
+    - name: comparison
+      image: registry.example.com/rescue-agent:v1
+      resources:
+        cpu: 4
+        memory: 8Gi
+      matrix:
+        modules:
+          pathPlanning:
+            - com.example.DefaultPathPlanning
+            - com.example.ImprovedPathPlanning
+          clustering:
+            - com.example.DefaultClustering
+            - com.example.ImprovedClustering
+        exclude:
+          - modules:
+              pathPlanning: com.example.DefaultPathPlanning
+              clustering: com.example.ImprovedClustering
+
+  conditions:
+    maps:
+      - name: map-a
+        source: s3://rescue-maps/map-a.zip
+    seeds: [1, 2, 3]
+
+  execution:
+    maxParallelRuns: 4
+    timeout: 30m
+
+  outputs:
+    collect:
+      - score
+      - simulatorLogs
+      - agentLogs

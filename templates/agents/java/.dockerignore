@@ -1,0 +1,17 @@
+.git
+.github
+.env
+.env.*
+.aws
+.ssh
+.codex
+.agents
+.idea
+.vscode
+.gradle
+build
+bin
+logs
+*.log
+precomp_data
+test-results
