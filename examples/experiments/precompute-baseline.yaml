@@ -20,6 +20,17 @@ spec:
       resources:
         cpu: 2
         memory: 4Gi
+      # 未指定の種類には上のresourcesを適用。各種別全体（センターを含む）の合計。
+      resourcesByRole:
+        fireBrigade:
+          cpu: 2
+          memory: 4Gi
+        policeForce:
+          cpu: 1
+          memory: 2Gi
+        ambulanceTeam:
+          cpu: 3
+          memory: 6Gi
       modules:
         SampleRoadDetector.PathPlanning: adf.impl.module.algorithm.DijkstraPathPlanning
         SampleRoadDetector.Clustering: adf.impl.module.algorithm.KMeansClustering

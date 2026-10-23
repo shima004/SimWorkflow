@@ -9,7 +9,8 @@ Go 1.24以降が必要です。YAMLの処理には `go.yaml.in/yaml/v3` を使�
 
 実験用YAMLは、エージェントのモジュール候補を `matrix.modules` に指定し、直積で組み合わせを生成する設計です。
 `matrix.exclude` で特定の組み合わせを除外し、各構成をマップ・シードごとに実行します。
-シミュレータと各エージェントには、それぞれ `resources.cpu`（コア相当の数値）と `resources.memory`（`4Gi` など）を指定します。
+シミュレーターとエージェントには `resources.cpu`（コア相当の数値）と `resources.memory`（`4Gi` など）を指定します。
+エージェントは消防・警察・救急ごとにコンテナを分け、`resourcesByRole` で種類別に上書きできます。各センターは対応する種類と同じコンテナで動作します。
 
 - [事前計算から本実行までの実行手順](docs/execution.md)
 - [最小の実験定義](examples/experiments/precompute-baseline.yaml)
