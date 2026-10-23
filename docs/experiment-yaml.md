@@ -5,6 +5,8 @@ YAMLの読み込み・検証・実行計画の展開を実装しています。A
 
 完全な定義例は [module-comparison.yaml](../examples/experiments/module-comparison.yaml) を参照してください。
 イメージ、マップの場所、モジュール名は例示用です。
+Java版サンプルはADFの実際のキーを使用し、独自モジュールの候補は仮名としています。
+Python版は [python-module-comparison.yaml](../examples/experiments/python-module-comparison.yaml) を参照してください。
 
 ## 基本構造
 
@@ -85,15 +87,15 @@ agents:
       cpu: 4
       memory: 8Gi
     modules:
-      clustering: com.example.DefaultClustering
+      SampleRoadDetector.Clustering: adf.impl.module.algorithm.KMeansClustering
     matrix:
       modules:
-        pathPlanning:
-          - com.example.DefaultPathPlanning
-          - com.example.ImprovedPathPlanning
+        SampleRoadDetector.PathPlanning:
+          - adf.impl.module.algorithm.DijkstraPathPlanning
+          - my_team.module.algorithm.CustomPathPlanning
 ```
 
-この例では、固定したclusteringと、2種類のpathPlanningを組み合わせた2構成を生成します。
+この例では、固定したClusteringと、2種類のPathPlanningを組み合わせた2構成を生成します。
 `matrix` を省略したエージェントは、固定設定の1構成として扱います。
 `modules` と `matrix.modules` に同じキーを指定することはエラーとし、暗黙の上書きはしません。
 
@@ -107,8 +109,8 @@ agents:
 ```yaml
 exclude:
   - modules:
-      pathPlanning: com.example.DefaultPathPlanning
-      clustering: com.example.ImprovedClustering
+      SampleRoadDetector.PathPlanning: adf.impl.module.algorithm.DijkstraPathPlanning
+      SampleRoadDetector.Clustering: my_team.module.algorithm.CustomClustering
 ```
 
 1つの除外条件に記述された項目がすべて一致した構成を除外します。

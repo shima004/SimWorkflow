@@ -20,16 +20,18 @@ spec:
         memory: 8Gi
       matrix:
         modules:
-          pathPlanning:
-            - com.example.DefaultPathPlanning
-            - com.example.ImprovedPathPlanning
-          clustering:
-            - com.example.DefaultClustering
-            - com.example.ImprovedClustering
+          SampleRoadDetector.PathPlanning:
+            - adf.impl.module.algorithm.DijkstraPathPlanning
+            # Placeholder: include your own implementation in the image.
+            - my_team.module.algorithm.CustomPathPlanning
+          SampleRoadDetector.Clustering:
+            - adf.impl.module.algorithm.KMeansClustering
+            # Placeholder: include your own implementation in the image.
+            - my_team.module.algorithm.CustomClustering
         exclude:
           - modules:
-              pathPlanning: com.example.DefaultPathPlanning
-              clustering: com.example.ImprovedClustering
+              SampleRoadDetector.PathPlanning: adf.impl.module.algorithm.DijkstraPathPlanning
+              SampleRoadDetector.Clustering: my_team.module.algorithm.CustomClustering
 
   conditions:
     maps:

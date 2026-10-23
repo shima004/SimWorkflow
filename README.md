@@ -1,7 +1,7 @@
 # SimWorkflow CLI
 
 Go製のCLIの土台です。Argo Workflows、S3互換サービス、コンテナイメージレジストリの接続設定を環境変数から読み込みます。
-接続設定と実験YAMLの読み込み・検証、実行計画の展開ができます。APIへの接続、認証の成否確認、Workflow操作やイメージ転送は今後実装します。
+接続設定と実験YAMLの読み込み・検証、実行計画の展開、ADFのモジュール設定ファイルの生成ができます。APIへの接続、認証の成否確認、Workflow操作やイメージ転送は今後実装します。
 
 Go 1.24以降が必要です。YAMLの処理には `go.yaml.in/yaml/v3` を使用します。
 
@@ -29,6 +29,33 @@ go run ./cmd/simworkflow experiment plan -f examples/experiments/module-comparis
 
 展開する実行数の上限は既定で10,000件です。意図した大規模実験では `--max-runs 20000` などで変更できます。
 YAMLからArgo Workflowへの変換と実サービスでの実行は未実装です。
+
+## モジュール設定ファイルの生成
+
+実験YAMLと元設定から、構成ごとに設定ファイルを作成できます。マップやシードが異なっても、同じモジュール構成のファイルは1つだけ作成します。
+
+```sh
+# Java版: 3構成の.cfgとmanifest.jsonを生成
+go run ./cmd/simworkflow experiment modules \
+  -f examples/experiments/module-comparison.yaml \
+  --agent comparison \
+  --base examples/module-configs/java.cfg \
+  --format java --output-dir /tmp/module-configs-java
+
+# Python版: 2構成の.yamlとmanifest.jsonを生成
+go run ./cmd/simworkflow experiment modules \
+  -f examples/experiments/python-module-comparison.yaml \
+  --agent python-comparison \
+  --base examples/module-configs/python.yaml \
+  --format python --output-dir /tmp/module-configs-python
+```
+
+出力ディレクトリは新規のものを指定します。既存のディレクトリは上書きしません。
+`manifest.json` には各ファイルと、実行計画に共通する構成ID・エージェント名・イメージ・モジュール設定・リソース設定を記録します。
+指定していない元設定は残し、元設定に存在しないキーへの上書きはエラーにします。
+同梱の元設定は生成処理を試すための最小例です。実際の実験では自分のエージェントの完全な設定ファイルを `--base` に指定してください。
+`my_team` や `src.my_team` の実装は例示用なので、実際にイメージに含めた実装に置き換えます。
+生成ファイルをコンテナに渡す手順は以下のテンプレートREADMEに記載しています。
 
 ## エージェント用コンテナテンプレート
 
@@ -98,5 +125,6 @@ go vet ./...
 - `cmd/simworkflow`: CLIのエントリーポイントと `config check`
 - `internal/config`: 接続設定の型、環境変数の読み込み・検証、`.env` の読み込み
 - `internal/experiment`: 実験YAMLの読み込み・検証と実行計画の展開
+- `internal/moduleconfig`: Java／Python版ADFモジュール設定の生成
 
 接続処理の実装時には `config.Load(os.LookupEnv)` が返す設定を使用できます。`.env` を併用する場合は `config.WithFallback` で環境変数の読み込みに重ねます。

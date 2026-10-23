@@ -32,7 +32,7 @@ PythonのModuleConfigはネストしたキーをドット区切りに平坦化�
 ## プラットフォームでの適用方針
 
 実験YAMLの `modules` と `matrix.modules` では、ADFが実際に参照する設定キーを使います。
-既存の仕様にある `pathPlanning` や `clustering` は構造説明のための仮名です。
+実験サンプルも `SampleRoadDetector.PathPlanning` などADFが参照するキーを使います。
 
 Java版の指定例（エージェント定義の抜粋）:
 
@@ -69,4 +69,9 @@ Pythonサンプルの `main.py` は `config/launcher.yaml` を指定してLaunch
 
 ユーザー向けの [Javaコンテナテンプレート](../templates/agents/java/README.md) と [Pythonコンテナテンプレート](../templates/agents/python/README.md) では、作業ディレクトリを `/app` とし、元設定をそれぞれ `/app/config/module.cfg`、`/app/config/module.yaml` に含めます。
 元設定の取得処理とJava/Python形式の選択フィールドは、今後のプラットフォーム実装で確定します。
-現時点では設定の生成・配置処理は未実装です。
+`simworkflow experiment modules` で、ローカルの元設定から構成ごとの設定ファイルと `manifest.json` を生成できます。
+`--agent` で対象を選び、`--base` に完全な元設定、`--format java|python` に設定形式、`--output-dir` に新規ディレクトリを指定します。
+構成IDは実行計画と共通です。マップやシードごとに同一設定を複製することはしません。
+元設定に存在しないキー、Javaの重複キー、Pythonの重複・曖昧なキーはエラーにします。
+Pythonのアンカー・エイリアス・マージキーには現在対応していません。
+コンテナからの元設定取得、自動配置、Argo Workflowによる実行は未実装です。

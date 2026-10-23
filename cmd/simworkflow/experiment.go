@@ -14,11 +14,14 @@ import (
 
 func runExperiment(args []string, out, errOut io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("expected experiment validate or experiment plan")
+		return errors.New("expected experiment validate, plan or modules")
 	}
 	command := args[0]
+	if command == "modules" {
+		return runModules(args[1:], out, errOut)
+	}
 	if command != "validate" && command != "plan" {
-		return fmt.Errorf("unknown experiment command %q (expected validate or plan)", command)
+		return fmt.Errorf("unknown experiment command %q (expected validate, plan or modules)", command)
 	}
 	flags := flag.NewFlagSet("experiment "+command, flag.ContinueOnError)
 	flags.SetOutput(errOut)
