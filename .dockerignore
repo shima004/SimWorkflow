@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+.aws
+.ssh
+.codex
+.agents
+bin
+artifacts
+*.tar
+*.tar.gz
