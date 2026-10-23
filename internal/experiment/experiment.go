@@ -72,12 +72,13 @@ func (c CPU) MilliCores() (int64, error) {
 }
 
 type Agent struct {
-	Name      string            `yaml:"name" json:"name"`
-	Runtime   string            `yaml:"runtime,omitempty" json:"runtime,omitempty"`
-	Image     string            `yaml:"image" json:"image"`
-	Resources Resources         `yaml:"resources" json:"resources"`
-	Modules   map[string]string `yaml:"modules,omitempty" json:"modules,omitempty"`
-	Matrix    *Matrix           `yaml:"matrix,omitempty" json:"matrix,omitempty"`
+	Name            string               `yaml:"name" json:"name"`
+	Runtime         string               `yaml:"runtime,omitempty" json:"runtime,omitempty"`
+	Image           string               `yaml:"image" json:"image"`
+	Resources       Resources            `yaml:"resources" json:"resources"`
+	ResourcesByRole map[string]Resources `yaml:"resourcesByRole,omitempty" json:"resourcesByRole,omitempty"`
+	Modules         map[string]string    `yaml:"modules,omitempty" json:"modules,omitempty"`
+	Matrix          *Matrix              `yaml:"matrix,omitempty" json:"matrix,omitempty"`
 }
 
 type Matrix struct {
@@ -186,6 +187,19 @@ func (e *Experiment) Validate() error {
 		}
 		seenAgents[a.Name] = true
 		checkContainer(path, a.Image, a.Resources)
+		for _, role := range sortedKeys(a.ResourcesByRole) {
+			rolePath := path + ".resourcesByRole." + role
+			if !ValidRole(role) {
+				add(rolePath, "must be fireBrigade, policeForce or ambulanceTeam; centres share their corresponding role")
+			}
+			resources := a.ResourcesByRole[role]
+			if _, err := resources.CPU.MilliCores(); err != nil {
+				add(rolePath+".cpu", err.Error())
+			}
+			if _, err := resources.MemoryBytes(); err != nil {
+				add(rolePath+".memory", err.Error())
+			}
+		}
 		for _, key := range sortedKeys(a.Modules) {
 			if !modulePattern.MatchString(key) || !modulePattern.MatchString(a.Modules[key]) {
 				add(path+".modules."+key, "key and implementation must be dot-separated identifiers")

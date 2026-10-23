@@ -190,3 +190,51 @@ func TestResourceQuantities(t *testing.T) {
 		t.Fatalf("memory: %d, %v", got, err)
 	}
 }
+
+func TestRoleResourcesValidationFallbackAndIdentity(t *testing.T) {
+	e := sample(t)
+	baseline, err := BuildPlan(e, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range Roles() {
+		if got := baseline.Runs[0].Configuration.ResourcesForRole(role); got != e.Spec.Agents[0].Resources {
+			t.Fatal("missing overrides must use the default per-role budget")
+		}
+	}
+	e.Spec.Agents[0].ResourcesByRole = map[string]Resources{"fireBrigade": {CPU: "0.5", Memory: "1Gi"}}
+	plan, err := BuildPlan(e, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.TotalRuns != baseline.TotalRuns {
+		t.Fatal("role budgets do not add runs")
+	}
+	if plan.Runs[0].ID == baseline.Runs[0].ID || plan.Runs[0].Configuration.ID == baseline.Runs[0].Configuration.ID {
+		t.Fatal("resource changes must affect identity")
+	}
+	if got := plan.Runs[0].Configuration.ResourcesForRole("fireBrigade"); got.CPU != "0.5" || got.Memory != "1Gi" {
+		t.Fatal(got)
+	}
+	if got := plan.Runs[0].Configuration.ResourcesForRole("policeForce"); got != e.Spec.Agents[0].Resources {
+		t.Fatal("unmodified roles must retain defaults")
+	}
+	e.Spec.Agents[0].ResourcesByRole["fireBrigade"] = Resources{CPU: "9", Memory: "9Gi"}
+	if plan.Runs[0].Configuration.ResourcesForRole("fireBrigade").CPU != "0.5" {
+		t.Fatal("plan must own its resource map")
+	}
+	for _, tc := range []struct {
+		role   string
+		budget Resources
+	}{
+		{"fireStation", Resources{CPU: "1", Memory: "1Gi"}},
+		{"fireBrigade", Resources{CPU: "0", Memory: "1Gi"}},
+		{"policeForce", Resources{CPU: "1"}},
+		{"ambulanceTeam", Resources{Memory: "1Gi"}},
+	} {
+		e.Spec.Agents[0].ResourcesByRole = map[string]Resources{tc.role: tc.budget}
+		if err := e.Validate(); err == nil || !strings.Contains(err.Error(), "resourcesByRole") {
+			t.Fatalf("accepted invalid role resources: %+v", tc)
+		}
+	}
+}

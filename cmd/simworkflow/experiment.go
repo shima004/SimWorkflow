@@ -70,9 +70,13 @@ func printPlan(out io.Writer, plan *experiment.Plan) error {
 	for _, agent := range plan.Agents {
 		fmt.Fprintf(w, "%s\t%d\t%d\n", agent.Name, agent.Configurations, agent.Runs)
 	}
-	fmt.Fprintln(w, "\nRUN\tAGENT\tMAP\tSEED\tSIMULATOR CPU / MEMORY\tAGENT CPU / MEMORY")
+	fmt.Fprintln(w, "\nRUN\tAGENT\tMAP\tSEED\tSIMULATOR CPU / MEMORY\tDEFAULT PER-ROLE CPU / MEMORY")
 	for _, run := range plan.Runs {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s / %s\t%s / %s\n", run.ID, run.Configuration.Agent, run.Map.Name, run.Seed, run.Simulator.Resources.CPU, run.Simulator.Resources.Memory, run.Configuration.Resources.CPU, run.Configuration.Resources.Memory)
+		for _, role := range experiment.Roles() {
+			resources := run.Configuration.ResourcesForRole(role)
+			fmt.Fprintf(w, "  %s (+ centre): %s CPU / %s\n", role, resources.CPU, resources.Memory)
+		}
 		keys := sortedModuleKeys(run.Configuration.Modules)
 		for _, key := range keys {
 			fmt.Fprintf(w, "  %s = %s\n", key, run.Configuration.Modules[key])

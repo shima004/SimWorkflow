@@ -31,12 +31,13 @@ type AgentSummary struct {
 }
 
 type Configuration struct {
-	ID        string            `json:"id"`
-	Agent     string            `json:"agent"`
-	Runtime   string            `json:"runtime"`
-	Image     string            `json:"image"`
-	Resources Resources         `json:"resources"`
-	Modules   map[string]string `json:"modules"`
+	ID              string               `json:"id"`
+	Agent           string               `json:"agent"`
+	Runtime         string               `json:"runtime"`
+	Image           string               `json:"image"`
+	Resources       Resources            `json:"resources"`
+	ResourcesByRole map[string]Resources `json:"resourcesByRole,omitempty"`
+	Modules         map[string]string    `json:"modules"`
 }
 
 type Run struct {
@@ -78,7 +79,7 @@ func BuildPlan(e *Experiment, maxRuns int) (*Plan, error) {
 			if runtime == "" {
 				runtime = "java"
 			}
-			configuration := Configuration{Agent: agent.Name, Runtime: runtime, Image: agent.Image, Resources: agent.Resources, Modules: maps.Clone(modules)}
+			configuration := Configuration{Agent: agent.Name, Runtime: runtime, Image: agent.Image, Resources: agent.Resources, ResourcesByRole: maps.Clone(agent.ResourcesByRole), Modules: maps.Clone(modules)}
 			configuration.ID = "config-" + digest(configuration)
 			count++
 			for _, m := range e.Spec.Conditions.Maps {
