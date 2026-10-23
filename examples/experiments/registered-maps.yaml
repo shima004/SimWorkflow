@@ -1,0 +1,29 @@
+apiVersion: simworkflow/v1alpha1
+kind: Experiment
+metadata:
+  name: registered-map-comparison
+spec:
+  simulator:
+    image: ghcr.io/shima004/rcrs-server:v1.0.4
+    resources: {cpu: 2, memory: 8Gi}
+    parameters:
+      timesteps: 300
+  agents:
+    - name: baseline
+      runtime: java
+      image: registry.example.com/my-team/agent-java:v1
+      resources: {cpu: 2, memory: 4Gi}
+  conditions:
+    maps:
+      # map register --name kobe --version v1 --path ./my-map で登録する。
+      - name: kobe-v1
+        ref: kobe
+        version: v1
+      # submit/render時に具体的な版とハッシュへ解決する。
+      - name: kobe-newest
+        ref: kobe
+        version: latest
+    seeds: [1, 2]
+  execution: {maxParallelRuns: 2, timeout: 30m}
+  outputs:
+    collect: [score, simulatorLogs, agentLogs]

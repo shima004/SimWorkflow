@@ -40,6 +40,8 @@ Javaは `PRECOMPUTED`、Pythonは構造化ログの `mode: 1`（PRECOMPUTED）�
 
 ## マップZIPの形式
 
+名前と版を付けて管理する場合は [マップの登録と利用](maps.md) を参照してください。登録済みマップは実験送信時に版とSHA-256を固定します。`simulator.parameters.timesteps` でステップ数を指定でき、マップの登録し直しは不要です。
+
 ZIPのルートに以下を配置します。
 
 ```text

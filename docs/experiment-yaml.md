@@ -19,7 +19,8 @@ Python版は [python-module-comparison.yaml](../examples/experiments/python-modu
 | `metadata.description`           | 任意の説明                                               |
 | `spec.simulator.image`           | シミュレータのコンテナイメージ                           |
 | `spec.agents`                    | 比較対象となるエージェント定義の配列                     |
-| `spec.conditions.maps`           | マップ名 `name` と配置先 `source` の配列                 |
+| `spec.conditions.maps`           | `name` と登録済みの `version`、または直接参照の `source` の配列 |
+| `spec.simulator.parameters.timesteps` | 任意のステップ数。正の整数、最大2,147,483,647 |
 | `spec.conditions.seeds`          | 乱数シードの整数配列                                     |
 | `spec.execution.maxParallelRuns` | 実験全体で同時実行するシミュレーション数の上限。正の整数 |
 | `spec.execution.timeout`         | 事前計算から本実行までの合計制限時間。`30m` などの正の期間                |
@@ -32,6 +33,7 @@ Python版は [python-module-comparison.yaml](../examples/experiments/python-modu
 `spec.simulator.resources` と各 `spec.agents[].resources` に、割り当てるCPU・メモリを指定します。エージェントは種類ごとのコンテナに適用します。詳細は次節を参照してください。
 
 サービスの接続先・認証情報はCLIの環境変数で設定し、このYAMLには含めません。
+マップの登録、`ref`・`version: latest` の解決、SHA-256の固定、ステップ数の変更は [マップの運用](maps.md) を参照してください。
 マップの `s3://bucket/key` はS3オブジェクトの参照先です。結果の保存先バケットを指定する `S3_BUCKET` とは別に、参照するバケットを表します。
 
 ## CPU・メモリ
