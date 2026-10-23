@@ -106,12 +106,30 @@ waiting:
 	if err != nil {
 		files = []string{}
 	}
-	summary := Summary{ExecutionID: c.ExecutionID, Experiment: c.Experiment, Run: c.Run, Phase: "Failed", Server: server, Agent: agent, Agents: agents, PrecomputeFiles: files, ResultPrefix: c.ResultPrefix, FinishedAt: time.Now().UTC()}
+	summary := Summary{Stage: c.Stage, ExecutionID: c.ExecutionID, Experiment: c.Experiment, Run: c.Run, Phase: "Failed", Server: server, Agent: agent, Agents: agents, PrecomputeFiles: files, ResultPrefix: c.ResultPrefix, FinishedAt: time.Now().UTC()}
 	if server.Success && agent.Success {
 		summary.Phase = "Succeeded"
 	}
 	if slices.Contains(c.Collect, "score") {
 		summary.Score = readScore(root)
+	}
+	// Run deadline cancellation must not prevent saving the failure report.
+	uploadCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	if c.Stage == Precompute && summary.Phase == "Succeeded" {
+		handoff := filepath.Join(root, "precompute.zip")
+		err := makeHandoff(root, handoff, c)
+		if err == nil {
+			if c.PrecomputeUpload == nil {
+				err = errors.New("missing precompute upload")
+			} else {
+				err = uploadFile(uploadCtx, handoff, *c.PrecomputeUpload)
+			}
+		}
+		if err != nil {
+			summary.Phase = "Failed"
+			summary.Error = "could not publish precompute data"
+		}
 	}
 	if err := writeJSON(filepath.Join(root, "result.json"), summary); err != nil {
 		return err
@@ -120,9 +138,6 @@ waiting:
 	if err := bundle(root, archive, c.Collect); err != nil {
 		return err
 	}
-	// Run deadline cancellation must not prevent saving the failure report.
-	uploadCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
 	f, err := os.Open(archive)
 	if err != nil {
 		return err
@@ -214,4 +229,17 @@ func bundle(root, destination string, collect []string) (err error) {
 		}
 	}
 	return nil
+}
+
+func uploadFile(ctx context.Context, path string, transfer storage.Transfer) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	response, err := storage.Request(ctx, http.MethodPut, transfer, f)
+	if err != nil {
+		return err
+	}
+	return response.Body.Close()
 }

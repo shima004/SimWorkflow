@@ -3,6 +3,8 @@ package worker
 import (
 	"archive/zip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"simworkflow/internal/experiment"
 	"simworkflow/internal/storage"
@@ -20,7 +23,7 @@ import (
 const maxMapBytes int64 = 2 << 30
 
 func Prepare(ctx context.Context, root string, c Config) error {
-	if c.TimeoutSeconds <= 0 || c.Run.ID == "" {
+	if c.TimeoutSeconds <= 0 || c.Run.ID == "" || (c.Stage != Precompute && c.Stage != Simulation) {
 		return errors.New("invalid run configuration")
 	}
 	if err := os.MkdirAll(root, 0777); err != nil {
@@ -49,9 +52,13 @@ func Prepare(ctx context.Context, root string, c Config) error {
 			}
 		}
 	}
-	if err := writeJSON(filepath.Join(root, "run.json"), c); err != nil {
+	if c.Stage == Precompute {
+		c.Deadline = time.Now().UTC().Add(time.Duration(c.TimeoutSeconds) * time.Second)
+	} else if err := restoreHandoff(ctx, root, &c); err != nil {
 		return err
 	}
+	ctx, cancel := context.WithDeadline(ctx, c.Deadline)
+	defer cancel()
 	resp, err := storage.Request(ctx, http.MethodGet, c.Map, nil)
 	if err != nil {
 		return fmt.Errorf("map download: %w", err)
@@ -62,7 +69,8 @@ func Prepare(ctx context.Context, root string, c Config) error {
 		return err
 	}
 	defer os.Remove(f.Name())
-	n, copyErr := io.Copy(f, io.LimitReader(resp.Body, maxMapBytes+1))
+	hash := sha256.New()
+	n, copyErr := io.Copy(io.MultiWriter(f, hash), io.LimitReader(resp.Body, maxMapBytes+1))
 	closeErr := f.Close()
 	if copyErr != nil || closeErr != nil {
 		return errors.New("could not save map archive")
@@ -70,6 +78,11 @@ func Prepare(ctx context.Context, root string, c Config) error {
 	if n > maxMapBytes {
 		return errors.New("map archive exceeds 2GiB limit")
 	}
+	digest := hex.EncodeToString(hash.Sum(nil))
+	if c.Stage == Simulation && c.MapSHA256 != digest {
+		return errors.New("map archive changed since precompute")
+	}
+	c.MapSHA256 = digest
 	if err := extractZIP(f.Name(), filepath.Join(root, "scenario")); err != nil {
 		return err
 	}
@@ -78,7 +91,10 @@ func Prepare(ctx context.Context, root string, c Config) error {
 			return fmt.Errorf("map archive must contain %s", path)
 		}
 	}
-	return seedConfig(filepath.Join(root, "scenario", "config"), c.Run.Seed)
+	if err := seedConfig(filepath.Join(root, "scenario", "config"), c.Run.Seed); err != nil {
+		return err
+	}
+	return writeJSON(filepath.Join(root, "run.json"), c)
 }
 
 func extractZIP(archive, destination string) error {

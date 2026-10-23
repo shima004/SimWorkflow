@@ -16,6 +16,9 @@ import (
 
 func TestSignedTransfersAndJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead && strings.Contains(r.URL.Path, "future") {
+			t.Error("future outputs must not be checked before execution")
+		}
 		if r.Method == http.MethodGet {
 			io.WriteString(w, `{"name":"test"}`)
 		} else if r.Method == http.MethodPut {
@@ -41,6 +44,9 @@ func TestSignedTransfersAndJSON(t *testing.T) {
 		if !strings.Contains(transfer.URL, "X-Amz-Signature=") || strings.Contains(transfer.URL, "secret-signing-key") {
 			t.Fatal("workers must receive short-lived signatures, not long-lived secret keys")
 		}
+	}
+	if transfer, err := store.SignDownload(context.Background(), "results", "future/data.zip"); err != nil || !strings.Contains(transfer.URL, "X-Amz-Signature=") {
+		t.Fatal("sign future stage inputs without requiring them to exist")
 	}
 	if _, err := store.Download(context.Background(), "https://untrusted/map.zip"); err == nil {
 		t.Fatal("map references must be S3 URIs")

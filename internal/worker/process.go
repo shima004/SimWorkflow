@@ -90,7 +90,7 @@ func (w *readyWriter) Write(data []byte) (int, error) {
 }
 
 func runServer(ctx context.Context, root string, c Config) error {
-	for _, phase := range []string{"precompute", "simulation"} {
+	for _, phase := range []string{c.Stage} {
 		mode := "precompute"
 		if phase == "simulation" {
 			mode = "comprun"

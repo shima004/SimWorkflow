@@ -86,24 +86,3 @@ func waitAgents(ctx context.Context, root, phase string) error {
 		}
 	}
 }
-
-func waitServerPhase(ctx context.Context, root, phase string) (State, error) {
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		if state, ok := readState(root, phase+".server"); ok {
-			return state, nil
-		}
-		if state, ok := readState(root, "server"); ok && !state.Success {
-			return State{}, errors.New("server failed before phase completion")
-		}
-		if state, _, _ := agentStates(root, ""); state.Error != "" {
-			return State{}, errors.New("agent role failed before phase completion")
-		}
-		select {
-		case <-ctx.Done():
-			return State{}, errors.New("run deadline reached while waiting for server phase")
-		case <-ticker.C:
-		}
-	}
-}

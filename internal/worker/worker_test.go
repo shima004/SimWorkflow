@@ -47,7 +47,7 @@ func TestPrepareAndSeedIsolation(t *testing.T) {
 	defer server.Close()
 	for _, seed := range []int64{1, 2} {
 		root := filepath.Join(t.TempDir(), "run")
-		c := Config{TimeoutSeconds: 60, Run: experiment.Run{ID: "run-test", Seed: seed}, Map: storage.Transfer{URL: server.URL}}
+		c := Config{Stage: Precompute, TimeoutSeconds: 60, Run: experiment.Run{ID: "run-test", Seed: seed}, Map: storage.Transfer{URL: server.URL}}
 		if err := Prepare(context.Background(), root, c); err != nil {
 			t.Fatal(err)
 		}
@@ -306,9 +306,6 @@ func TestRoleBarrierWaitsForAllAndReportsFailuresEarly(t *testing.T) {
 	if done || state.Success || !strings.Contains(state.Error, "fireBrigade") {
 		t.Fatal("report a failure before other roles finish")
 	}
-	if _, err := waitServerPhase(context.Background(), root, "precompute"); err == nil {
-		t.Fatal("sibling failure must abort the server restart wait")
-	}
 	if err := waitAgents(context.Background(), root, "simulation"); err == nil {
 		t.Fatal("failure must abort barrier wait")
 	}
@@ -319,10 +316,10 @@ func TestAbsentRoleSkipsStartupAndCompletesBarriers(t *testing.T) {
 	os.MkdirAll(filepath.Join(root, "scenario/map"), 0700)
 	os.Mkdir(filepath.Join(root, "state"), 0700)
 	os.WriteFile(filepath.Join(root, "scenario/map/scenario.xml"), []byte("<scenario><ambulanceteam/></scenario>"), 0600)
-	if err := runAgent(context.Background(), root, Config{}, "fireBrigade"); err != nil {
-		t.Fatal(err)
-	}
-	for _, phase := range []string{"precompute", "simulation"} {
+	for _, phase := range []string{Precompute, Simulation} {
+		if err := runAgent(context.Background(), root, Config{Stage: phase}, "fireBrigade"); err != nil {
+			t.Fatal(err)
+		}
 		state, ok := readState(root, phase+"."+AgentActor("fireBrigade"))
 		if !ok || !state.Success {
 			t.Fatal("absent roles must not block either phase")

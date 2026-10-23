@@ -165,7 +165,7 @@ func runAgent(ctx context.Context, root string, c Config, role string) error {
 	total := platoons + counts[1] + counts[3] + counts[5]
 	// Roles absent from a scenario still publish their barrier states.
 	if total == 0 {
-		for _, phase := range []string{"precompute", "simulation"} {
+		for _, phase := range []string{c.Stage} {
 			if err := writeJSON(statePath(root, phase+"."+actor), State{Success: true}); err != nil {
 				return err
 			}
@@ -176,22 +176,13 @@ func runAgent(ctx context.Context, root string, c Config, role string) error {
 	if err != nil {
 		return err
 	}
-	for _, phase := range []string{"precompute", "simulation"} {
+	for _, phase := range []string{c.Stage} {
 		// Centres share their platoon's container but do not precompute.
 		if phase == "precompute" && platoons == 0 {
 			if err := writeJSON(statePath(root, phase+"."+actor), State{Success: true}); err != nil {
 				return err
 			}
 			continue
-		}
-		if phase == "simulation" {
-			state, err := waitServerPhase(ctx, root, "precompute")
-			if err != nil {
-				return err
-			}
-			if !state.Success {
-				return errors.New("precompute server phase failed")
-			}
 		}
 		// A failed server must abort the wait instead of waiting for readiness.
 		for {

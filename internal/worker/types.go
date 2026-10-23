@@ -13,16 +13,26 @@ import (
 	"simworkflow/internal/storage"
 )
 
+const (
+	Precompute = "precompute"
+	Simulation = "simulation"
+)
+
 type Config struct {
-	ExecutionID    string           `json:"executionId"`
-	Experiment     string           `json:"experiment"`
-	Run            experiment.Run   `json:"run"`
-	TimeoutSeconds int64            `json:"timeoutSeconds"`
-	Map            storage.Transfer `json:"map"`
-	Bundle         storage.Transfer `json:"bundle"`
-	Summary        storage.Transfer `json:"summary"`
-	ResultPrefix   string           `json:"resultPrefix"`
-	Collect        []string         `json:"collect"`
+	Stage              string            `json:"stage"`
+	Deadline           time.Time         `json:"deadline"`
+	MapSHA256          string            `json:"mapSHA256"`
+	PrecomputeUpload   *storage.Transfer `json:"precomputeUpload,omitempty"`
+	PrecomputeDownload *storage.Transfer `json:"precomputeDownload,omitempty"`
+	ExecutionID        string            `json:"executionId"`
+	Experiment         string            `json:"experiment"`
+	Run                experiment.Run    `json:"run"`
+	TimeoutSeconds     int64             `json:"timeoutSeconds"`
+	Map                storage.Transfer  `json:"map"`
+	Bundle             storage.Transfer  `json:"bundle"`
+	Summary            storage.Transfer  `json:"summary"`
+	ResultPrefix       string            `json:"resultPrefix"`
+	Collect            []string          `json:"collect"`
 }
 
 type State struct {
@@ -31,6 +41,9 @@ type State struct {
 }
 
 type Summary struct {
+	WorkflowPhase   string           `json:"workflowPhase,omitempty"`
+	Stage           string           `json:"stage,omitempty"`
+	Error           string           `json:"error,omitempty"`
 	ExecutionID     string           `json:"executionId"`
 	Experiment      string           `json:"experiment"`
 	Run             experiment.Run   `json:"run"`
@@ -99,7 +112,10 @@ func Run(ctx context.Context, root, actor string) (err error) {
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(c.TimeoutSeconds)*time.Second)
+	if c.Stage != Precompute && c.Stage != Simulation {
+		return errors.New("worker requires a precompute or simulation stage")
+	}
+	ctx, cancel := context.WithDeadline(ctx, c.Deadline)
 	defer cancel()
 	if actor == "collect" {
 		return collect(ctx, root, c)

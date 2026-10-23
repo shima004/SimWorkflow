@@ -66,7 +66,13 @@ func (s *Store) Download(ctx context.Context, source string) (Transfer, error) {
 	if _, err := s.Client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(u.Host), Key: aws.String(key)}); err != nil {
 		return Transfer{}, fmt.Errorf("map object: %w", safeError(err))
 	}
-	request, err := s3.NewPresignClient(s.Client).PresignGetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(u.Host), Key: aws.String(key)}, s3.WithPresignExpires(24*time.Hour))
+	return s.SignDownload(ctx, u.Host, key)
+}
+
+// SignDownload also supports objects produced by an earlier workflow step.
+// It deliberately does not require the object to exist at submission time.
+func (s *Store) SignDownload(ctx context.Context, bucket, key string) (Transfer, error) {
+	request, err := s3.NewPresignClient(s.Client).PresignGetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)}, s3.WithPresignExpires(24*time.Hour))
 	if err != nil {
 		return Transfer{}, errors.New("could not sign map download")
 	}
@@ -81,12 +87,19 @@ func (s *Store) Upload(ctx context.Context, key string) (Transfer, error) {
 	return Transfer{URL: request.URL, Headers: request.SignedHeader}, nil
 }
 
+var ErrNotFound = errors.New("S3 object not found")
+
+func IsNotFound(err error) bool { return errors.Is(err, ErrNotFound) }
+
 func safeError(err error) error {
 	if err == nil {
 		return nil
 	}
 	var response *smithyhttp.ResponseError
 	if errors.As(err, &response) {
+		if response.HTTPStatusCode() == http.StatusNotFound {
+			return ErrNotFound
+		}
 		return fmt.Errorf("S3 HTTP %d", response.HTTPStatusCode())
 	}
 	return errors.New("S3 request failed")
