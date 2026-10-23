@@ -1,0 +1,31 @@
+# Access for the CLI's Argo API token. Review namespace and ServiceAccount
+# before applying. This does not configure the workflow executor's identity.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: simworkflow-client
+  namespace: argo-workflows
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [workflows]
+    verbs: [get, list, watch, create]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: simworkflow-client
+  namespace: argo-workflows
+subjects:
+  - kind: ServiceAccount
+    name: simworkflow
+    namespace: argo-workflows
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: simworkflow-client

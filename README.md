@@ -1,7 +1,7 @@
 # SimWorkflow CLI
 
 Go製のCLIの土台です。Argo Workflows、S3互換サービス、コンテナイメージレジストリの接続設定を環境変数から読み込みます。
-接続設定と実験YAMLの読み込み・検証、実行計画の展開、ADFのモジュール設定ファイルの生成ができます。APIへの接続、認証の成否確認、Workflow操作やイメージ転送は今後実装します。
+接続設定と実験YAMLの読み込み・検証、サービスへの読み取りアクセス確認、実行計画の展開、ADFのモジュール設定ファイルの生成ができます。Workflow操作やイメージ転送は今後実装します。
 
 Go 1.24以降が必要です。YAMLの処理には `go.yaml.in/yaml/v3` を使用します。
 
@@ -81,6 +81,15 @@ go run ./cmd/simworkflow -env-file .env config check
 `.env.example` の値のままでも設定形式の検証はできます。実サービスを操作する際には実際の接続情報に置き換えてください。
 `config check` はネットワーク通信を行わず、設定の不足や形式を検証します。認証情報や接続先の値は表示しません。
 
+実際にサービスへの読み取りアクセスを確認するには `--connect` を付けます。
+
+```sh
+go run ./cmd/simworkflow -env-file .env config check --connect
+```
+
+このコマンドはArgoのWorkflow一覧、S3の指定バケット、レジストリV2 APIを確認します。
+書き込みは行いません。権限不足や到達できない接続先の対処は [接続確認の手順](docs/connections.md) を参照してください。
+
 本番では環境変数を直接渡します。`.env` は `-env-file` を指定した場合のみ読み込みます。
 
 ```sh
@@ -111,7 +120,7 @@ go build -o bin/simworkflow ./cmd/simworkflow
 | `REGISTRY_USERNAME`       | 任意 | パスワードと組み合わせて設定                                      |
 | `REGISTRY_PASSWORD`       | 任意 | ユーザー名と組み合わせて設定                                      |
 | `REGISTRY_TOKEN`          | 任意 | ユーザー名・パスワードと併用不可。`Bearer` 接頭辞なし             |
-| `HTTP_TIMEOUT`            | 任意 | `30s`。将来のHTTPリクエスト用。正の期間を指定                     |
+| `HTTP_TIMEOUT`            | 任意 | `30s`。各HTTPリクエストのタイムアウト。正の期間を指定            |
 
 URLは `http://` または `https://` が必須です。URL内のユーザー情報、クエリ、フラグメントは受け付けません。
 レジストリの認証は匿名・ユーザー名とパスワード・トークンのいずれかを選択できます。
@@ -126,6 +135,7 @@ go vet ./...
 
 - `cmd/simworkflow`: CLIのエントリーポイントと `config check`
 - `internal/config`: 接続設定の型、環境変数の読み込み・検証、`.env` の読み込み
+- `internal/connections`: 認証付きのサービス接続確認とS3クライアントの構築
 - `internal/experiment`: 実験YAMLの読み込み・検証と実行計画の展開
 - `internal/moduleconfig`: Java／Python版ADFモジュール設定の生成
 
