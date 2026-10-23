@@ -1,9 +1,9 @@
 # SimWorkflow CLI
 
 Go製のCLIの土台です。Argo Workflows、S3互換サービス、コンテナイメージレジストリの接続設定を環境変数から読み込みます。
-現在の実装範囲は設定の読み込みと検証です。APIへの接続、認証の成否確認、Workflow操作やイメージ転送は今後実装します。
+接続設定と実験YAMLの読み込み・検証、実行計画の展開ができます。APIへの接続、認証の成否確認、Workflow操作やイメージ転送は今後実装します。
 
-Go 1.24以降が必要です。外部ライブラリへの依存はありません。
+Go 1.24以降が必要です。YAMLの処理には `go.yaml.in/yaml/v3` を使用します。
 
 ## 実験定義の設計
 
@@ -14,7 +14,21 @@ Go 1.24以降が必要です。外部ライブラリへの依存はありませ�
 - [実験定義YAMLの仕様](docs/experiment-yaml.md)
 - [モジュール比較のサンプル](examples/experiments/module-comparison.yaml)（除外後3構成 × マップ1件 × シード3件 = 9回）
 
-現在は仕様とサンプルのみで、YAMLからの実行処理は未実装です。
+以下のコマンドはサービスの接続情報なしで利用でき、ネットワーク通信は行いません。
+
+```sh
+# 設定と、除外後に実行可能な組み合わせが残ることを検証
+go run ./cmd/simworkflow experiment validate -f examples/experiments/module-comparison.yaml
+
+# 展開された構成・マップ・シード・リソースと総実行回数を確認
+go run ./cmd/simworkflow experiment plan -f examples/experiments/module-comparison.yaml
+
+# JSONで実行計画を取得
+go run ./cmd/simworkflow experiment plan -f examples/experiments/module-comparison.yaml --format json
+```
+
+展開する実行数の上限は既定で10,000件です。意図した大規模実験では `--max-runs 20000` などで変更できます。
+YAMLからArgo Workflowへの変換と実サービスでの実行は未実装です。
 
 ## エージェント用コンテナテンプレート
 
@@ -83,5 +97,6 @@ go vet ./...
 
 - `cmd/simworkflow`: CLIのエントリーポイントと `config check`
 - `internal/config`: 接続設定の型、環境変数の読み込み・検証、`.env` の読み込み
+- `internal/experiment`: 実験YAMLの読み込み・検証と実行計画の展開
 
 接続処理の実装時には `config.Load(os.LookupEnv)` が返す設定を使用できます。`.env` を併用する場合は `config.WithFallback` で環境変数の読み込みに重ねます。

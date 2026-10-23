@@ -22,7 +22,7 @@ func run(args []string, lookup func(string) (string, bool), out, errOut io.Write
 	flags.SetOutput(errOut)
 	envFile := flags.String("env-file", "", "optional local .env file (process environment takes precedence)")
 	flags.Usage = func() {
-		fmt.Fprintln(errOut, "Usage: simworkflow [-env-file .env] config check")
+		fmt.Fprintln(errOut, "Usage: simworkflow [-env-file .env] config check\n       simworkflow experiment <validate|plan|modules> [options]")
 		flags.PrintDefaults()
 	}
 	if err := flags.Parse(args); err != nil {
@@ -31,9 +31,12 @@ func run(args []string, lookup func(string) (string, bool), out, errOut io.Write
 		}
 		return err
 	}
+	if flags.NArg() >= 1 && flags.Arg(0) == "experiment" {
+		return runExperiment(flags.Args()[1:], out, errOut)
+	}
 	if flags.NArg() != 2 || flags.Arg(0) != "config" || flags.Arg(1) != "check" {
 		flags.Usage()
-		return errors.New("expected config check")
+		return errors.New("expected config check or experiment command")
 	}
 	if *envFile != "" {
 		values, err := config.ReadEnvFile(*envFile)
