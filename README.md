@@ -1,7 +1,7 @@
 # SimWorkflow CLI
 
-Go製のCLIの土台です。Argo Workflows、S3互換サービス、コンテナイメージレジストリの接続設定を環境変数から読み込みます。
-接続設定と実験YAMLの読み込み・検証、サービスへの読み取りアクセス確認、実行計画の展開、ADFのモジュール設定ファイルの生成ができます。Workflow操作やイメージ転送は今後実装します。
+RoboCup Rescue Simulationの実験をYAMLで定義し、Argo Workflowsで実行するGo製CLIです。
+モジュールの組み合わせを展開し、サーバー・エージェントの事前計算、本実行、結果のS3保存までを行います。サービスの接続設定は環境変数から読み込みます。
 
 Go 1.24以降が必要です。YAMLの処理には `go.yaml.in/yaml/v3` を使用します。
 
@@ -11,6 +11,8 @@ Go 1.24以降が必要です。YAMLの処理には `go.yaml.in/yaml/v3` を使�
 `matrix.exclude` で特定の組み合わせを除外し、各構成をマップ・シードごとに実行します。
 シミュレータと各エージェントには、それぞれ `resources.cpu`（コア相当の数値）と `resources.memory`（`4Gi` など）を指定します。
 
+- [事前計算から本実行までの実行手順](docs/execution.md)
+- [最小の実験定義](examples/experiments/precompute-baseline.yaml)
 - [実験定義YAMLの仕様](docs/experiment-yaml.md)
 - [モジュール比較のサンプル](examples/experiments/module-comparison.yaml)（除外後3構成 × マップ1件 × シード3件 = 9回）
 - [シミュレーターの起動仕様](docs/simulator.md)（`ghcr.io/shima004/rcrs-server:v1.0.4`）
@@ -29,7 +31,16 @@ go run ./cmd/simworkflow experiment plan -f examples/experiments/module-comparis
 ```
 
 展開する実行数の上限は既定で10,000件です。意図した大規模実験では `--max-runs 20000` などで変更できます。
-YAMLからArgo Workflowへの変換と実サービスでの実行は未実装です。
+実行にはマップZIPをS3へ配置し、テンプレートに従うエージェントとワーカーのイメージをレジストリに登録します。
+
+```sh
+go run ./cmd/simworkflow -env-file .env experiment submit \
+  -f experiment.yaml --helper-image registry.example.com/simworkflow/worker:v1
+go run ./cmd/simworkflow -env-file .env experiment status --watch WORKFLOW_NAME
+go run ./cmd/simworkflow -env-file .env experiment results WORKFLOW_NAME
+```
+
+マップの形式、事前計算データの引き継ぎ、生成Workflowの確認方法は [実行手順](docs/execution.md) を参照してください。
 
 ## モジュール設定ファイルの生成
 
@@ -67,7 +78,7 @@ go run ./cmd/simworkflow experiment modules \
 - [Python版（pip / uv）](templates/agents/python/README.md)
 
 テンプレートにはエージェント本体を含みません。Java版・Python uv版のDockerビルドと、生成設定のADFでの読み込みを確認済みです。
-実サービス接続と実験の完走は未確認です。[検証記録](docs/validation.md)を参照してください。
+Java版・Python uv版とも、Argo上で事前計算、本実行、結果のS3保存を確認しています。確認条件は [検証記録](docs/validation.md) を参照してください。
 
 ## 動作確認
 
@@ -133,10 +144,13 @@ go test ./...
 go vet ./...
 ```
 
-- `cmd/simworkflow`: CLIのエントリーポイントと `config check`
+- `cmd/simworkflow`: 設定・実験・ワーカーのCLI
 - `internal/config`: 接続設定の型、環境変数の読み込み・検証、`.env` の読み込み
 - `internal/connections`: 認証付きのサービス接続確認とS3クライアントの構築
 - `internal/experiment`: 実験YAMLの読み込み・検証と実行計画の展開
 - `internal/moduleconfig`: Java／Python版ADFモジュール設定の生成
+- `internal/workflow` / `internal/argo`: Workflow生成・送信・状態参照
+- `internal/worker`: マップ準備、事前計算と本実行の制御、結果収集
+- `internal/storage`: S3の実行計画保存と期限付きファイル転送
 
 接続処理の実装時には `config.Load(os.LookupEnv)` が返す設定を使用できます。`.env` を併用する場合は `config.WithFallback` で環境変数の読み込みに重ねます。

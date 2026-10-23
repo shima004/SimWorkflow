@@ -1,7 +1,7 @@
 # ADFサンプルのモジュール切り替え
 
 提供されたJava版・Python版サンプルと、Python版の依存するADF Coreを確認した結果です。
-コンテナを起動しての動作確認はまだ行っていません。
+テンプレートのコンテナとArgo上での動作確認結果は [検証記録](validation.md) を参照してください。
 
 ## 確認した設定方法
 
@@ -51,7 +51,7 @@ Pythonでも同じ設定キーを使えますが、候補の値にはPythonの�
 サンプルの値は `adf_core_python.implement.module.algorithm.a_star_path_planning.AStarPathPlanning` です。
 JavaとPythonの実装クラス名を相互に置き換えることはしません。
 
-処理は以下の順序とします。
+処理は以下の順序です。
 
 1. 対象イメージに対応する元のモジュール設定ファイルを取得する。
 2. `matrix` を展開し、実行ごとに元の設定へ固定モジュールと選択された候補を上書きする。
@@ -68,10 +68,10 @@ Pythonサンプルの `main.py` は `config/launcher.yaml` を指定してLaunch
 設定ファイル生成だけでは候補の実装コードを追加できません。候補を含むコンテナイメージが必要です。
 
 ユーザー向けの [Javaコンテナテンプレート](../templates/agents/java/README.md) と [Pythonコンテナテンプレート](../templates/agents/python/README.md) では、作業ディレクトリを `/app` とし、元設定をそれぞれ `/app/config/module.cfg`、`/app/config/module.yaml` に含めます。
-元設定の取得処理とJava/Python形式の選択フィールドは、今後のプラットフォーム実装で確定します。
+実行時にはエージェントコンテナ内で元設定を読み込み、`runtime: java|python` に従って生成・起動します。
 `simworkflow experiment modules` で、ローカルの元設定から構成ごとの設定ファイルと `manifest.json` を生成できます。
 `--agent` で対象を選び、`--base` に完全な元設定、`--format java|python` に設定形式、`--output-dir` に新規ディレクトリを指定します。
 構成IDは実行計画と共通です。マップやシードごとに同一設定を複製することはしません。
 元設定に存在しないキー、Javaの重複キー、Pythonの重複・曖昧なキーはエラーにします。
 Pythonのアンカー・エイリアス・マージキーには現在対応していません。
-コンテナからの元設定取得、自動配置、Argo Workflowによる実行は未実装です。
+Argo上でも同じ設定生成処理を使用します。[事前計算付き実験の実行](execution.md) を参照してください。

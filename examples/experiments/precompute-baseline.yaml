@@ -1,0 +1,40 @@
+apiVersion: simworkflow/v1alpha1
+kind: Experiment
+
+metadata:
+  name: precompute-baseline
+  description: 事前計算データを引き継いで1回の本実行を行う
+
+spec:
+  simulator:
+    image: ghcr.io/shima004/rcrs-server:v1.0.4
+    resources:
+      cpu: 2
+      memory: 8Gi
+
+  agents:
+    - name: baseline
+      runtime: java
+      # Javaテンプレートでビルドし、実行ノードからpullできる場所へ登録する。
+      image: registry.example.com/my-team/agent-java:v1
+      resources:
+        cpu: 2
+        memory: 4Gi
+      modules:
+        SampleRoadDetector.PathPlanning: adf.impl.module.algorithm.DijkstraPathPlanning
+        SampleRoadDetector.Clustering: adf.impl.module.algorithm.KMeansClustering
+
+  conditions:
+    maps:
+      - name: test-map
+        # ZIPのルートにmap/とconfig/を配置する。
+        source: s3://rescue-maps/test-map.zip
+    seeds: [1]
+
+  execution:
+    maxParallelRuns: 1
+    # 事前計算と本実行を合わせた時間。
+    timeout: 30m
+
+  outputs:
+    collect: [score, simulatorLogs, agentLogs]
