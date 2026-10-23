@@ -22,7 +22,7 @@ Python版は [python-module-comparison.yaml](../examples/experiments/python-modu
 | `spec.conditions.maps`           | マップ名 `name` と配置先 `source` の配列                 |
 | `spec.conditions.seeds`          | 乱数シードの整数配列                                     |
 | `spec.execution.maxParallelRuns` | 実験全体で同時実行するシミュレーション数の上限。正の整数 |
-| `spec.execution.timeout`         | 1回の実行の制限時間。`30m` などの正の期間                |
+| `spec.execution.timeout`         | 事前計算から本実行までの合計制限時間。`30m` などの正の期間                |
 | `spec.outputs.collect`           | 収集対象。`score`、`simulatorLogs`、`agentLogs`          |
 
 エージェント定義、マップ、シードを組み合わせて実行します。
