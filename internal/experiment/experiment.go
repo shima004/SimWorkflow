@@ -73,6 +73,7 @@ func (c CPU) MilliCores() (int64, error) {
 
 type Agent struct {
 	Name      string            `yaml:"name" json:"name"`
+	Runtime   string            `yaml:"runtime,omitempty" json:"runtime,omitempty"`
 	Image     string            `yaml:"image" json:"image"`
 	Resources Resources         `yaml:"resources" json:"resources"`
 	Modules   map[string]string `yaml:"modules,omitempty" json:"modules,omitempty"`
@@ -177,6 +178,9 @@ func (e *Experiment) Validate() error {
 	seenAgents := map[string]bool{}
 	for i, a := range e.Spec.Agents {
 		path := fmt.Sprintf("spec.agents[%d]", i)
+		if a.Runtime != "" && a.Runtime != "java" && a.Runtime != "python" {
+			add(path+".runtime", "must be java or python")
+		}
 		if !validName(a.Name) || seenAgents[a.Name] {
 			add(path+".name", "must be a unique name of 1–63 lowercase letters, digits or hyphens, beginning and ending with a letter or digit")
 		}

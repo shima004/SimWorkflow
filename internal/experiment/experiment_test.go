@@ -118,6 +118,7 @@ func TestValidation(t *testing.T) {
 	}{
 		{"version", func(e *Experiment) { e.APIVersion = "unknown" }, "apiVersion"},
 		{"kind", func(e *Experiment) { e.Kind = "Workflow" }, "kind"},
+		{"runtime", func(e *Experiment) { e.Spec.Agents[0].Runtime = "unknown" }, "runtime"},
 		{"name", func(e *Experiment) { e.Metadata.Name = "../bad" }, "metadata.name"},
 		{"image", func(e *Experiment) { e.Spec.Simulator.Image = "" }, "simulator.image"},
 		{"cpu", func(e *Experiment) { e.Spec.Simulator.Resources.CPU = "0.0001" }, "resources.cpu"},

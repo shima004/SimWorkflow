@@ -14,6 +14,7 @@ spec:
 
   agents:
     - name: python-comparison
+      runtime: python
       image: registry.example.com/rescue-agent-python:v1
       resources:
         cpu: 4

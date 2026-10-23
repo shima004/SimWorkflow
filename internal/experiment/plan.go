@@ -33,6 +33,7 @@ type AgentSummary struct {
 type Configuration struct {
 	ID        string            `json:"id"`
 	Agent     string            `json:"agent"`
+	Runtime   string            `json:"runtime"`
 	Image     string            `json:"image"`
 	Resources Resources         `json:"resources"`
 	Modules   map[string]string `json:"modules"`
@@ -73,7 +74,11 @@ func BuildPlan(e *Experiment, maxRuns int) (*Plan, error) {
 			if len(plan.Runs) > maxRuns-runsPerConfig {
 				return fmt.Errorf("experiment exceeds the limit of %d runs; raise --max-runs explicitly if intended", maxRuns)
 			}
-			configuration := Configuration{Agent: agent.Name, Image: agent.Image, Resources: agent.Resources, Modules: maps.Clone(modules)}
+			runtime := agent.Runtime
+			if runtime == "" {
+				runtime = "java"
+			}
+			configuration := Configuration{Agent: agent.Name, Runtime: runtime, Image: agent.Image, Resources: agent.Resources, Modules: maps.Clone(modules)}
 			configuration.ID = "config-" + digest(configuration)
 			count++
 			for _, m := range e.Spec.Conditions.Maps {
