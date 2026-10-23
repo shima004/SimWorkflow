@@ -1,0 +1,13 @@
+# Copy to pyproject.toml in your agent repository, then run uv lock.
+[project]
+name = "rescue-agent-python"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = ["adf-core-python", "rcrscore"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+adf-core-python = { git = "https://github.com/adf-python/adf-core-python", rev = "c5eaf8d2dae07c0bb1a3227efca9effd4fca110b" }
+rcrscore = { git = "https://github.com/adf-python/rcrs-core-python", tag = "v0.2.3" }

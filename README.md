@@ -66,7 +66,8 @@ go run ./cmd/simworkflow experiment modules \
 - [Java版](templates/agents/java/README.md)
 - [Python版（pip / uv）](templates/agents/python/README.md)
 
-テンプレートにはエージェント本体を含みません。Dockerビルドと実サービス接続は未検証です。
+テンプレートにはエージェント本体を含みません。Java版・Python uv版のDockerビルドと、生成設定のADFでの読み込みを確認済みです。
+実サービス接続と実験の完走は未確認です。[検証記録](docs/validation.md)を参照してください。
 
 ## 動作確認
 

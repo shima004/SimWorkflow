@@ -1,0 +1,9 @@
+// Resolve and download runtime-only/transitive dependencies during image build.
+// A sample without tests may otherwise resolve only its compile classpath.
+allprojects {
+    tasks.register('resolveRuntimeDependencies') {
+        doLast {
+            configurations.runtimeClasspath.resolve()
+        }
+    }
+}

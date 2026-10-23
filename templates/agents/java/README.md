@@ -6,7 +6,7 @@ Java 21でビルドし、元の `launch.sh` で起動します。ビルドと起
 
 ## 作成
 
-1. このディレクトリの `Dockerfile` と `.dockerignore` を、エージェントリポジトリの `gradlew` があるディレクトリへコピーします。
+1. このディレクトリの `Dockerfile`、`.dockerignore`、`simworkflow-runtime.gradle` を、エージェントリポジトリの `gradlew` があるディレクトリへコピーします。
 2. 比較したいモジュールのJavaソースを `src/main/java` 以下に追加します。外部JARを使う場合は、元の `build.gradle` の依存設定に従って追加します。
 3. 同じディレクトリで次のコマンドを実行します。
 
@@ -18,6 +18,7 @@ docker push registry.example.com/my-team/agent-java:v1
 
 イメージ名は利用するレジストリ・チーム名に変更してください。
 ビルド時にGradle本体と依存ライブラリを取得するため、ネットワーク接続が必要です。
+`simworkflow-runtime.gradle` は `runtimeClasspath` も解決し、実行時に必要な推移依存をイメージ内に取得します。コンパイルのみでは、テストのないプロジェクトの実行時依存は取得されないことがあります。
 元のサンプルは一部の依存に `master-SNAPSHOT` を使用しています。実験を再現する際には、依存バージョンとイメージのダイジェストを固定してください。
 
 ## コンテナの取り決め
@@ -53,4 +54,5 @@ docker run --rm \
 プラットフォームも同じように、生成したファイルをコンテナに渡して引数で選択する設計です。設定生成とArgo Workflowによる実行は未実装です。
 CPU・メモリの制限とJVMのヒープ設定は別です。元の `build.gradle` の `launch` タスクは `maxHeapSize = '2048m'` を指定しているため、変更が必要ならエージェント側のビルド設定も調整します。
 
-Dockerビルドと実サービス接続は未検証です。
+公開サンプルでDockerビルドに成功し、生成した設定をADFの `ModuleConfig` で読み込んで基準実装のクラスをロードできることを確認しています。
+シミュレーターへの接続と実験の完走は未確認です。[検証記録](../../../docs/validation.md)を参照してください。
