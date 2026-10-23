@@ -100,6 +100,10 @@ go run ./cmd/simworkflow experiment status --watch WORKFLOW_NAME
 go run ./cmd/simworkflow experiment results WORKFLOW_NAME
 ```
 
+`status --watch` は約5秒ごとに構成別の段階・状態・完了ステップ数／総ステップ数・最新スコア・進捗の更新経過時間を表示します。`status` 単体は1回だけ表示します。
+進捗対応ワーカーで新規送信した実験では、結果収集コンテナがカーネルログを追跡し、段階ごとの `progress.json` を約5秒ごとにS3へ送信します。表示には転送・ポーリング分の遅延があります。完了ステップ数はカーネルの完了ログから読み、経過時間からは推定しません。
+旧ワーカーの実験や未起動のPodではステップ数を `-` と表示します。初期化中は進捗の送信前なので、まずArgoの段階・状態だけが表示されます。進捗転送が止まった場合は最終更新からの経過時間を確認できます。進捗送信の失敗だけで実験を失敗にはしません。
+
 `results` は実験ごとの要約をJSON配列で返します。実行状態、モジュール構成、シード、事前計算ファイル、スコア、S3の保存先を確認できます。
 `stage` が要約の対象（`precompute`／`simulation`）、`phase` がその段階の結果、`workflowPhase` がWorkflow全体の状態です。
 本実行の要約がまだない場合は事前計算の要約を返します。事前計算のSucceededは実験全体の完了を意味しません。
@@ -109,6 +113,8 @@ S3では実行ごとに一意のプレフィックスを生成します。
 
 ```text
 experiments/<execution-id>/plan.json
+experiments/<execution-id>/<run-id>/precompute/progress.json
+experiments/<execution-id>/<run-id>/progress.json
 experiments/<execution-id>/<run-id>/precompute/data.zip
 experiments/<execution-id>/<run-id>/precompute/summary.json
 experiments/<execution-id>/<run-id>/precompute/bundle.tar.gz

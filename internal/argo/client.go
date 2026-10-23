@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"simworkflow/internal/config"
 	"simworkflow/internal/connections"
@@ -30,9 +31,12 @@ type Snapshot struct {
 		Phase   string `json:"phase"`
 		Message string `json:"message"`
 		Nodes   map[string]struct {
-			DisplayName string `json:"displayName"`
-			Phase       string `json:"phase"`
-			Message     string `json:"message"`
+			TemplateName string    `json:"templateName"`
+			Type         string    `json:"type"`
+			StartedAt    time.Time `json:"startedAt"`
+			DisplayName  string    `json:"displayName"`
+			Phase        string    `json:"phase"`
+			Message      string    `json:"message"`
 		} `json:"nodes"`
 	} `json:"status"`
 }

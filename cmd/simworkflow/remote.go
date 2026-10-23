@@ -35,7 +35,7 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	flags := flag.NewFlagSet("experiment "+command, flag.ContinueOnError)
 	flags.SetOutput(errOut)
 	if command == "status" || command == "results" {
-		watch := flags.Bool("watch", false, "wait until workflow finishes (status only)")
+		watch := flags.Bool("watch", false, "show per-run progress every 5 seconds until workflow finishes (status only)")
 		if err := flags.Parse(args[1:]); err != nil {
 			if errors.Is(err, flag.ErrHelp) {
 				return nil
@@ -84,6 +84,9 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 				phase = "Pending"
 			}
 			if _, err := fmt.Fprintf(out, "%s: %s\n", snapshot.Metadata.Name, phase); err != nil {
+				return err
+			}
+			if err := writeRunProgress(ctx, storage.New(c), snapshot, out); err != nil {
 				return err
 			}
 			if !*watch {
@@ -172,7 +175,11 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 			if err != nil {
 				return err
 			}
-			c := worker.Config{Stage: stage, ExecutionID: executionID, Experiment: plan.Experiment.Name, Run: run, TimeoutSeconds: int64(timeout / time.Second), Map: mapTransfer, Bundle: bundle, Summary: summary, ResultPrefix: stagePrefix, Collect: plan.Collect}
+			progress, err := store.Upload(ctx, stagePrefix+"/progress.json")
+			if err != nil {
+				return err
+			}
+			c := worker.Config{ProgressUpload: &progress, Stage: stage, ExecutionID: executionID, Experiment: plan.Experiment.Name, Run: run, TimeoutSeconds: int64(timeout / time.Second), Map: mapTransfer, Bundle: bundle, Summary: summary, ResultPrefix: stagePrefix, Collect: plan.Collect}
 			key := resultPrefix + "/precompute/data.zip"
 			if stage == worker.Precompute {
 				transfer, err := store.Upload(ctx, key)

@@ -19,6 +19,7 @@ const (
 )
 
 type Config struct {
+	ProgressUpload     *storage.Transfer `json:"progressUpload,omitempty"`
 	Stage              string            `json:"stage"`
 	Deadline           time.Time         `json:"deadline"`
 	MapSHA256          string            `json:"mapSHA256"`

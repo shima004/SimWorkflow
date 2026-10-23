@@ -77,7 +77,15 @@ func readScore(root string) *float64 {
 	return score
 }
 
-func collect(ctx context.Context, root string, c Config) error {
+func collect(ctx context.Context, root string, c Config) (collectErr error) {
+	reporter := startProgress(ctx, root, c)
+	defer func() {
+		phase := "Succeeded"
+		if collectErr != nil {
+			phase = "Failed"
+		}
+		reporter.finish(phase)
+	}()
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	var server, agent State
