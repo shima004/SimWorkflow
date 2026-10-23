@@ -7,10 +7,10 @@ metadata:
 
 spec:
   simulator:
-    image: registry.example.com/rescue-simulator:v1
+    image: ghcr.io/shima004/rcrs-server:v1.0.4
     resources:
       cpu: 2
-      memory: 4Gi
+      memory: 8Gi
 
   agents:
     - name: python-comparison

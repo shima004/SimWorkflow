@@ -34,7 +34,7 @@ func TestExperimentCommandsWithoutServiceCredentials(t *testing.T) {
 	if err := run([]string{"experiment", "plan", "-f", file}, noEnv, &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "SampleRoadDetector.PathPlanning") || !strings.Contains(out.String(), "4Gi") {
+	if !strings.Contains(out.String(), "SampleRoadDetector.PathPlanning") || !strings.Contains(out.String(), "8Gi") {
 		t.Fatal("text plan must show resolved modules and resource settings")
 	}
 	for _, args := range [][]string{

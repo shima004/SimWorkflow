@@ -31,7 +31,7 @@ func TestSamplePlan(t *testing.T) {
 			t.Fatalf("duplicate run ID: %s", run.ID)
 		}
 		ids[run.ID] = true
-		if run.Simulator.Resources.Memory != "4Gi" || run.Configuration.Resources.CPU != "4" {
+		if run.Simulator.Resources.Memory != "8Gi" || run.Configuration.Resources.CPU != "4" {
 			t.Fatal("resources must be retained independently for simulator and agent")
 		}
 		for _, exclude := range e.Spec.Agents[0].Matrix.Exclude {

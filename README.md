@@ -13,6 +13,7 @@ Go 1.24以降が必要です。YAMLの処理には `go.yaml.in/yaml/v3` を使�
 
 - [実験定義YAMLの仕様](docs/experiment-yaml.md)
 - [モジュール比較のサンプル](examples/experiments/module-comparison.yaml)（除外後3構成 × マップ1件 × シード3件 = 9回）
+- [シミュレーターの起動仕様](docs/simulator.md)（`ghcr.io/shima004/rcrs-server:v1.0.4`）
 
 以下のコマンドはサービスの接続情報なしで利用でき、ネットワーク通信は行いません。
 
@@ -59,7 +60,7 @@ go run ./cmd/simworkflow experiment modules \
 
 ## エージェント用コンテナテンプレート
 
-各ディレクトリの `Dockerfile` と `.dockerignore` を、エージェントリポジトリのルートへコピーして使います。
+各ディレクトリのREADMEに従って、Dockerfileと補助ファイルをエージェントリポジトリのルートへコピーして使います。
 ビルド・レジストリへの登録方法と、実験用モジュール設定をマウントして起動する例を同梱しています。
 
 - [Java版](templates/agents/java/README.md)
