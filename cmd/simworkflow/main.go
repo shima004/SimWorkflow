@@ -27,7 +27,7 @@ func run(args []string, lookup func(string) (string, bool), out, errOut io.Write
 	flags.SetOutput(errOut)
 	envFile := flags.String("env-file", "", "optional local .env file (process environment takes precedence)")
 	flags.Usage = func() {
-		fmt.Fprintln(errOut, "Usage: simworkflow [-env-file .env] config check [--connect]\n       simworkflow [-env-file .env] experiment <validate|plan|modules|render|submit|status|results> [options]")
+		fmt.Fprintln(errOut, "Usage: simworkflow [-env-file .env] config check [--connect]\n       simworkflow [-env-file .env] experiment <validate|plan|modules|render|submit|status|results> [options]\n       simworkflow [-env-file .env] map <register|list|inspect> [options]")
 		flags.PrintDefaults()
 	}
 	if err := flags.Parse(args); err != nil {
@@ -35,6 +35,20 @@ func run(args []string, lookup func(string) (string, bool), out, errOut io.Write
 			return nil
 		}
 		return err
+	}
+	if flags.NArg() >= 1 && flags.Arg(0) == "map" {
+		if *envFile != "" {
+			values, err := config.ReadEnvFile(*envFile)
+			if err != nil {
+				return err
+			}
+			lookup = config.WithFallback(lookup, values)
+		}
+		c, err := config.Load(lookup)
+		if err != nil {
+			return err
+		}
+		return runMap(flags.Args()[1:], c, out, errOut)
 	}
 	if flags.NArg() >= 1 && flags.Arg(0) == "experiment" {
 		if flags.NArg() > 1 && remoteCommand(flags.Arg(1)) {

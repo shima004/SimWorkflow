@@ -14,6 +14,7 @@ import (
 const DefaultMaxRuns = 10000
 
 type Plan struct {
+	UnresolvedMaps  bool           `json:"unresolvedMaps,omitempty"`
 	APIVersion      string         `json:"apiVersion"`
 	Experiment      Metadata       `json:"experiment"`
 	TotalRuns       int            `json:"totalRuns"`
@@ -68,6 +69,11 @@ func BuildPlan(e *Experiment, maxRuns int) (*Plan, error) {
 		MaxParallelRuns: e.Spec.Execution.MaxParallelRuns, Timeout: e.Spec.Execution.Timeout,
 		Collect: append([]string(nil), e.Spec.Outputs.Collect...),
 		Agents:  []AgentSummary{}, Runs: []Run{},
+	}
+	for _, m := range e.Spec.Conditions.Maps {
+		if m.Version != "" && m.Resolved == nil {
+			plan.UnresolvedMaps = true
+		}
 	}
 	for _, agent := range e.Spec.Agents {
 		count := 0

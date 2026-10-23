@@ -18,6 +18,7 @@ import (
 	"simworkflow/internal/argo"
 	"simworkflow/internal/config"
 	"simworkflow/internal/experiment"
+	"simworkflow/internal/mapcatalog"
 	"simworkflow/internal/storage"
 	"simworkflow/internal/worker"
 	"simworkflow/internal/workflow"
@@ -122,6 +123,11 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	if err != nil {
 		return err
 	}
+	store := storage.New(c)
+	e, err = (&mapcatalog.Catalog{Store: store}).Resolve(ctx, e)
+	if err != nil {
+		return err
+	}
 	plan, err := experiment.BuildPlan(e, *maxRuns)
 	if err != nil {
 		return err
@@ -140,17 +146,16 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	}
 	executionID := hex.EncodeToString(random[:])
 	prefix := "experiments/" + executionID
-	store := storage.New(c)
 	configs := make([]workflow.RunConfig, 0, len(plan.Runs))
 	downloads := map[string]storage.Transfer{}
 	for _, run := range plan.Runs {
-		mapTransfer, ok := downloads[run.Map.Source]
+		mapTransfer, ok := downloads[run.Map.Location()]
 		if !ok {
-			mapTransfer, err = store.Download(ctx, run.Map.Source)
+			mapTransfer, err = store.Download(ctx, run.Map.Location())
 			if err != nil {
 				return err
 			}
-			downloads[run.Map.Source] = mapTransfer
+			downloads[run.Map.Location()] = mapTransfer
 		}
 		resultPrefix := prefix + "/" + run.ID
 		pair := workflow.RunConfig{}

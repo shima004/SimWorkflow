@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -324,5 +326,37 @@ func TestAbsentRoleSkipsStartupAndCompletesBarriers(t *testing.T) {
 		if !ok || !state.Success {
 			t.Fatal("absent roles must not block either phase")
 		}
+	}
+}
+
+func TestPinnedMapHashAndTimestepOverride(t *testing.T) {
+	archive := zipBytes(t, map[string]string{"map/scenario.xml": "<scenario><ambulanceteam/></scenario>", "config/common.cfg": "random.seed: 1\nkernel.timesteps: 300\n", "config/kernel.cfg": "!include common.cfg\nkernel.timesteps: 300\n"})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(archive) }))
+	defer server.Close()
+	steps := 5
+	c := Config{Stage: Precompute, TimeoutSeconds: 60, Run: experiment.Run{ID: "run-test", Map: experiment.Map{SHA256: strings.Repeat("a", 64)}, Simulator: experiment.Container{Parameters: &experiment.SimulatorParameters{Timesteps: &steps}}}, Map: storage.Transfer{URL: server.URL}}
+	if err := Prepare(context.Background(), t.TempDir(), c); err == nil || !strings.Contains(err.Error(), "SHA-256") {
+		t.Fatal("pinned map changes must be rejected", err)
+	}
+	hash := sha256.Sum256(archive)
+	c.Run.Map.SHA256 = hex.EncodeToString(hash[:])
+	root := t.TempDir()
+	if err := Prepare(context.Background(), root, c); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"common.cfg", "kernel.cfg"} {
+		data, err := os.ReadFile(filepath.Join(root, "scenario/config", name))
+		if err != nil || strings.Contains(string(data), "300") || !strings.Contains(string(data), "kernel.timesteps: 5") {
+			t.Fatal("all timestep definitions must match the experiment", name, err)
+		}
+	}
+	missing := t.TempDir()
+	os.WriteFile(filepath.Join(missing, "kernel.cfg"), []byte("!include common.cfg\n"), 0600)
+	if err := setTimesteps(missing, 12); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(missing, "kernel.cfg"))
+	if !strings.Contains(string(data), "kernel.timesteps: 12") {
+		t.Fatal("missing timestep setting must be appended")
 	}
 }

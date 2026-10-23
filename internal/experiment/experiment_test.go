@@ -238,3 +238,34 @@ func TestRoleResourcesValidationFallbackAndIdentity(t *testing.T) {
 		}
 	}
 }
+
+func TestRegisteredMapsParametersAndValidation(t *testing.T) {
+	e := sample(t)
+	e.Spec.Conditions.Maps = []Map{{Name: "test-old", Ref: "test", Version: "v1"}, {Name: "test-current", Ref: "test", Version: "latest"}}
+	steps := 10
+	e.Spec.Simulator.Parameters = &SimulatorParameters{Timesteps: &steps}
+	plan, err := BuildPlan(e, 100)
+	if err != nil || !plan.UnresolvedMaps {
+		t.Fatal(plan, err)
+	}
+	originalID := plan.Runs[0].ID
+	changed := 300
+	e.Spec.Simulator.Parameters = &SimulatorParameters{Timesteps: &changed}
+	plan, err = BuildPlan(e, 100)
+	if err != nil || plan.Runs[0].ID == originalID {
+		t.Fatal("timestep changes must change run identity", err)
+	}
+	for _, m := range []Map{{Name: "test", Version: "../v1"}, {Name: "test", Version: "v1", Source: "s3://maps/map.zip"}, {Name: "test", Ref: "test", Source: "s3://maps/map.zip"}, {Name: "test", Source: "s3://maps/map.zip", SHA256: "invalid"}} {
+		e.Spec.Conditions.Maps = []Map{m}
+		if err := e.Validate(); err == nil {
+			t.Fatalf("invalid map reference accepted: %+v", m)
+		}
+	}
+	e.Spec.Conditions.Maps = []Map{{Name: "test", Source: "s3://maps/map.zip", SHA256: strings.Repeat("a", 64)}}
+	for _, n := range []int{0, -1} {
+		e.Spec.Simulator.Parameters = &SimulatorParameters{Timesteps: &n}
+		if err := e.Validate(); err == nil {
+			t.Fatal("invalid timestep count accepted")
+		}
+	}
+}

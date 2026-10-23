@@ -38,9 +38,14 @@ type Spec struct {
 	Outputs    Outputs    `yaml:"outputs" json:"outputs"`
 }
 
+type SimulatorParameters struct {
+	Timesteps *int `yaml:"timesteps,omitempty" json:"timesteps,omitempty"`
+}
+
 type Container struct {
-	Image     string    `yaml:"image" json:"image"`
-	Resources Resources `yaml:"resources" json:"resources"`
+	Parameters *SimulatorParameters `yaml:"parameters,omitempty" json:"parameters,omitempty"`
+	Image      string               `yaml:"image" json:"image"`
+	Resources  Resources            `yaml:"resources" json:"resources"`
 }
 
 type Resources struct {
@@ -95,9 +100,20 @@ type Conditions struct {
 	Seeds []int64 `yaml:"seeds" json:"seeds"`
 }
 
+type ResolvedMap struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Source  string `json:"source"`
+	SHA256  string `json:"sha256"`
+}
+
 type Map struct {
-	Name   string `yaml:"name" json:"name"`
-	Source string `yaml:"source" json:"source"`
+	Version  string       `yaml:"version,omitempty" json:"version,omitempty"`
+	Ref      string       `yaml:"ref,omitempty" json:"ref,omitempty"`
+	SHA256   string       `yaml:"sha256,omitempty" json:"sha256,omitempty"`
+	Resolved *ResolvedMap `yaml:"-" json:"resolved,omitempty"`
+	Name     string       `yaml:"name" json:"name"`
+	Source   string       `yaml:"source,omitempty" json:"source,omitempty"`
 }
 
 type Execution struct {
@@ -173,6 +189,9 @@ func (e *Experiment) Validate() error {
 		}
 	}
 	checkContainer("spec.simulator", e.Spec.Simulator.Image, e.Spec.Simulator.Resources)
+	if p := e.Spec.Simulator.Parameters; p != nil && p.Timesteps != nil && (*p.Timesteps <= 0 || int64(*p.Timesteps) > 2147483647) {
+		add("spec.simulator.parameters.timesteps", "must be an integer between 1 and 2147483647")
+	}
 	if len(e.Spec.Agents) == 0 {
 		add("spec.agents", "at least one agent is required")
 	}
@@ -252,9 +271,30 @@ func (e *Experiment) Validate() error {
 			add(path+".name", "must be a unique name of 1–63 lowercase letters, digits or hyphens, beginning and ending with a letter or digit")
 		}
 		seenMaps[m.Name] = true
-		u, err := url.Parse(m.Source)
-		if err != nil || u.Scheme != "s3" || u.Host == "" || u.User != nil || strings.TrimPrefix(u.Path, "/") == "" || u.RawQuery != "" || u.Fragment != "" {
-			add(path+".source", "must be an s3://bucket/key reference without credentials, query or fragment")
+		if m.Version != "" {
+			if !ValidMapVersion(m.Version) {
+				add(path+".version", "must be a version identifier or latest")
+			}
+			if m.Source != "" || m.SHA256 != "" {
+				add(path, "specify version or source, not both")
+			}
+			if m.Ref != "" && !validName(m.Ref) {
+				add(path+".ref", "must be a registered map name")
+			}
+		} else {
+			if m.Ref != "" {
+				add(path+".ref", "requires version")
+			}
+			u, err := url.Parse(m.Source)
+			if err != nil || u.Scheme != "s3" || u.Host == "" || u.User != nil || strings.TrimPrefix(u.Path, "/") == "" || u.RawQuery != "" || u.Fragment != "" {
+				add(path+".source", "must be an s3://bucket/key reference without credentials, query or fragment")
+			}
+			if m.SHA256 != "" && !ValidSHA256(m.SHA256) {
+				add(path+".sha256", "must be 64 lowercase hexadecimal characters")
+			}
+		}
+		if r := m.Resolved; r != nil && (m.Version == "" || r.Name != m.RegistryName() || !ValidMapVersion(r.Version) || r.Version == "latest" || !ValidSHA256(r.SHA256) || !strings.HasPrefix(r.Source, "s3://")) {
+			add(path, "invalid resolved map")
 		}
 	}
 	if len(e.Spec.Conditions.Seeds) == 0 {
