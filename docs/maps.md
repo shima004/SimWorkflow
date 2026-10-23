@@ -16,16 +16,16 @@ my-map/
 ```
 
 ```sh
-go run ./cmd/simworkflow -env-file .env map register \
+go run ./cmd/simworkflow map register \
   --name kobe --version v1 --path ./my-map \
   --description '比較実験用の神戸マップ' --origin '配布元のURL・生成条件など'
 
 # ZIPのルートにmap/とconfig/がある既存ZIPも登録可能
-go run ./cmd/simworkflow -env-file .env map register \
+go run ./cmd/simworkflow map register \
   --name kobe --version v2 --path ./kobe-v2.zip
 
-go run ./cmd/simworkflow -env-file .env map list --format text
-go run ./cmd/simworkflow -env-file .env map inspect --name kobe --version v1
+go run ./cmd/simworkflow map list --format text
+go run ./cmd/simworkflow map inspect --name kobe --version v1
 ```
 
 ディレクトリの場合、`map/` と `config/` だけをZIPへ収録します。これらの中にはシミュレーターへ渡すファイルだけを置いてください。同じファイル内容からは同じZIPを生成します。ZIP入力は元のバイト列を保存します。

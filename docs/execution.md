@@ -90,14 +90,14 @@ CLIの作成・参照権限は [client-rbac.yaml](../examples/kubernetes/client-
 実験YAMLの `runtime` に `java` または `python` を指定します。イメージ、マップのS3参照、モジュール候補は実際に用意したものを指定してください。
 
 ```sh
-go run ./cmd/simworkflow -env-file .env experiment submit \
+go run ./cmd/simworkflow experiment submit \
   -f experiment.yaml \
   --helper-image registry.example.com/simworkflow/worker:v1 \
   --service-account simworkflow
 
 # submitが返したWorkflow名を指定。オプションは名前より前に置く
-go run ./cmd/simworkflow -env-file .env experiment status --watch WORKFLOW_NAME
-go run ./cmd/simworkflow -env-file .env experiment results WORKFLOW_NAME
+go run ./cmd/simworkflow experiment status --watch WORKFLOW_NAME
+go run ./cmd/simworkflow experiment results WORKFLOW_NAME
 ```
 
 `results` は実験ごとの要約をJSON配列で返します。実行状態、モジュール構成、シード、事前計算ファイル、スコア、S3の保存先を確認できます。
@@ -124,7 +124,7 @@ experiments/<execution-id>/<run-id>/bundle.tar.gz
 
 ```sh
 mkdir -p artifacts
-go run ./cmd/simworkflow -env-file .env experiment render \
+go run ./cmd/simworkflow experiment render \
   -f experiment.yaml \
   --helper-image registry.example.com/simworkflow/worker:v1 \
   --output artifacts/workflow.yaml

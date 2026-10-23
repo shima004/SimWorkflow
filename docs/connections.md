@@ -3,13 +3,13 @@
 環境変数の形式だけを調べる場合:
 
 ```sh
-go run ./cmd/simworkflow -env-file .env config check
+go run ./cmd/simworkflow config check
 ```
 
 実際に読み取りリクエストを送る場合:
 
 ```sh
-go run ./cmd/simworkflow -env-file .env config check --connect
+go run ./cmd/simworkflow config check --connect
 ```
 
 `--connect` は3サービスを並行して調べ、サービスごとの結果を表示します。1つでも失敗すれば終了コードは1です。

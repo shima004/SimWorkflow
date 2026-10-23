@@ -25,7 +25,7 @@ func run(args []string, lookup func(string) (string, bool), out, errOut io.Write
 	}
 	flags := flag.NewFlagSet("simworkflow", flag.ContinueOnError)
 	flags.SetOutput(errOut)
-	envFile := flags.String("env-file", "", "optional local .env file (process environment takes precedence)")
+	envFile := flags.String("env-file", ".env", "environment file (default: .env in current directory if present; empty disables loading)")
 	flags.Usage = func() {
 		fmt.Fprintln(errOut, "Usage: simworkflow [-env-file .env] config check [--connect]\n       simworkflow [-env-file .env] experiment <validate|plan|modules|render|submit|status|results> [options]\n       simworkflow [-env-file .env] map <register|list|inspect> [options]")
 		flags.PrintDefaults()
@@ -36,15 +36,24 @@ func run(args []string, lookup func(string) (string, bool), out, errOut io.Write
 		}
 		return err
 	}
-	if flags.NArg() >= 1 && flags.Arg(0) == "map" {
+	explicitEnvFile := false
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "env-file" {
+			explicitEnvFile = true
+		}
+	})
+	loadConfig := func() (config.Config, error) {
 		if *envFile != "" {
 			values, err := config.ReadEnvFile(*envFile)
-			if err != nil {
-				return err
+			if err != nil && !(errors.Is(err, os.ErrNotExist) && !explicitEnvFile) {
+				return config.Config{}, err
 			}
 			lookup = config.WithFallback(lookup, values)
 		}
-		c, err := config.Load(lookup)
+		return config.Load(lookup)
+	}
+	if flags.NArg() >= 1 && flags.Arg(0) == "map" {
+		c, err := loadConfig()
 		if err != nil {
 			return err
 		}
@@ -52,14 +61,7 @@ func run(args []string, lookup func(string) (string, bool), out, errOut io.Write
 	}
 	if flags.NArg() >= 1 && flags.Arg(0) == "experiment" {
 		if flags.NArg() > 1 && remoteCommand(flags.Arg(1)) {
-			if *envFile != "" {
-				values, err := config.ReadEnvFile(*envFile)
-				if err != nil {
-					return err
-				}
-				lookup = config.WithFallback(lookup, values)
-			}
-			c, err := config.Load(lookup)
+			c, err := loadConfig()
 			if err != nil {
 				return err
 			}
@@ -83,14 +85,7 @@ func run(args []string, lookup func(string) (string, bool), out, errOut io.Write
 	if checkFlags.NArg() != 0 {
 		return errors.New("config check does not accept positional arguments")
 	}
-	if *envFile != "" {
-		values, err := config.ReadEnvFile(*envFile)
-		if err != nil {
-			return err
-		}
-		lookup = config.WithFallback(lookup, values)
-	}
-	c, err := config.Load(lookup)
+	c, err := loadConfig()
 	if err != nil {
 		return err
 	}

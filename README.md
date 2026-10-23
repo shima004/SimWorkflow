@@ -37,10 +37,10 @@ go run ./cmd/simworkflow experiment plan -f examples/experiments/module-comparis
 実行にはマップZIPをS3へ配置し、テンプレートに従うエージェントとワーカーのイメージをレジストリに登録します。
 
 ```sh
-go run ./cmd/simworkflow -env-file .env experiment submit \
+go run ./cmd/simworkflow experiment submit \
   -f experiment.yaml --helper-image registry.example.com/simworkflow/worker:v1
-go run ./cmd/simworkflow -env-file .env experiment status --watch WORKFLOW_NAME
-go run ./cmd/simworkflow -env-file .env experiment results WORKFLOW_NAME
+go run ./cmd/simworkflow experiment status --watch WORKFLOW_NAME
+go run ./cmd/simworkflow experiment results WORKFLOW_NAME
 ```
 
 マップの形式、事前計算データの引き継ぎ、生成Workflowの確認方法は [実行手順](docs/execution.md) を参照してください。
@@ -89,7 +89,7 @@ Java版・Python uv版とも、Argo上で事前計算、本実行、結果のS3�
 cp .env.example .env
 chmod 600 .env
 # .env を編集して接続先と認証情報を設定
-go run ./cmd/simworkflow -env-file .env config check
+go run ./cmd/simworkflow config check
 ```
 
 `.env.example` の値のままでも設定形式の検証はできます。実サービスを操作する際には実際の接続情報に置き換えてください。
@@ -98,13 +98,14 @@ go run ./cmd/simworkflow -env-file .env config check
 実際にサービスへの読み取りアクセスを確認するには `--connect` を付けます。
 
 ```sh
-go run ./cmd/simworkflow -env-file .env config check --connect
+go run ./cmd/simworkflow config check --connect
 ```
 
 このコマンドはArgoのWorkflow一覧、S3の指定バケット、レジストリV2 APIを確認します。
 書き込みは行いません。権限不足や到達できない接続先の対処は [接続確認の手順](docs/connections.md) を参照してください。
 
-本番では環境変数を直接渡します。`.env` は `-env-file` を指定した場合のみ読み込みます。
+カレントディレクトリの `.env` があれば自動で読み込みます。存在しない場合は環境変数だけを使用します。本番では環境変数を直接渡せます。
+別のファイルは `-env-file .env.local` で指定でき、指定したファイルが存在しない場合はエラーになります。`-env-file=""` で自動読み込みを無効にできます。
 
 ```sh
 go build -o bin/simworkflow ./cmd/simworkflow
@@ -112,7 +113,7 @@ go build -o bin/simworkflow ./cmd/simworkflow
 ./bin/simworkflow config check
 ```
 
-優先順位は **環境変数 > 指定した .env > デフォルト値** です。環境変数を明示的に空に設定した場合も `.env` より優先されます。
+優先順位は **環境変数 > 読み込んだ .env > デフォルト値** です。環境変数を明示的に空に設定した場合も `.env` より優先されます。
 `.env` は `KEY=value`、`export KEY=value`、単一引用符・二重引用符、コメントに対応します。値はリテラルとして扱い、変数展開・コマンド実行・エスケープ変換・複数行の値には対応しません。引用符を含む値はもう一方の引用符で囲んでください。
 `.env` と `.env.*` はGit管理対象から除外しています（`.env.example` を除く）。
 
