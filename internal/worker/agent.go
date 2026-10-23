@@ -1,13 +1,16 @@
 package worker
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -235,14 +238,60 @@ func runAgent(ctx context.Context, root string, c Config) error {
 			}
 		}
 		if phase == "simulation" {
-			if !fileContains(filepath.Join(root, "logs", phase, "agent.log"), "PRECOMPUTED") {
-				return errors.New("agent did not confirm PRECOMPUTED mode")
+			if err := verifyResumed(root, c.Run.Configuration.Runtime, counts); err != nil {
+				return err
 			}
 		}
 		if err := writeJSON(statePath(root, phase+".agent"), State{Success: true}); err != nil {
 			return err
 		}
 		fmt.Printf("agent: %s completed\n", phase)
+	}
+	return nil
+}
+
+var pythonPlatoon = regexp.MustCompile(`Connected to kernel: (PlatoonAmbulance|PlatoonFire|PlatoonPolice) \(`)
+var pythonResumed = regexp.MustCompile(`mode:\s*(1|Mode\.PRECOMPUTED|PRECOMPUTED)\)`)
+
+func verifyResumed(root, runtime string, counts []int) error {
+	name := "agent.log"
+	if runtime == "python" {
+		name = "agent-internal.log"
+	}
+	f, err := os.Open(filepath.Join(root, "logs/simulation", name))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	expected := counts[0] + counts[2] + counts[4]
+	connected := 0
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 4096), 1<<20)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if runtime == "python" {
+			var entry struct {
+				Event string `json:"event"`
+			}
+			if json.Unmarshal(scanner.Bytes(), &entry) != nil || !pythonPlatoon.MatchString(entry.Event) {
+				continue
+			}
+			connected++
+			if !pythonResumed.MatchString(entry.Event) {
+				return errors.New("Python platoon did not resume precomputed data")
+			}
+		} else if strings.Contains(line, "Connected -") && strings.Contains(line, ".platoon.Platoon") {
+			connected++
+			if !strings.Contains(line, "(PRECOMPUTED)") {
+				return errors.New("Java platoon did not resume precomputed data")
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return errors.New("could not verify agent resume log")
+	}
+	if expected <= 0 || connected != expected {
+		return errors.New("not all expected platoon agents confirmed precomputed mode")
 	}
 	return nil
 }

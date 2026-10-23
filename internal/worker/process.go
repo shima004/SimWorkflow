@@ -20,31 +20,6 @@ type process struct {
 	log  *os.File
 }
 
-func fileContains(path, needle string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-	buffer := make([]byte, 32<<10)
-	tail := ""
-	for {
-		n, err := f.Read(buffer)
-		text := tail + string(buffer[:n])
-		if strings.Contains(text, needle) {
-			return true
-		}
-		if len(text) >= len(needle) {
-			tail = text[len(text)-len(needle)+1:]
-		} else {
-			tail = text
-		}
-		if err != nil {
-			return false
-		}
-	}
-}
-
 func start(root, phase, actor, dir string, args []string, ready bool) (*process, error) {
 	logDir := filepath.Join(root, "logs", phase)
 	if err := os.MkdirAll(logDir, 0777); err != nil {

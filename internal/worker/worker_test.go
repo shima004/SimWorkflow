@@ -197,3 +197,44 @@ func TestCanceledRunStillStoresFailure(t *testing.T) {
 		t.Fatal("canceled runs must remain failed while saving a failure report")
 	}
 }
+
+func TestResumeModeVerification(t *testing.T) {
+	for _, runtime := range []string{"java", "python"} {
+		root := t.TempDir()
+		dir := filepath.Join(root, "logs/simulation")
+		os.MkdirAll(dir, 0700)
+		name := "agent.log"
+		mode := "PRECOMPUTED"
+		if runtime == "python" {
+			name = "agent-internal.log"
+			mode = "1"
+		}
+		makeLog := func(mode string, count int) string {
+			var output strings.Builder
+			for _, role := range []string{"Police", "Fire", "Ambulance"}[:count] {
+				if runtime == "python" {
+					entry, _ := json.Marshal(map[string]string{"event": "Connected to kernel: Platoon" + role + " (request_id: 1, agent_id: 2, mode: " + mode + ")"})
+					output.Write(entry)
+					output.WriteByte('\n')
+				} else {
+					output.WriteString("[INFO] Connected - adf.core.agent.platoon.Platoon" + role + "@123 (" + mode + ")\n")
+				}
+			}
+			return output.String()
+		}
+		path := filepath.Join(dir, name)
+		os.WriteFile(path, []byte(makeLog(mode, 3)), 0600)
+		counts := []int{1, 0, 1, 0, 1, 0}
+		if err := verifyResumed(root, runtime, counts); err != nil {
+			t.Fatalf("%s: %v", runtime, err)
+		}
+		os.WriteFile(path, []byte(makeLog("0", 3)), 0600)
+		if err := verifyResumed(root, runtime, counts); err == nil {
+			t.Fatal("non-precomputed modes must fail")
+		}
+		os.WriteFile(path, []byte(makeLog(mode, 2)), 0600)
+		if err := verifyResumed(root, runtime, counts); err == nil {
+			t.Fatal("missing platoon connections must fail")
+		}
+	}
+}
