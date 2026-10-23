@@ -14,6 +14,7 @@ Go 1.24以降が必要です。YAMLの処理には `go.yaml.in/yaml/v3` を使�
 
 - [事前計算から本実行までの実行手順](docs/execution.md)
 - [最小の実験定義](examples/experiments/precompute-baseline.yaml)
+- [実装切り替え・並列実行の検証サンプル](examples/validation/module-comparison/README.md)
 - [実験定義YAMLの仕様](docs/experiment-yaml.md)
 - [モジュール比較のサンプル](examples/experiments/module-comparison.yaml)（除外後3構成 × マップ1件 × シード3件 = 9回）
 - [シミュレーターの起動仕様](docs/simulator.md)（`ghcr.io/shima004/rcrs-server:v1.0.4`）
