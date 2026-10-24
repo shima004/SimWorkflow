@@ -45,6 +45,9 @@ type progressModel struct {
 	details             []string
 	detailRunID         string
 	listX, listY        int
+	openViewer          func(string, experiment.Run) tea.Cmd
+	viewerBusy          bool
+	viewerNotice        string
 }
 
 func loadProgress(ctx context.Context, c config.Config, name string) tea.Cmd {
@@ -104,7 +107,7 @@ func screenText(s string) string {
 func watchProgress(ctx context.Context, c config.Config, name string, in io.Reader, out io.Writer) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	m := progressModel{fetch: loadProgress(ctx, c, name), frame: progressFrame{name: screenText(name), phase: "Loading"}, width: 80, height: 24}
+	m := progressModel{fetch: loadProgress(ctx, c, name), openViewer: simScopeCommand(ctx, c), frame: progressFrame{name: screenText(name), phase: "Loading"}, width: 80, height: 24}
 	final, err := tea.NewProgram(m, tea.WithContext(ctx), tea.WithInput(in), tea.WithOutput(out), tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
 	if err != nil {
 		return err
@@ -194,6 +197,12 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.done {
 			next = m.fetch
 		}
+	case viewerOpened:
+		m.viewerBusy = false
+		m.viewerNotice = "Opened SimScope in browser"
+		if msg.err != nil {
+			m.viewerNotice = "SimScope: " + screenText(msg.err.Error())
+		}
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
@@ -210,6 +219,17 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.details = runDetails(m.frame.plan, run)
 				m.detailRunID = run.ID
 				m.listX, m.listY, m.x, m.y = m.x, m.y, 0, 0
+			}
+		case "w":
+			if m.details != nil && !m.viewerBusy && m.openViewer != nil {
+				for _, run := range m.frame.runs {
+					if run.ID == m.detailRunID {
+						m.viewerBusy = true
+						m.viewerNotice = "Preparing SimScope (first replay may take a few minutes)..."
+						next = m.openViewer(m.frame.name, run)
+						break
+					}
+				}
 			}
 		case "up", "k":
 			m.moveSelection(-1)
@@ -266,6 +286,9 @@ func (m progressModel) View() string {
 	} else if m.refreshErr != nil {
 		status = "Refresh failed; retrying in 5s (showing last data)"
 	}
+	if m.viewerNotice != "" {
+		status = m.viewerNotice
+	}
 	columns := "  " + ansi.Cut(m.frame.columns, m.x, m.x+max(0, m.width-2))
 	if m.details != nil {
 		columns = "Settings: " + m.detailRunID
@@ -293,7 +316,7 @@ func (m progressModel) View() string {
 	}
 	help := "↑↓ select  Enter details  ←→ pan  PgUp/PgDn  q quit"
 	if m.details != nil {
-		help = "↑↓/wheel scroll  ←→ pan  Esc back  q quit"
+		help = "w SimScope  ↑↓/wheel scroll  ←→ pan  Esc back  q quit"
 	}
 	lines = append(lines, fmt.Sprintf("%d-%d/%d | %s", first, last, len(rows), help))
 	lines = lines[:min(len(lines), m.height)]

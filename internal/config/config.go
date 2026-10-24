@@ -33,6 +33,7 @@ type Registry struct {
 }
 
 type Config struct {
+	SimScopeURL string
 	Argo        Argo
 	S3          S3
 	Registry    Registry
@@ -49,7 +50,8 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 		return fallback
 	}
 	c := Config{
-		Argo: Argo{Server: get("ARGO_WORKFLOW_SERVER", ""), Namespace: get("ARGO_WORKFLOW_NAMESPACE", "argo"), Token: get("ARGO_WORKFLOW_TOKEN", "")},
+		SimScopeURL: get("SIMSCOPE_URL", "http://172.16.201.173"),
+		Argo:        Argo{Server: get("ARGO_WORKFLOW_SERVER", ""), Namespace: get("ARGO_WORKFLOW_NAMESPACE", "argo"), Token: get("ARGO_WORKFLOW_TOKEN", "")},
 		S3: S3{
 			Endpoint: get("S3_ENDPOINT", ""), Region: get("S3_REGION", "us-east-1"),
 			Bucket: get("S3_BUCKET", ""), AccessKeyID: get("S3_ACCESS_KEY_ID", ""),
@@ -58,7 +60,7 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 		Registry: Registry{URL: get("REGISTRY_URL", ""), Username: get("REGISTRY_USERNAME", ""), Password: get("REGISTRY_PASSWORD", ""), Token: get("REGISTRY_TOKEN", "")},
 	}
 	for _, entry := range []struct{ key, value string }{
-		{"ARGO_WORKFLOW_SERVER", c.Argo.Server}, {"S3_ENDPOINT", c.S3.Endpoint}, {"REGISTRY_URL", c.Registry.URL},
+		{"ARGO_WORKFLOW_SERVER", c.Argo.Server}, {"S3_ENDPOINT", c.S3.Endpoint}, {"REGISTRY_URL", c.Registry.URL}, {"SIMSCOPE_URL", c.SimScopeURL},
 	} {
 		u, err := url.Parse(entry.value)
 		if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {

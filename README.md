@@ -47,6 +47,7 @@ go run ./cmd/simworkflow experiment download --include summary --stage simulatio
 ```
 
 `experiment status --watch` で構成別の段階・状態・ステップ進捗・最新スコアを約5秒ごとに確認できます。端末では上下キーで実行を選択し、Enterでモジュールやリソースなどの設定詳細、Escで一覧へ戻れます。マウスホイールでスクロール、左右キーで横移動、`q` で終了できます。完了後も結果を表示します。従来のテキスト表示は `--plain` を追加します。ステップ進捗には進捗対応ワーカーを使用します。
+詳細画面では `w` で [SimScope](docs/simscope.md) をブラウザに開けます。実行中はリアルタイム接続、終了後は保存ログを再生します。接続先は `SIMSCOPE_URL`（既定: `http://172.16.201.173`）です。リアルタイム接続には対応ワーカーで新規送信してください。
 
 マップの形式、事前計算データの引き継ぎ、生成Workflowの確認方法は [実行手順](docs/execution.md) を参照してください。
 

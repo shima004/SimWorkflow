@@ -71,6 +71,15 @@ func (s *Store) Open(ctx context.Context, key string) (io.ReadCloser, error) {
 	return response.Body, nil
 }
 
+// Exists checks a private result object without exposing transport errors.
+func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
+	_, err := s.Client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(s.Bucket), Key: aws.String(key)})
+	if IsNotFound(safeError(err)) {
+		return false, nil
+	}
+	return err == nil, safeError(err)
+}
+
 func (s *Store) Download(ctx context.Context, source string) (Transfer, error) {
 	u, err := url.Parse(source)
 	if err != nil || u.Scheme != "s3" || u.Host == "" || u.Path == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {

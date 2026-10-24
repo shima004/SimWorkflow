@@ -46,24 +46,8 @@ func writePlannedRunProgress(ctx context.Context, store *storage.Store, snapshot
 		// Prefer simulation once scheduled. Within a stage, choose the newest
 		// Pod so a failed first attempt does not hide the retry's state.
 		for _, candidate := range []string{worker.Precompute, worker.Simulation} {
-			var latest time.Time
-			latestAttempt := -1
-			found := false
-			for _, node := range snapshot.Status.Nodes {
-				if node.Type != "Pod" || node.TemplateName != run.ID+"-"+candidate {
-					continue
-				}
-				attempt := 0
-				if i := strings.LastIndex(node.DisplayName, "("); i >= 0 {
-					attempt, _ = strconv.Atoi(strings.TrimSuffix(node.DisplayName[i+1:], ")"))
-				}
-				if !found || attempt > latestAttempt || (attempt == latestAttempt && !node.StartedAt.Before(latest)) {
-					latestAttempt = attempt
-					phase, latest, found = node.Phase, node.StartedAt, true
-				}
-			}
-			if found {
-				stage, started = candidate, latest
+			if node, found := latestStageNode(snapshot, run.ID, candidate); found {
+				stage, phase, started = candidate, node.Phase, node.StartedAt
 			}
 		}
 		steps, score, updated := "-", "-", "-"
@@ -107,4 +91,23 @@ func writePlannedRunProgress(ctx context.Context, store *storage.Store, snapshot
 		fmt.Fprintf(writer, "%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\n", run.ID, run.Map.Name, run.Seed, stage, phase, steps, score, updated)
 	}
 	return writer.Flush()
+}
+
+// Prefer the highest retry attempt, including Pending retries with no start time.
+func latestStageNode(snapshot *argo.Snapshot, runID, stage string) (argo.Node, bool) {
+	var latest argo.Node
+	latestAttempt, found := -1, false
+	for _, node := range snapshot.Status.Nodes {
+		if node.Type != "Pod" || node.TemplateName != runID+"-"+stage {
+			continue
+		}
+		attempt := 0
+		if i := strings.LastIndex(node.DisplayName, "("); i >= 0 {
+			attempt, _ = strconv.Atoi(strings.TrimSuffix(node.DisplayName[i+1:], ")"))
+		}
+		if !found || attempt > latestAttempt || (attempt == latestAttempt && !node.StartedAt.Before(latest.StartedAt)) {
+			latest, latestAttempt, found = node, attempt, true
+		}
+	}
+	return latest, found
 }

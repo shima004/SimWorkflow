@@ -28,17 +28,20 @@ type Snapshot struct {
 		Annotations map[string]string `json:"annotations"`
 	} `json:"metadata"`
 	Status struct {
-		Phase   string `json:"phase"`
-		Message string `json:"message"`
-		Nodes   map[string]struct {
-			TemplateName string    `json:"templateName"`
-			Type         string    `json:"type"`
-			StartedAt    time.Time `json:"startedAt"`
-			DisplayName  string    `json:"displayName"`
-			Phase        string    `json:"phase"`
-			Message      string    `json:"message"`
-		} `json:"nodes"`
+		Phase   string          `json:"phase"`
+		Message string          `json:"message"`
+		Nodes   map[string]Node `json:"nodes"`
 	} `json:"status"`
+}
+
+type Node struct {
+	TemplateName string    `json:"templateName"`
+	Type         string    `json:"type"`
+	StartedAt    time.Time `json:"startedAt"`
+	DisplayName  string    `json:"displayName"`
+	Phase        string    `json:"phase"`
+	Message      string    `json:"message"`
+	PodIP        string    `json:"podIP"`
 }
 
 func New(c config.Config) *Client { return &Client{config: c.Argo, http: connections.HTTPClient(c)} }
