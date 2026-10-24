@@ -1,15 +1,15 @@
 # サービスへの接続確認
 
-環境変数の形式だけを調べる場合:
+[接続設定](configuration.md) を用意した後、設定の不足や形式だけを調べる場合：
 
 ```sh
-go run ./cmd/simworkflow config check
+simworkflow config check
 ```
 
 実際に読み取りリクエストを送る場合:
 
 ```sh
-go run ./cmd/simworkflow config check --connect
+simworkflow config check --connect
 ```
 
 `--connect` は3サービスを並行して調べ、サービスごとの結果を表示します。1つでも失敗すれば終了コードは1です。
@@ -42,7 +42,7 @@ Workflowの作成・参照とPodログの参照を許可します。クラスタ
 kubectl apply -f examples/kubernetes/client-rbac.yaml
 ```
 
-このファイルはCLIの利用者向けです。Workflow自身の実行に使うServiceAccountやexecutorの権限は、実行処理の実装時に別途設定します。
+このファイルはCLIの利用者向けです。Workflow自身の実行に使うServiceAccountとexecutor権限には [executor-rbac.yaml](../examples/kubernetes/executor-rbac.yaml) を使用します。
 CLIはRBACを変更しません。
 
 ## S3の404
@@ -62,3 +62,5 @@ KubernetesのClusterIPは、CLIを実行する環境からルーティングで�
 - [Argoのセキュリティ](https://argo-workflows.readthedocs.io/en/latest/security/)
 - [S3 HeadBucket](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadBucket.html)
 - [Registry V2 API](https://distribution.github.io/distribution/spec/api/)
+
+[ドキュメント一覧へ](README.md)

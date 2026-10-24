@@ -1,10 +1,75 @@
-# 別環境への配布
+# 実行環境の準備と配布
 
-利用者向けCLIは [GitHub Releases](https://github.com/shima004/SimWorkflow/releases) のシングルバイナリで配布します。[インストール手順](installation.md) を参照してください。
+クラスタを準備する管理者と、CLI・helperを公開する開発者向けのガイドです。既存の実行環境を利用する場合は [インストール](installation.md) → [接続設定](configuration.md) → [最初の実験](quickstart.md) へ進んでください。
 
-クラスタ側の配布対象はhelperイメージです。シミュレーター・エージェントの起動管理、S3からの設定取得、事前計算データの引き継ぎ、進捗・結果保存とCLIを含みます。
+## 必要なサービス
 
-配布先は `ghcr.io/shima004/simworkflow-worker` です。初回公開の状態と固定digestは末尾の公開記録を確認してください。サポートする実行Podのアーキテクチャは `linux/amd64` です。
+| 対象 | 用意するもの |
+| --- | --- |
+| Kubernetes・Argo Workflows | ContainerSetを実行できる環境、対象名前空間、CLIと実行Podの権限 |
+| S3互換サービス | マップ・ワーカー設定・進捗・結果を保存する非公開バケットとアクセスキー |
+| イメージレジストリ | 実行ノードから取得できるシミュレーター・エージェント・helperのイメージ |
+| SimScope（任意） | 利用する場合だけURLと接続経路を設定 |
+
+CLIからArgo・S3・レジストリへ、実行PodからS3と各イメージへアクセスできる必要があります。CLIの接続設定だけで、Kubernetesノードのレジストリ認証やネットワーク設定は変更されません。
+
+標準の実行Podは `linux/amd64` を対象にします。利用者向けCLIはLinux・macOS・Windowsのamd64／arm64向けです。
+
+## 名前空間と実行権限
+
+次のRBACサンプルは `argo-workflows` 名前空間と `simworkflow` ServiceAccountを使用します。管理者が利用環境へ合わせて変更・適用してください。CLIはRBACを自動変更しません。
+
+- [client-rbac.yaml](../examples/kubernetes/client-rbac.yaml)：CLIからWorkflowを作成・参照し、Podログを参照する権限
+- [executor-rbac.yaml](../examples/kubernetes/executor-rbac.yaml)：実行Podのexecutor権限
+
+実行用ServiceAccountは `experiment submit --service-account NAME` で選べます。デフォルトは `simworkflow` です。Argoの接続エラーは [接続確認](connections.md) を参照してください。
+
+## シミュレーター・エージェント・マップ
+
+シミュレーターは `ghcr.io/shima004/rcrs-server:v1.0.4` に対応します。エージェントは [Java](../templates/agents/java/README.md) または [Python](../templates/agents/python/README.md) のテンプレートで作成し、実行ノードから取得できるレジストリへ登録します。
+
+S3バケットを作成し、[マップ](maps.md) を登録します。同じマップ版への並行登録にはS3の条件付きPUTが正しく動作することが必要です。検証環境で確認した制約はマップのガイドに記載しています。
+
+`examples/validation/` にある内部レジストリの参照や実験名は検証時の記録です。別環境へそのまま送信せず、利用できるイメージ・マップへ置き換えてください。
+
+## 公開helperを利用する
+
+helperはシミュレーター・エージェントの起動管理、S3からの設定取得、事前計算データの受け渡し、進捗・結果の保存を担当するイメージです。利用者がローカルにビルドする必要はありません。
+
+CLIは次の検証済み公開イメージをデフォルトにしています。
+
+```text
+ghcr.io/shima004/simworkflow-worker@sha256:2e204474aa5c348c0d2196cc83adde038170fd9885bb09c2e83b4a4fd31cc027
+```
+
+通常は追加オプションなしで送信できます。ワーカー設定の保存先はS3がデフォルトです。
+
+```sh
+simworkflow experiment submit -f experiment.yaml
+```
+
+別のhelperを利用するときだけ `--helper-image IMAGE` を指定します。`latest` は更新されるため、再現性が必要な実験ではdigestやコミット固定タグを使います。新しいhelperの公開で、CLIのデフォルトdigestや送信済み実験の参照先が自動更新されることはありません。
+
+## 独自helperをビルドする
+
+ワーカーのコードを変更する場合に、このリポジトリのルートで実行します。
+
+```sh
+docker build --platform linux/amd64 -t registry.example.com/simworkflow/worker:v1 .
+docker push registry.example.com/simworkflow/worker:v1
+simworkflow experiment submit -f experiment.yaml \
+  --helper-image registry.example.com/simworkflow/worker:v1
+```
+
+HTTPレジストリへの登録方法は利用するDocker環境に依存します。Dockerデーモンの設定を変更せずに登録する場合は、保存したイメージをcraneで転送する方法もあります。
+
+```sh
+go install github.com/google/go-containerregistry/cmd/crane@v0.22.1
+docker save -o /tmp/simworkflow-worker.tar registry.example.com/simworkflow/worker:v1
+crane push --insecure /tmp/simworkflow-worker.tar registry.example.com/simworkflow/worker:v1
+```
+
+S3から設定を取得できない旧ワーカーを使う場合だけ `--config-storage inline` を指定します。[Workflowサイズと設定保存方式](execution.md#ワーカー設定とworkflowサイズ) を確認してください。
 
 ## CLIをリリースする
 
@@ -12,7 +77,7 @@
 
 バイナリの `simworkflow --version` はタグとソースコミットを表示します。ビルドではCGOを無効にし、`.env` などの利用環境の設定は取り込みません。macOS・Windows向けバイナリの署名は行いません。
 
-初回は次の手順で `v0.1.0` を公開します。タグ作成前に変更をコミットしてください。
+新しいバージョンのタグを、リリースするコミットに作成してpushします。以下は `v0.1.0` の例です。既存のタグは再作成せず、pushだけを行います。
 
 ```sh
 git push origin main
@@ -22,38 +87,9 @@ git push origin v0.1.0
 
 `v0.*` と `-rc.1` などの接尾辞があるタグはプレリリース、それ以外は正式リリースになります。全ファイルをアップロードしてから公開し、途中で失敗した場合はドラフトが残ります。同じタグのActionsを再実行するとドラフトへのアップロードを再試行できます。公開済みReleaseは上書きせず、新しいタグを作成してください。既存のhelper公開ワークフローも同じタグで実行されます。CLIが使用するデフォルトhelperは検証済みdigestのままです。
 
-ローカルでも配布物を作成できます（GoとPython 3が必要）。出力先は空のディレクトリを指定します。
+ローカルで配布物を作る手順は [開発ガイド](development.md) を参照してください。
 
-```sh
-python3 scripts/build-release.py --version v0.1.0 --output /tmp/simworkflow-release-v0.1.0
-```
-
-## イメージの利用
-
-現行CLIは、次の動作確認済みdigestをhelperのデフォルトにしています。
-
-```text
-ghcr.io/shima004/simworkflow-worker@sha256:2e204474aa5c348c0d2196cc83adde038170fd9885bb09c2e83b4a4fd31cc027
-```
-
-`--helper-image` と `--config-storage` を省略して実験を送信できます。helperは上記の固定digest、設定保存先はS3がデフォルトです。
-
-```sh
-docker pull ghcr.io/shima004/simworkflow-worker:latest
-
-go run ./cmd/simworkflow experiment submit \
-  -f experiment.yaml
-```
-
-別のhelperを使用する場合は `--helper-image IMAGE` で上書きできます。`latest` はmainの更新で変わるため、デフォルトでは使用しません。別の版を選ぶ場合もdigestや `sha-<40桁のコミットSHA>` で固定できます。Argo・S3の接続設定や認証情報は利用環境ごとに設定します。`simworkflow config init` でユーザー共通のYAMLを作成でき、以後は実行するディレクトリに依存しません。[設定手順](configuration.md) を参照してください。
-
-## 実験用イメージ・マップとの関係
-
-helper以外に、実験YAMLで指定するシミュレーターとエージェントのイメージが必要です。シミュレーターは既存の `ghcr.io/shima004/rcrs-server:v1.0.4` を使用できます。独自エージェントは利用者がアクセス可能なレジストリへ登録します。マップは利用環境のS3へ登録し、Argoの名前空間とServiceAccountを準備してください。
-
-ローカルレジストリの `172.16.201.150:5000/...` を含む既存の検証YAMLは、この環境での記録です。別環境では到達可能なエージェントイメージへ置き換えます。実験データ・認証情報をhelperへ含める必要はありません。
-
-## GitHub Actionsで継続公開する
+## helperを継続公開する
 
 [helper-image.yml](../.github/workflows/helper-image.yml) は次の処理を行います。
 
@@ -68,16 +104,6 @@ GHCRでは新しいパッケージの初期公開範囲はprivateです。初回
 
 参考：[GitHub公式のGHCR公開手順](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images)、[Container registryの公開範囲](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。
 
-## 初回公開記録（2026年10月24日）
+公開済みイメージの初回確認結果は [検証記録](validation.md#公開helperの初回確認) を参照してください。
 
-GHCRへの登録と `latest`・`sha-58fd58333b221537b282ad160d34ee0407d227a8` の作成を確認しています。
-
-```text
-ghcr.io/shima004/simworkflow-worker@sha256:2e204474aa5c348c0d2196cc83adde038170fd9885bb09c2e83b4a4fd31cc027
-```
-
-ビルド・Goの全体テスト・actionlint・コンテナ内でのCLI起動を確認済みです。パッケージをPublicへ変更後、空のDocker認証設定からmanifestと全イメージを取得できることを確認済みです。取得したdigestは上記の固定digestと一致しています。
-
-GitHub Actionsの設定はローカルで作成済みですが、現在の接続からリポジトリへのアクセス権がないため、GitHubへの反映は未完了です。リポジトリへアクセス可能な環境から今回のコミットをpushすると、その後のmain更新・タグ作成で公開処理が動きます。
-
-詳細は [検証記録](../examples/validation/public-helper-20261024.json) を参照してください。
+[ドキュメント一覧へ](README.md)

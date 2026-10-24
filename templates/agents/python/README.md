@@ -4,31 +4,10 @@ ADF互換のPythonエージェント用です。uv版は [rescue-python](https:/
 uv版は、実行確認済みのPython 3.14・ADF Core v0.2.14に統一しています。pip版は従来のPython 3.13向けです。
 このテンプレート自体はエージェントのソースコードを含みません。Java連携を使わないPythonエージェントを対象とします。
 
-## pipを使う場合
-
-1. このディレクトリの `Dockerfile` と `.dockerignore` を、エージェントリポジトリの `main.py` があるディレクトリへコピーします。
-2. 比較したいモジュールのPythonソースを `src` 以下に追加します。必要な依存ライブラリを `requirements.txt` に追加します。
-3. 同じディレクトリで次のコマンドを実行します。
-
-```sh
-docker build -t registry.example.com/my-team/agent-python:v1 .
-docker login registry.example.com
-docker push registry.example.com/my-team/agent-python:v1
-```
-
-イメージ名は利用するレジストリ・チーム名に変更してください。
-ビルド時にGitリポジトリとPythonパッケージを取得するため、ネットワーク接続が必要です。
-
-ADF Coreの `uv.sources` で指定されている `rcrscore` は、pip用に先にGitからインストールします。
-テンプレートの `RCRS_CORE_REF` は `v0.2.3` です。使用するADF Coreの依存設定に合わせて変更できます。
-
-```sh
-docker build --build-arg RCRS_CORE_REF=v0.2.3 \
-  -t registry.example.com/my-team/agent-python:v1 .
-```
-
-元のサンプルの `requirements.txt` はADF CoreのGitリポジトリを参照します。
-実験を再現する際には、その参照をコミットに固定し、その他の依存バージョンとイメージのダイジェストも固定してください。
+| 方式 | 対象 | Dockerfile |
+| --- | --- | --- |
+| [uv](#uvを使う場合) | Python 3.14・rescue-python基準 | `Dockerfile.uv` |
+| [pip](#pipを使う場合) | Python 3.13・従来サンプル向け | `Dockerfile` |
 
 ## uvを使う場合
 
@@ -96,6 +75,32 @@ agent/
 
 出典ラベルを設定したい場合はビルド時に `--build-arg AGENT_SOURCE=https://github.com/OWNER/AGENT --build-arg AGENT_REVISION=COMMIT` を追加します。
 [rescue-pythonの検証例](../../../examples/validation/rescue-python-vc/README.md) もこの `Dockerfile.uv` を使用します。
+
+## pipを使う場合
+
+1. このディレクトリの `Dockerfile` と `.dockerignore` を、エージェントリポジトリの `main.py` があるディレクトリへコピーします。
+2. 比較したいモジュールのPythonソースを `src` 以下に追加します。必要な依存ライブラリを `requirements.txt` に追加します。
+3. 同じディレクトリで次のコマンドを実行します。
+
+```sh
+docker build -t registry.example.com/my-team/agent-python:v1 .
+docker login registry.example.com
+docker push registry.example.com/my-team/agent-python:v1
+```
+
+イメージ名は利用するレジストリ・チーム名に変更してください。
+ビルド時にGitリポジトリとPythonパッケージを取得するため、ネットワーク接続が必要です。
+
+ADF Coreの `uv.sources` で指定されている `rcrscore` は、pip用に先にGitからインストールします。
+テンプレートの `RCRS_CORE_REF` は `v0.2.3` です。使用するADF Coreの依存設定に合わせて変更できます。
+
+```sh
+docker build --build-arg RCRS_CORE_REF=v0.2.3 \
+  -t registry.example.com/my-team/agent-python:v1 .
+```
+
+元のサンプルの `requirements.txt` はADF CoreのGitリポジトリを参照します。
+実験を再現する際には、その参照をコミットに固定し、その他の依存バージョンとイメージのダイジェストも固定してください。
 
 ## コンテナの取り決め
 

@@ -1,0 +1,39 @@
+# ドキュメント
+
+初めて使う場合は、インストール → 接続設定 → クイックスタートの順に進めてください。コマンド例はPATHに配置した `simworkflow` を使用します。ソースからの実行方法は開発ガイドに記載しています。
+
+## 利用する
+
+| ガイド | 内容 |
+| --- | --- |
+| [インストール](installation.md) | OS・CPUに合う配布物の選択、チェックサム、PATH、更新 |
+| [接続設定](configuration.md) | 共通YAML、環境変数、.env、優先順位、設定項目一覧 |
+| [クイックスタート](quickstart.md) | マップの登録から実験の送信・監視・結果取得まで |
+| [実験YAMLの仕様](experiment-yaml.md) | モジュールの組み合わせ、除外、マップ・シード、CPU・メモリ |
+| [モジュール切り替え](adf-module-settings.md) | ADFの設定キー、元設定への反映、ローカルでの設定生成 |
+| [マップ](maps.md) | ZIPの形式、名前・版、登録、同時登録の条件 |
+| [進捗・スコア](progress.md) | TUIの操作、設定詳細、テキスト監視、結果要約 |
+| [ダウンロード](download.md) | 要素・実行・段階・ファイルを選んで取得、追加取得 |
+| [SimScope連携（任意）](simscope.md) | URLの設定、実行中の接続、保存ログの再生 |
+| [接続トラブル](connections.md) | 接続確認の範囲、Argoの403、S3の404、レジストリへの到達性 |
+
+## エージェント・実行環境を準備する
+
+| ガイド | 内容 |
+| --- | --- |
+| [Pythonエージェント](../templates/agents/python/README.md) | uv／pipでのイメージ作成、依存関係、設定ファイルの配置 |
+| [Javaエージェント](../templates/agents/java/README.md) | イメージ作成、Gradle依存の同梱、設定ファイルの配置 |
+| [実行環境の準備](distribution.md) | Argo・S3・レジストリ・RBAC、公開helper、独自helper |
+| [実行の仕組み](execution.md) | 事前計算と本実行、S3保存、失敗・再試行、期限・サイズ制限 |
+| [シミュレーターの仕様](simulator.md) | 対象イメージ、起動引数、接続先、JVMメモリ |
+
+## 開発・検証する
+
+| ガイド | 内容 |
+| --- | --- |
+| [開発ガイド](development.md) | ソースからのビルド、検証コマンド、実装の構成、Release公開 |
+| [検証記録](validation.md) | 確認した環境・実験・制限と、その時点の記録 |
+
+[`examples/experiments/`](../examples/experiments/) は定義を作るためのサンプルです。イメージ・マップ参照は自分の環境へ合わせて変更します。[`examples/validation/`](../examples/validation/) は特定の検証環境での記録であり、内部アドレスや実験名を含みます。
+
+[プロジェクトのREADMEへ戻る](../README.md)

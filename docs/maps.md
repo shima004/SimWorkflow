@@ -16,16 +16,16 @@ my-map/
 ```
 
 ```sh
-go run ./cmd/simworkflow map register \
+simworkflow map register \
   --name kobe --version v1 --path ./my-map \
   --description '比較実験用の神戸マップ' --origin '配布元のURL・生成条件など'
 
 # ZIPのルートにmap/とconfig/がある既存ZIPも登録可能
-go run ./cmd/simworkflow map register \
+simworkflow map register \
   --name kobe --version v2 --path ./kobe-v2.zip
 
-go run ./cmd/simworkflow map list --format text
-go run ./cmd/simworkflow map inspect --name kobe --version v1
+simworkflow map list --format text
+simworkflow map inspect --name kobe --version v1
 ```
 
 ディレクトリの場合、`map/` と `config/` だけをZIPへ収録します。これらの中にはシミュレーターへ渡すファイルだけを置いてください。同じファイル内容からは同じZIPを生成します。ZIP入力は元のバイト列を保存します。
@@ -85,6 +85,8 @@ maps/<name>/<version>/metadata.json
 
 同じ版への並行登録の排他制御にはS3の条件付きPUT（`If-None-Match: *`）を使用します。**保存先がこの条件を並行処理でも正しく実装することが前提です。** CLI以外からの直接変更を防ぐバケット権限管理も別途必要です。
 
-現在の検証環境（利用者申告: `rustfs/rustfs:1.0.0-alpha.83`）では、異なる内容を同じ新規キーへ並行PUTすると両方成功する症状を確認しています。この環境で同じ名前・版の登録を並行実行すると、上書きを防げません。解消・再検証までは登録処理を一元化して逐次実行してください。ハッシュの照合は実行時の改変検出であり、登録時の排他制御の代用にはなりません。
+2026年10月24日の検証環境（利用者申告: `rustfs/rustfs:1.0.0-alpha.83`）では、異なる内容を同じ新規キーへ並行PUTすると両方成功する症状を確認しています。この環境で同じ名前・版の登録を並行実行すると、上書きを防げません。解消・再検証までは登録処理を一元化して逐次実行してください。ハッシュの照合は実行時の改変検出であり、登録時の排他制御の代用にはなりません。
 
 RustFSの関連する[公式Issue #1659](https://github.com/rustfs/rustfs/issues/1659)は修正・確認済みとして閉じられていますが、今回の症状との原因の一致や、更新による解消は未確認です。
+
+[ドキュメント一覧へ](README.md)

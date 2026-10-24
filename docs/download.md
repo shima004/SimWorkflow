@@ -1,32 +1,32 @@
 # 実験結果のダウンロード
 
 `experiment download` で、Workflowに保存された結果から必要な要素を取得できます。[ユーザー共通のconfig.yaml](configuration.md)、環境変数、カレントディレクトリの `.env` を使用でき、AWS CLIの設定は不要です。
-オプションはWorkflow名より前に置きます。
+`WORKFLOW_NAME` は送信時に返された名前、`RUN_ID` は対象の実行IDへ置き換えます。オプションはWorkflow名より前に置きます。
 
 ```sh
 # 全構成の本実行の要約だけ（スコアと実行条件を含む）
-go run ./cmd/simworkflow experiment download \
+simworkflow experiment download \
   --include summary --stage simulation \
   --output artifacts/vc-scores \
-  rescue-python-vc-comparison-5tmsf
+  WORKFLOW_NAME
 
 # 本実行のシミュレーター・エージェントのログ
-go run ./cmd/simworkflow experiment download \
+simworkflow experiment download \
   --include simulatorLogs,agentLogs --stage simulation \
   --output artifacts/vc-logs \
-  rescue-python-vc-comparison-5tmsf
+  WORKFLOW_NAME
 
 # 指定した構成のrescue.log.7zだけ
-go run ./cmd/simworkflow experiment download \
-  --run run-c4ec68cd352511cdacf9e2e85be04556 \
+simworkflow experiment download \
+  --run RUN_ID \
   --file logs/simulation/rescue.log.7z \
   --output artifacts/vc-rescue-log \
-  rescue-python-vc-comparison-5tmsf
+  WORKFLOW_NAME
 
 # 全構成の事前計算データZIPだけ
-go run ./cmd/simworkflow experiment download \
+simworkflow experiment download \
   --include precompute --output artifacts/vc-precompute \
-  rescue-python-vc-comparison-5tmsf
+  WORKFLOW_NAME
 ```
 
 ## 選択できる要素
@@ -55,12 +55,12 @@ go run ./cmd/simworkflow experiment download \
 `--file` だけを指定した場合は、指定ファイルのみを保存します。`--include` を明示すれば、要素指定と組み合わせられます。
 
 ```sh
-go run ./cmd/simworkflow experiment download \
-  --run run-c4ec68cd352511cdacf9e2e85be04556 \
+simworkflow experiment download \
+  --run RUN_ID \
   --file logs/simulation/kernel.log \
   --file logs/simulation/agent-fire-brigade.log \
   --output artifacts/vc-selected-logs \
-  rescue-python-vc-comparison-5tmsf
+  WORKFLOW_NAME
 ```
 
 ログの指定では、パスの `precompute` / `simulation` に対応する段階だけを探します。
@@ -98,3 +98,5 @@ go run ./cmd/simworkflow experiment download \
 通信や破損アーカイブなどのエラーでも、保存済みの完全なファイルとエラーをマニフェストに残します。転送途中のファイルは削除します。
 
 展開時はパスの逸脱・リンク・重複パスを拒否し、1バンドルの展開量を16GiB、エントリ数を100,000件までとします。
+
+[ドキュメント一覧へ](README.md)

@@ -1,35 +1,21 @@
-# ADFサンプルのモジュール切り替え
+# エージェントのモジュール切り替え
 
-提供されたJava版・Python版サンプルと、Python版の依存するADF Coreを確認した結果です。
+実験YAMLで指定したモジュールを、Java／Pythonエージェントの設定へ反映する方法です。候補となる実装はエージェントイメージに含めます。
 テンプレートのコンテナとArgo上での動作確認結果は [検証記録](validation.md) を参照してください。
 
-## 確認した設定方法
+## 設定ファイルとキー
 
 | 対象 | モジュール設定 | 設定ファイルの指定方法 |
 | --- | --- | --- |
 | Java | `config/module.cfg`。`キー : 実装クラス名` | `launch.sh` の `-mc [FILE]` |
 | Python | `config/module.yaml`。ネストしたYAML | `config/launcher.yaml` の `adf.agent.moduleconfig.filename` |
 
-Java版の根拠:
-
-- [module.cfg](https://github.com/roborescue/adf-sample-agent-java/blob/e9339b10a5188ae15747fba836b6ea035b3b570d/config/module.cfg)
-- [launch.sh](https://github.com/roborescue/adf-sample-agent-java/blob/e9339b10a5188ae15747fba836b6ea035b3b570d/launch.sh)
-- [SampleRoadDetector.java](https://github.com/roborescue/adf-sample-agent-java/blob/e9339b10a5188ae15747fba836b6ea035b3b570d/src/main/java/sample_team/module/complex/SampleRoadDetector.java)
-
-Python版の根拠:
-
-- [module.yaml](https://github.com/adf-python/adf-sample-agent-python/blob/042a3477fb60f388e277e691dc2035e1a6555807/config/module.yaml)
-- [launcher.yaml](https://github.com/adf-python/adf-sample-agent-python/blob/042a3477fb60f388e277e691dc2035e1a6555807/config/launcher.yaml)
-- [main.py](https://github.com/adf-python/adf-sample-agent-python/blob/042a3477fb60f388e277e691dc2035e1a6555807/main.py)
-- [SampleRoadDetector](https://github.com/adf-python/adf-sample-agent-python/blob/042a3477fb60f388e277e691dc2035e1a6555807/src/sample_team/sample_road_detector.py)
-- [ADF CoreのModuleConfig](https://github.com/adf-python/adf-core-python/blob/c5eaf8d2dae07c0bb1a3227efca9effd4fca110b/src/adf_core_python/core/agent/config/module_config.py)
-
 PythonのModuleConfigはネストしたキーをドット区切りに平坦化します。
 どちらのSampleRoadDetectorも `SampleRoadDetector.PathPlanning` と `SampleRoadDetector.Clustering` を参照しています。
 単なる `pathPlanning` では、この差し替え箇所を指定できません。
 同じPathPlanningでも、SearchやExtActionなどは別の設定キーを参照するため、1つのキーを変えて全箇所が変わるとは限りません。
 
-## プラットフォームでの適用方針
+## 実行時の適用
 
 実験YAMLの `modules` と `matrix.modules` では、ADFが実際に参照する設定キーを使います。
 実験サンプルも `SampleRoadDetector.PathPlanning` などADFが参照するキーを使います。
@@ -62,7 +48,7 @@ JavaとPythonの実装クラス名を相互に置き換えることはしませ�
 
 Pythonサンプルの `main.py` は `config/launcher.yaml` を指定してLauncherを作成しているため、このサンプルではその設定に合わせてファイルを配置します。
 確認したPython LauncherにはJavaの `-mc` に相当する引数はありません。
-設定ディレクトリ全体を隠して他の設定ファイルを失わないよう、生成ファイルだけを配置する設計とします。
+設定ディレクトリ全体を隠して他の設定ファイルを失わないよう、生成ファイルを独立した場所へ配置します。
 
 差し替え候補は、Javaではクラスパス、Pythonではインポートパスからロードでき、差し替え箇所に必要なインターフェースを満たす必要があります。
 設定ファイル生成だけでは候補の実装コードを追加できません。候補を含むコンテナイメージが必要です。
@@ -75,3 +61,52 @@ Pythonサンプルの `main.py` は `config/launcher.yaml` を指定してLaunch
 元設定に存在しないキー、Javaの重複キー、Pythonの重複・曖昧なキーはエラーにします。
 Pythonのアンカー・エイリアス・マージキーには現在対応していません。
 Argo上でも同じ設定生成処理を使用します。[事前計算付き実験の実行](execution.md) を参照してください。
+
+## ローカルで設定ファイルを生成する
+
+コマンド中の `examples/` は、このリポジトリのルートからのパスです。
+
+実験YAMLと元設定から、構成ごとに設定ファイルを作成できます。マップやシードが異なっても、同じモジュール構成のファイルは1つだけ作成します。
+
+```sh
+# Java版: 3構成の.cfgとmanifest.jsonを生成
+simworkflow experiment modules \
+  -f examples/experiments/module-comparison.yaml \
+  --agent comparison \
+  --base examples/module-configs/java.cfg \
+  --format java --output-dir /tmp/module-configs-java
+
+# Python版: 2構成の.yamlとmanifest.jsonを生成
+simworkflow experiment modules \
+  -f examples/experiments/python-module-comparison.yaml \
+  --agent python-comparison \
+  --base examples/module-configs/python.yaml \
+  --format python --output-dir /tmp/module-configs-python
+```
+
+出力ディレクトリは新規のものを指定します。既存のディレクトリは上書きしません。
+`manifest.json` には各ファイルと、実行計画に共通する構成ID・エージェント名・イメージ・モジュール設定・リソース設定を記録します。
+指定していない元設定は残し、元設定に存在しないキーへの上書きはエラーにします。
+同梱の元設定は生成処理を試すための最小例です。実際の実験では自分のエージェントの完全な設定ファイルを `--base` に指定してください。
+`my_team` や `src.my_team` の実装は例示用なので、実際にイメージに含めた実装に置き換えます。
+生成ファイルをコンテナに渡す手順は [Java](../templates/agents/java/README.md)／[Python](../templates/agents/python/README.md) のテンプレートを参照してください。
+
+## 参考：確認したサンプルとソース
+
+以下は設定方式を確認した時点のソースです。Python uv版テンプレートの対象・依存バージョンは [Pythonテンプレート](../templates/agents/python/README.md) を参照してください。
+
+Java版の根拠:
+
+- [module.cfg](https://github.com/roborescue/adf-sample-agent-java/blob/e9339b10a5188ae15747fba836b6ea035b3b570d/config/module.cfg)
+- [launch.sh](https://github.com/roborescue/adf-sample-agent-java/blob/e9339b10a5188ae15747fba836b6ea035b3b570d/launch.sh)
+- [SampleRoadDetector.java](https://github.com/roborescue/adf-sample-agent-java/blob/e9339b10a5188ae15747fba836b6ea035b3b570d/src/main/java/sample_team/module/complex/SampleRoadDetector.java)
+
+Python版の根拠:
+
+- [module.yaml](https://github.com/adf-python/adf-sample-agent-python/blob/042a3477fb60f388e277e691dc2035e1a6555807/config/module.yaml)
+- [launcher.yaml](https://github.com/adf-python/adf-sample-agent-python/blob/042a3477fb60f388e277e691dc2035e1a6555807/config/launcher.yaml)
+- [main.py](https://github.com/adf-python/adf-sample-agent-python/blob/042a3477fb60f388e277e691dc2035e1a6555807/main.py)
+- [SampleRoadDetector](https://github.com/adf-python/adf-sample-agent-python/blob/042a3477fb60f388e277e691dc2035e1a6555807/src/sample_team/sample_road_detector.py)
+- [ADF CoreのModuleConfig](https://github.com/adf-python/adf-core-python/blob/c5eaf8d2dae07c0bb1a3227efca9effd4fca110b/src/adf_core_python/core/agent/config/module_config.py)
+
+[ドキュメント一覧へ](README.md)
