@@ -92,7 +92,6 @@ CLIの作成・参照権限は [client-rbac.yaml](../examples/kubernetes/client-
 ```sh
 go run ./cmd/simworkflow experiment submit \
   -f experiment.yaml \
-  --helper-image registry.example.com/simworkflow/worker:v1 \
   --service-account simworkflow
 
 # submitが返したWorkflow名を指定。オプションは名前より前に置く
@@ -139,7 +138,6 @@ experiments/<execution-id>/<run-id>/bundle.tar.gz
 mkdir -p artifacts
 go run ./cmd/simworkflow experiment render \
   -f experiment.yaml \
-  --helper-image registry.example.com/simworkflow/worker:v1 \
   --output artifacts/workflow.yaml
 ```
 
@@ -158,11 +156,10 @@ URLを含むワーカー設定は結果バンドルに含めません。
 ```sh
 go run ./cmd/simworkflow experiment submit \
   -f examples/validation/rescue-python-vc-100/experiment.yaml \
-  --config-storage s3 \
-  --helper-image 172.16.201.150:5000/simworkflow/worker:remote-config-20261024
+  --config-storage s3
 ```
 
-`s3` 方式には対応ワーカー `remote-config-20261024` 以降を使用してください。このワーカーは進捗・SimScope用Pod IPの保存にも対応します。設定取得の署名URLも24時間有効で、Podに長期アクセスキーは渡しません。設定オブジェクトには他の転送用URLも含まれるため、バケットは非公開で管理します。設定オブジェクトは結果バンドルや通常の結果ダウンロードには含めません。
+`s3` 方式はCLI既定の公開helperイメージで利用できます。独自のhelperに切り替える場合は `remote-config-20261024` 以降に相当する設定取得機能が必要です。このワーカーは進捗・SimScope用Pod IPの保存にも対応します。設定取得の署名URLも24時間有効で、Podに長期アクセスキーは渡しません。設定オブジェクトには他の転送用URLも含まれるため、バケットは非公開で管理します。設定オブジェクトは結果バンドルや通常の結果ダウンロードには含めません。
 
 既定の `--config-storage inline` は従来どおり設定JSONをWorkflowに埋め込み、旧ワーカーと互換性があります。CLIは生成定義が900KiBを超える場合、Argoへ送信する前にエラーにします。これはノード状態用の余裕を残すための検査で、クラスタ側のWorkflowサイズ制限は変更しません。
 

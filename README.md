@@ -36,16 +36,17 @@ go run ./cmd/simworkflow experiment plan -f examples/experiments/module-comparis
 ```
 
 展開する実行数の上限は既定で10,000件です。意図した大規模実験では `--max-runs 20000` などで変更できます。
-実行にはマップZIPをS3へ配置し、テンプレートに従うエージェントとワーカーのイメージをレジストリに登録します。
+実行にはマップZIPをS3へ配置し、テンプレートに従うエージェントのイメージをクラスタから取得可能なレジストリへ登録します。
 
 ```sh
-go run ./cmd/simworkflow experiment submit \
-  -f experiment.yaml --helper-image registry.example.com/simworkflow/worker:v1
+go run ./cmd/simworkflow experiment submit -f experiment.yaml
 go run ./cmd/simworkflow experiment status --watch WORKFLOW_NAME
 go run ./cmd/simworkflow experiment results WORKFLOW_NAME
 # 本実行のスコア要約だけを保存
 go run ./cmd/simworkflow experiment download --include summary --stage simulation WORKFLOW_NAME
 ```
+
+helperイメージは公開済みの動作確認済みGHCRイメージをdigest固定で使用します。別のイメージを使う場合は `--helper-image IMAGE` を指定してください。大きな実験では `--config-storage s3` を追加します。
 
 `experiment status --watch` で構成別の段階・状態・ステップ進捗・最新スコアを約5秒ごとに確認できます。端末では上下キーで実行を選択し、Enterでモジュールやリソースなどの設定詳細、Escで一覧へ戻れます。マウスホイールでスクロール、左右キーで横移動、`q` で終了できます。完了後も結果を表示します。従来のテキスト表示は `--plain` を追加します。ステップ進捗には進捗対応ワーカーを使用します。
 詳細画面では `w` で [SimScope](docs/simscope.md) をブラウザに開けます。実行中はリアルタイム接続、終了後は保存ログを再生します。接続先は `SIMSCOPE_URL`（既定: `http://172.16.201.173`）です。リアルタイム接続には対応ワーカーで新規送信してください。

@@ -24,6 +24,8 @@ import (
 	"simworkflow/internal/workflow"
 )
 
+const defaultHelperImage = "ghcr.io/shima004/simworkflow-worker@sha256:2e204474aa5c348c0d2196cc83adde038170fd9885bb09c2e83b4a4fd31cc027"
+
 func remoteCommand(command string) bool {
 	return command == "render" || command == "submit" || command == "status" || command == "results" || command == "download"
 }
@@ -116,7 +118,7 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 		}
 	}
 	file := flags.String("f", "", "experiment YAML (required)")
-	helper := flags.String("helper-image", "", "published SimWorkflow helper image (required)")
+	helper := flags.String("helper-image", defaultHelperImage, "override the published SimWorkflow helper image")
 	account := flags.String("service-account", "simworkflow", "workflow executor ServiceAccount")
 	maxRuns := flags.Int("max-runs", experiment.DefaultMaxRuns, "maximum expanded runs")
 	output := flags.String("output", "", "new private YAML file for render; contains temporary signed URLs")
@@ -127,8 +129,11 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 		}
 		return err
 	}
-	if flags.NArg() != 0 || *file == "" || *helper == "" {
-		return errors.New("specify -f FILE and --helper-image IMAGE")
+	if flags.NArg() != 0 || *file == "" {
+		return errors.New("specify -f FILE; positional arguments are not supported")
+	}
+	if strings.TrimSpace(*helper) == "" {
+		return errors.New("helper-image must not be empty")
 	}
 	if *configStorage != "inline" && *configStorage != "s3" {
 		return errors.New("config-storage must be inline or s3")

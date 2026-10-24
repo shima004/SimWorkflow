@@ -38,12 +38,45 @@ func TestRemoteCommands(t *testing.T) {
 					Metadata struct {
 						Annotations map[string]string `json:"annotations"`
 					} `json:"metadata"`
+					Spec struct {
+						Templates []struct {
+							InitContainers []struct {
+								Image string `json:"image"`
+							} `json:"initContainers"`
+							ContainerSet struct {
+								Containers []struct {
+									Name  string `json:"name"`
+									Image string `json:"image"`
+								} `json:"containers"`
+							} `json:"containerSet"`
+						} `json:"templates"`
+					} `json:"spec"`
 				} `json:"workflow"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&envelope); err != nil {
 				t.Error(err)
 			}
 			annotations = envelope.Workflow.Metadata.Annotations
+			helperCount := 0
+			for _, template := range envelope.Workflow.Spec.Templates {
+				for _, init := range template.InitContainers {
+					helperCount++
+					if init.Image != defaultHelperImage {
+						t.Error("prepare must use the pinned default helper")
+					}
+				}
+				for _, c := range template.ContainerSet.Containers {
+					if c.Name == "main" {
+						helperCount++
+						if c.Image != defaultHelperImage {
+							t.Error("collector must use the pinned default helper")
+						}
+					}
+				}
+			}
+			if helperCount == 0 {
+				t.Error("submitted workflow has no helper containers")
+			}
 			submitted = true
 			json.NewEncoder(w).Encode(map[string]any{"metadata": map[string]any{"name": "smoke-run"}})
 			return
@@ -91,6 +124,9 @@ func TestRemoteCommands(t *testing.T) {
 	if !bytes.Contains(data, []byte("X-Amz-Signature")) || bytes.Contains(data, []byte("secret-s3-key")) || strings.Contains(out.String(), "X-Amz-Signature") {
 		t.Fatal("render must include temporary capabilities only in the private file")
 	}
+	if !bytes.Contains(data, []byte("registry/worker:test")) || bytes.Contains(data, []byte(defaultHelperImage)) {
+		t.Fatal("explicit helper-image must override the default")
+	}
 	mu.Lock()
 	wasSubmitted := submitted
 	mu.Unlock()
@@ -125,7 +161,7 @@ func TestRemoteCommands(t *testing.T) {
 		t.Fatal("all nine runs must reference both stage configurations in S3")
 	}
 	out.Reset()
-	if err := run([]string{"experiment", "submit", "-f", file, "--helper-image", "registry/worker:test"}, lookup, &out, &errOut); err != nil {
+	if err := run([]string{"experiment", "submit", "-f", file}, lookup, &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "Submitted smoke-run (9 runs)") {
