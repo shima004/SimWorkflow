@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 
 	"simworkflow/internal/experiment"
@@ -15,6 +16,9 @@ import (
 )
 
 func runWorker(args []string, errOut io.Writer) error {
+	if runtime.GOOS != "linux" {
+		return errors.New("worker commands require a Linux container; client commands are available on this OS")
+	}
 	if len(args) == 0 {
 		return errors.New("worker requires prepare, server, agent or collect")
 	}

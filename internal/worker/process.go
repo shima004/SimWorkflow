@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -32,14 +31,13 @@ func start(root, phase, actor, dir string, args []string, ready bool) (*process,
 	}
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = dir
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	var output io.Writer = f
 	if ready {
 		output = &readyWriter{writer: f, root: root, phase: phase}
 	}
 	cmd.Stdout = output
 	cmd.Stderr = output
-	if err := cmd.Start(); err != nil {
+	if err := startCommand(cmd); err != nil {
 		f.Close()
 		return nil, fmt.Errorf("could not start %s in %s", actor, phase)
 	}
@@ -50,11 +48,11 @@ func start(root, phase, actor, dir string, args []string, ready bool) (*process,
 }
 
 func (p *process) stop() {
-	syscall.Kill(-p.cmd.Process.Pid, syscall.SIGTERM)
+	stopProcessGroup(p.cmd, false)
 	select {
 	case <-p.done:
 	case <-time.After(5 * time.Second):
-		syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL)
+		stopProcessGroup(p.cmd, true)
 		<-p.done
 	}
 }
