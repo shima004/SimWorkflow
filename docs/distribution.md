@@ -65,3 +65,17 @@ helper以外に、実験YAMLで指定するシミュレーターとエージェ�
 GHCRでは新しいパッケージの初期公開範囲はprivateです。初回登録後、パッケージ設定の **Change visibility → Public** を設定し、認証なしでpullできることを確認してください。リポジトリをPublicにする操作とは別です。既存の実験定義のイメージ参照は自動変更しません。
 
 参考：[GitHub公式のGHCR公開手順](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images)、[Container registryの公開範囲](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。
+
+## 初回公開記録（2026年10月24日）
+
+GHCRへの登録と `latest`・`sha-58fd58333b221537b282ad160d34ee0407d227a8` の作成を確認しています。
+
+```text
+ghcr.io/shima004/simworkflow-worker@sha256:2e204474aa5c348c0d2196cc83adde038170fd9885bb09c2e83b4a4fd31cc027
+```
+
+ビルド・Goの全体テスト・actionlint・コンテナ内でのCLI起動を確認済みです。現時点では匿名取得が拒否されており、[パッケージ設定](https://github.com/users/shima004/packages/container/simworkflow-worker/settings)でPublicへの切り替えが必要です。切り替え後に認証なしでの取得を確認します。
+
+GitHub Actionsの設定はローカルで作成済みですが、現在の接続からリポジトリへのアクセス権がないため、GitHubへの反映は未完了です。リポジトリへアクセス可能な環境から今回のコミットをpushすると、その後のmain更新・タグ作成で公開処理が動きます。
+
+詳細は [検証記録](../examples/validation/public-helper-20261024.json) を参照してください。
