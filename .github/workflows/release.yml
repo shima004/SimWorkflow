@@ -1,0 +1,102 @@
+name: Release CLI binaries
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'scripts/build-release.py'
+      - 'docs/installation.md'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.x'
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: go mod verify
+      - name: Build all platforms and check native binary
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.0-ci' }}
+        run: |
+          python3 scripts/build-release.py --version "$RELEASE_TAG" --output dist
+          (cd dist && sha256sum --check checksums.txt)
+          mkdir smoke
+          tar -xzf "dist/simworkflow_${RELEASE_TAG}_linux_amd64.tar.gz" -C smoke
+          ./smoke/simworkflow --version
+          ./smoke/simworkflow experiment validate -f examples/experiments/precompute-baseline.yaml
+
+  native-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.x'
+      - name: Check client commands on the target OS
+        shell: bash
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/simworkflow-native-config"
+          go build -mod=readonly -trimpath -o simworkflow-smoke.exe ./cmd/simworkflow
+          ./simworkflow-smoke.exe --version
+          ./simworkflow-smoke.exe experiment validate -f examples/experiments/precompute-baseline.yaml
+          ./simworkflow-smoke.exe config init
+          ./simworkflow-smoke.exe config path
+
+  publish:
+    needs: [check, native-smoke]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.x'
+      - name: Build release assets
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/build-release.py --version "$RELEASE_TAG" --output dist
+      - name: Publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A failed upload leaves a draft. Published releases are never replaced.
+          if gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft > /tmp/release-draft; then
+            test "$(cat /tmp/release-draft)" = true
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "SimWorkflow $RELEASE_TAG" --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" dist/* --clobber
+          if [[ "$RELEASE_TAG" == v0.* || "$RELEASE_TAG" == *-* ]]; then
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease --latest=false
+          else
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
+          fi

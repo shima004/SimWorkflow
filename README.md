@@ -3,7 +3,7 @@
 RoboCup Rescue Simulationの実験をYAMLで定義し、Argo Workflowsで実行するGo製CLIです。
 モジュールの組み合わせを展開し、サーバー・エージェントの事前計算と本実行を別のArgoステップで実行し、データをS3経由で引き継いで結果を保存します。サービスの接続設定はユーザー共通の `config.yaml`・環境変数・開発用の `.env` から読み込みます。
 
-Go 1.24以降が必要です。YAMLの処理には `go.yaml.in/yaml/v3` を使用します。
+[GitHub Releases](https://github.com/shima004/SimWorkflow/releases) からシングルバイナリを配布します。[インストール手順](docs/installation.md) を参照してください。ソースから実行する場合はGo 1.24以降が必要です。YAMLの処理には `go.yaml.in/yaml/v3` を使用します。
 
 ## 実験定義の設計
 

@@ -12,6 +12,11 @@ import (
 	"simworkflow/internal/connections"
 )
 
+var (
+	version = "dev"
+	commit  = "unknown"
+)
+
 func main() {
 	if err := run(os.Args[1:], os.LookupEnv, os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -27,6 +32,7 @@ func run(args []string, lookup func(string) (string, bool), out, errOut io.Write
 	flags.SetOutput(errOut)
 	envFile := flags.String("env-file", ".env", "environment file (default: .env in current directory if present; empty disables loading)")
 	configFile := flags.String("config", "", "config YAML file (default: user configuration directory/simworkflow/config.yaml; empty disables YAML loading)")
+	showVersion := flags.Bool("version", false, "print version and source commit")
 	flags.Usage = func() {
 		fmt.Fprintln(errOut, "Usage: simworkflow [--config FILE] [-env-file .env] config <init|path|check> [options]\n       simworkflow [--config FILE] [-env-file .env] experiment <validate|plan|modules|render|submit|status|results|download> [options]\n       simworkflow [--config FILE] [-env-file .env] map <register|list|inspect> [options]")
 		flags.PrintDefaults()
@@ -35,6 +41,10 @@ func run(args []string, lookup func(string) (string, bool), out, errOut io.Write
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
+		return err
+	}
+	if *showVersion {
+		_, err := fmt.Fprintf(out, "simworkflow %s (commit %s)\n", version, commit)
 		return err
 	}
 	explicitEnvFile := false

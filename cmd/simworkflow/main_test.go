@@ -38,6 +38,20 @@ registry:
 httpTimeout: 13s
 `
 
+func TestVersionWithoutConfiguration(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile(".env", []byte("broken private-value"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	if err := run([]string{"--config", "missing.yaml", "--version"}, func(string) (string, bool) { t.Fatal("version must not load credentials"); return "", false }, &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != fmt.Sprintf("simworkflow %s (commit %s)\n", version, commit) || errOut.Len() != 0 {
+		t.Fatal("unexpected version output")
+	}
+}
+
 func TestCommonYAMLWorksFromAnyDirectory(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", root)

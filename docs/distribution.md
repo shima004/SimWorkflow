@@ -1,8 +1,32 @@
 # 別環境への配布
 
-システム側の配布対象はhelperイメージです。シミュレーター・エージェントの起動管理、S3からの設定取得、事前計算データの引き継ぎ、進捗・結果保存とCLIを含みます。
+利用者向けCLIは [GitHub Releases](https://github.com/shima004/SimWorkflow/releases) のシングルバイナリで配布します。[インストール手順](installation.md) を参照してください。
+
+クラスタ側の配布対象はhelperイメージです。シミュレーター・エージェントの起動管理、S3からの設定取得、事前計算データの引き継ぎ、進捗・結果保存とCLIを含みます。
 
 配布先は `ghcr.io/shima004/simworkflow-worker` です。初回公開の状態と固定digestは末尾の公開記録を確認してください。サポートする実行Podのアーキテクチャは `linux/amd64` です。
+
+## CLIをリリースする
+
+[release.yml](../.github/workflows/release.yml) は `v*` タグのpushでテスト・vet・依存検査を行い、Linux／macOS／Windowsのamd64・arm64向けバイナリを作成します。Linux／macOSはtar.gz、Windowsはzipで配布し、各アーカイブには実行ファイルと利用手順を含めます。LICENSEが存在する場合は同梱します。SHA256の `checksums.txt` も添付します。
+
+バイナリの `simworkflow --version` はタグとソースコミットを表示します。ビルドではCGOを無効にし、`.env` などの利用環境の設定は取り込みません。macOS・Windows向けバイナリの署名は行いません。
+
+初回は次の手順で `v0.1.0` を公開します。タグ作成前に変更をコミットしてください。
+
+```sh
+git push origin main
+git tag -a v0.1.0 -m "SimWorkflow v0.1.0"
+git push origin v0.1.0
+```
+
+`v0.*` と `-rc.1` などの接尾辞があるタグはプレリリース、それ以外は正式リリースになります。全ファイルをアップロードしてから公開し、途中で失敗した場合はドラフトが残ります。同じタグのActionsを再実行するとドラフトへのアップロードを再試行できます。公開済みReleaseは上書きせず、新しいタグを作成してください。既存のhelper公開ワークフローも同じタグで実行されます。CLIが使用するデフォルトhelperは検証済みdigestのままです。
+
+ローカルでも配布物を作成できます（GoとPython 3が必要）。出力先は空のディレクトリを指定します。
+
+```sh
+python3 scripts/build-release.py --version v0.1.0 --output /tmp/simworkflow-release-v0.1.0
+```
 
 ## イメージの利用
 
