@@ -38,7 +38,7 @@ func runDownload(ctx context.Context, args []string, c config.Config, out, errOu
 	include := flags.String("include", "all", "comma-separated: all, plan, summary (or score), progress, simulatorLogs, agentLogs, precompute, modules, config, bundle")
 	runs := flags.String("run", "", "comma-separated run IDs; default: all runs")
 	stage := flags.String("stage", "all", "precompute, simulation or all (precompute data.zip is selected independently)")
-	output := flags.String("output", "", "new output directory; default: artifacts/WORKFLOW_NAME")
+	output := flags.String("output", "", "output directory; supports adding to this experiment; default: artifacts/WORKFLOW_NAME")
 	var files bundleFiles
 	flags.Var(&files, "file", "exact file path inside a bundle, e.g. logs/simulation/rescue.log.7z; repeat to select multiple files")
 	flags.Usage = func() {
@@ -84,9 +84,14 @@ func runDownload(ctx context.Context, args []string, c config.Config, out, errOu
 		return err
 	}
 	report, err := artifacts.Download(ctx, store, &plan, prefix, artifacts.Options{Workflow: name, Phase: snapshot.Status.Phase, Output: *output, Include: csvOptions(*include), Runs: csvOptions(*runs), Stage: *stage, Files: files})
-	if len(report.Downloaded) > 0 {
-		if _, writeErr := fmt.Fprintf(out, "Downloaded %d files to %s (%s). Manifest: download.json\n", len(report.Downloaded), *output, snapshot.Status.Phase); writeErr != nil {
+	if report.Added > 0 || len(report.Skipped) > 0 {
+		if _, writeErr := fmt.Fprintf(out, "Downloaded %d files to %s (%s). Manifest: download.json\n", report.Added, *output, snapshot.Status.Phase); writeErr != nil {
 			return errors.Join(err, writeErr)
+		}
+	}
+	if len(report.Skipped) > 0 {
+		if _, e := fmt.Fprintf(out, "Skipped %d verified existing files.\n", len(report.Skipped)); e != nil {
+			return errors.Join(err, e)
 		}
 	}
 	if len(report.Unavailable) > 0 {

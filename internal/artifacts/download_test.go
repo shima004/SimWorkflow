@@ -275,3 +275,122 @@ func TestDuplicateArchiveEntriesAreRejected(t *testing.T) {
 		t.Fatal("must reject duplicate archive entries")
 	}
 }
+
+func TestAppendSelectionsAndRepeatWithoutOverwriting(t *testing.T) {
+	s, p, out := fixture(t)
+	opts := Options{Workflow: "workflow", Phase: "Succeeded", Output: out, Include: []string{"summary"}, Stage: "simulation"}
+	first, err := Download(context.Background(), s, p, testPrefix, opts)
+	if err != nil || first.Added != 2 {
+		t.Fatalf("%v %+v", err, first)
+	}
+	original, _ := os.ReadFile(filepath.Join(out, firstRun, "simulation/summary.json"))
+	second, err := Download(context.Background(), s, p, testPrefix, Options{Workflow: "workflow", Phase: "Succeeded", Output: out, Files: []string{"logs/simulation/rescue.log.7z"}, Stage: "simulation"})
+	if err != nil || second.Added != 2 || len(second.Downloaded) != 4 {
+		t.Fatalf("%v %+v", err, second)
+	}
+	s.opened = nil
+	repeatedFiles, err := Download(context.Background(), s, p, testPrefix, Options{Workflow: "workflow", Phase: "Succeeded", Output: out, Files: []string{"logs/simulation/rescue.log.7z"}, Stage: "simulation"})
+	if err != nil || repeatedFiles.Added != 0 || len(repeatedFiles.Skipped) != 2 || len(s.opened) != 0 {
+		t.Fatalf("file-only repeat fetched bundles: %v %+v requests=%v", err, repeatedFiles, s.opened)
+	}
+	preserved, _ := os.ReadFile(filepath.Join(out, firstRun, "simulation/summary.json"))
+	if !bytes.Equal(original, preserved) {
+		t.Fatal("summary changed when logs were added")
+	}
+	data, _ := os.ReadFile(filepath.Join(out, "download.json"))
+	var manifest Report
+	if err := json.Unmarshal(data, &manifest); err != nil || len(manifest.Downloaded) != 4 {
+		t.Fatal("manifest lost earlier files")
+	}
+	s.opened = nil
+	again, err := Download(context.Background(), s, p, testPrefix, opts)
+	if err != nil || again.Added != 0 || len(again.Skipped) != 2 || len(again.Downloaded) != 4 || len(s.opened) != 0 {
+		t.Fatalf("%v %+v requests=%v", err, again, s.opened)
+	}
+	if err := os.Remove(filepath.Join(out, firstRun, "simulation/summary.json")); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := Download(context.Background(), s, p, testPrefix, opts)
+	if err != nil || restored.Added != 1 || len(restored.Skipped) != 1 || len(restored.Downloaded) != 4 {
+		t.Fatalf("%v %+v", err, restored)
+	}
+}
+
+func TestAppendProtectsLocalChangesAndOtherExperiments(t *testing.T) {
+	for _, scenario := range []string{"edited file", "different workflow", "different prefix", "download lock"} {
+		t.Run(scenario, func(t *testing.T) {
+			s, p, out := fixture(t)
+			opts := Options{Workflow: "workflow", Output: out, Include: []string{"plan"}}
+			if _, err := Download(context.Background(), s, p, testPrefix, opts); err != nil {
+				t.Fatal(err)
+			}
+			manifestPath := filepath.Join(out, "download.json")
+			before, _ := os.ReadFile(manifestPath)
+			prefix := testPrefix
+			switch scenario {
+			case "edited file":
+				os.WriteFile(filepath.Join(out, "plan.json"), []byte("local changes"), 0600)
+			case "different workflow":
+				opts.Workflow = "other-workflow"
+			case "different prefix":
+				prefix = "experiments/1123456789abcdef0123456789abcdef"
+			case "download lock":
+				os.WriteFile(filepath.Join(out, ".download.lock"), []byte("running"), 0600)
+			}
+			s.opened = nil
+			if _, err := Download(context.Background(), s, p, prefix, opts); err == nil {
+				t.Fatal("unsafe append was accepted")
+			}
+			if len(s.opened) != 0 {
+				t.Fatal("should reject before downloading")
+			}
+			if scenario == "edited file" {
+				body, _ := os.ReadFile(filepath.Join(out, "plan.json"))
+				if string(body) != "local changes" {
+					t.Fatal("local changes overwritten")
+				}
+			} else {
+				after, _ := os.ReadFile(manifestPath)
+				if !bytes.Equal(before, after) {
+					t.Fatal("unrelated or locked manifest changed")
+				}
+			}
+		})
+	}
+}
+
+func TestAppendRejectsSymlinkParents(t *testing.T) {
+	s, p, out := fixture(t)
+	opts := Options{Workflow: "workflow", Output: out, Include: []string{"summary"}, Stage: "simulation", Runs: []string{firstRun}}
+	if _, err := Download(context.Background(), s, p, testPrefix, opts); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(out, firstRun, "simulation/logs")); err != nil {
+		t.Fatal(err)
+	}
+	opts.Include = nil
+	opts.Files = []string{"logs/simulation/rescue.log.7z"}
+	if _, err := Download(context.Background(), s, p, testPrefix, opts); err == nil {
+		t.Fatal("symlink escape accepted")
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil || len(entries) != 0 {
+		t.Fatal("wrote outside output directory")
+	}
+}
+
+func TestUnavailableAppendDoesNotCountOldFilesAsSuccess(t *testing.T) {
+	s, p, out := fixture(t)
+	opts := Options{Output: out, Include: []string{"plan"}}
+	if _, err := Download(context.Background(), s, p, testPrefix, opts); err != nil {
+		t.Fatal(err)
+	}
+	opts.Include = nil
+	opts.Files = []string{"logs/simulation/missing.log"}
+	opts.Stage = "simulation"
+	r, err := Download(context.Background(), s, p, testPrefix, opts)
+	if err == nil || r.Added != 0 || len(r.Downloaded) != 1 {
+		t.Fatalf("%v %+v", err, r)
+	}
+}

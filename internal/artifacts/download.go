@@ -8,7 +8,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -44,6 +43,8 @@ type File struct {
 	SHA256 string `json:"sha256"`
 }
 type Report struct {
+	Added          int       `json:"addedFiles"`
+	Skipped        []string  `json:"skipped,omitempty"`
 	Workflow       string    `json:"workflow"`
 	WorkflowPhase  string    `json:"workflowPhase"`
 	ResultPrefix   string    `json:"resultPrefix"`
@@ -58,6 +59,8 @@ type Report struct {
 }
 
 type downloader struct {
+	root            *os.Root
+	existing        map[string]File
 	source          Source
 	ctx             context.Context
 	output          string
@@ -70,7 +73,8 @@ func safePath(name string) bool {
 	return fs.ValidPath(name) && filepath.IsLocal(name) && name != "." && !strings.Contains(name, "\\")
 }
 
-// Download uses a new output directory, never overwriting existing files.
+// Download adds selected artifacts to a directory bound to the experiment.
+// Existing tracked files are verified and retained; local edits are not replaced.
 // Completed files and a manifest remain available if a later object fails.
 func Download(ctx context.Context, source Source, plan *experiment.Plan, prefix string, o Options) (report Report, err error) {
 	if !ValidPrefix(prefix) {
@@ -142,23 +146,24 @@ func Download(ctx context.Context, source Source, plan *experiment.Plan, prefix 
 	for _, r := range runs {
 		report.Runs = append(report.Runs, r.ID)
 	}
-	// Mkdir reserves the output directory and rejects existing files/directories.
-	if err = os.MkdirAll(filepath.Dir(o.Output), 0700); err != nil {
-		return report, err
+	root, previous, openErr := openOutput(o.Output, o.Workflow, prefix)
+	if openErr != nil {
+		return report, openErr
 	}
-	if err = os.Mkdir(o.Output, 0700); err != nil {
-		return report, fmt.Errorf("create new output directory: %w", err)
+	defer root.Close()
+	defer root.Remove(".download.lock")
+	d := downloader{source: source, ctx: ctx, output: o.Output, selected: selected, report: &report, root: root, existing: map[string]File{}}
+	if previous != nil {
+		report.Downloaded = append(report.Downloaded, previous.Downloaded...)
+		for _, file := range previous.Downloaded {
+			d.existing[file.Path] = file
+		}
 	}
-	d := downloader{source: source, ctx: ctx, output: o.Output, selected: selected, report: &report}
 	defer func() {
 		if err != nil {
 			report.Error = err.Error()
 		}
-		data, e := json.MarshalIndent(report, "", "  ")
-		if e == nil {
-			e = os.WriteFile(filepath.Join(o.Output, "download.json"), append(data, '\n'), 0600)
-		}
-		if e != nil {
+		if e := saveManifest(root, o.Output, report); e != nil {
 			err = errors.Join(err, fmt.Errorf("save download manifest: %w", e))
 		}
 	}()
@@ -204,7 +209,7 @@ func Download(ctx context.Context, source Source, plan *experiment.Plan, prefix 
 			}
 		}
 	}
-	if len(report.Downloaded) == 0 {
+	if report.Added == 0 && len(report.Skipped) == 0 {
 		return report, errors.New("no requested artifacts are available yet; see download.json")
 	}
 	if (!all && len(report.Unavailable) > 0) || d.requiredMissing {
@@ -217,17 +222,20 @@ func (d *downloader) save(name, source string, body io.Reader) (err error) {
 	if !safePath(name) {
 		return errors.New("unsafe artifact output path")
 	}
-	path := filepath.Join(d.output, filepath.FromSlash(name))
-	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if skipped, e := d.skipExisting(name, source); e != nil || skipped {
+		return e
+	}
+	path := filepath.FromSlash(name)
+	if err = rootMkdirAll(d.root, filepath.Dir(path)); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	f, err := d.root.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err != nil {
-			os.Remove(path)
+			d.root.Remove(path)
 		}
 	}()
 	h := sha256.New()
@@ -239,11 +247,14 @@ func (d *downloader) save(name, source string, body io.Reader) (err error) {
 	if closeErr != nil {
 		return closeErr
 	}
-	d.report.Downloaded = append(d.report.Downloaded, File{Path: name, Source: source, Size: n, SHA256: hex.EncodeToString(h.Sum(nil))})
+	d.remember(File{Path: name, Source: source, Size: n, SHA256: hex.EncodeToString(h.Sum(nil))})
 	return nil
 }
 
 func (d *downloader) object(key, local string) error {
+	if skipped, err := d.skipExisting(local, key); err != nil || skipped {
+		return err
+	}
 	r, err := d.source.Open(d.ctx, key)
 	if storage.IsNotFound(err) {
 		d.report.Unavailable = append(d.report.Unavailable, key)
@@ -259,6 +270,19 @@ func (d *downloader) object(key, local string) error {
 func (d *downloader) archive(key, local, stage string, files []string, extract bool) error {
 	if !extract {
 		return d.object(key, local+"/bundle.tar.gz")
+	}
+	if len(files) > 0 && !d.selected["bundle"] && !d.selected["simulatorLogs"] && !d.selected["agentLogs"] && !d.selected["modules"] && !d.selected["config"] {
+		complete := true
+		for _, name := range files {
+			skipped, err := d.skipExisting(bundleOutput(local, stage, name), key+"#"+name)
+			if err != nil {
+				return err
+			}
+			complete = complete && skipped
+		}
+		if complete {
+			return nil
+		}
 	}
 	r, err := d.source.Open(d.ctx, key)
 	if storage.IsNotFound(err) {
@@ -357,11 +381,7 @@ func (d *downloader) archive(key, local, stage string, files []string, extract b
 			matched[kind] = true
 		}
 		if choose {
-			output := name
-			if strings.HasPrefix(name, "logs/"+stage+"/") {
-				output = "logs/" + strings.TrimPrefix(name, "logs/"+stage+"/")
-			}
-			if err = d.save(local+"/"+output, key+"#"+name, tr); err != nil {
+			if err = d.save(bundleOutput(local, stage, name), key+"#"+name, tr); err != nil {
 				return err
 			}
 		}
@@ -382,4 +402,11 @@ func (d *downloader) archive(key, local, stage string, files []string, extract b
 		}
 	}
 	return nil
+}
+
+func bundleOutput(local, stage, name string) string {
+	if strings.HasPrefix(name, "logs/"+stage+"/") {
+		name = "logs/" + strings.TrimPrefix(name, "logs/"+stage+"/")
+	}
+	return local + "/" + name
 }

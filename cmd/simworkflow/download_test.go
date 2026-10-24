@@ -59,6 +59,10 @@ func TestDownloadCommandAndFileSelection(t *testing.T) {
 	}
 	dest = filepath.Join(t.TempDir(), "rescue-only")
 	out.Reset()
+	if err := run([]string{"experiment", "download", "--include", "summary", "--stage", "simulation", "--output", dest, "test-workflow"}, lookup, &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
 	if err := run([]string{"experiment", "download", "--file", "logs/simulation/rescue.log.7z", "--run", id, "--output", dest, "test-workflow"}, lookup, &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
