@@ -39,11 +39,15 @@ PATHの設定は利用するシェルの設定ファイルにも追加してく�
 ```sh
 simworkflow config init
 simworkflow config path
-# 表示されたconfig.yamlに接続先・認証情報を入力
+# 表示されたconfig.yamlに接続先・名前空間・バケット名を入力
+simworkflow credentials set s3
+# Argo・レジストリに認証が必要なら、それぞれ登録
 simworkflow config check
 ```
 
-設定は利用者ごとに保存されるため、以後はどのディレクトリからでも実行できます。環境変数 > カレントディレクトリの `.env` > 共通YAMLの順で設定を適用します。SimScopeは任意機能です。
+接続設定と認証情報は利用者ごとに保存されるため、以後はどのディレクトリからでも実行できます。新規設定ではOSの資格情報ストアを使用し、認証情報はYAMLへ書きません。SimScopeは任意機能です。
+
+Argoの認証には `simworkflow credentials set argo`、レジストリのユーザー名・パスワードには `simworkflow credentials set registry`、トークンには `simworkflow credentials set registry --auth token` を使います。OSストアを使わないCI向けの方式やLinux／WSLの要件は [認証情報ガイド](https://github.com/shima004/SimWorkflow/blob/main/docs/credentials.md) を参照してください。
 
 接続設定の詳しい書式は [接続設定ガイド](https://github.com/shima004/SimWorkflow/blob/main/docs/configuration.md) を参照してください。
 

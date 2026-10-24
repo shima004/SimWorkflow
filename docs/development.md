@@ -35,11 +35,20 @@ python3 scripts/build-release.py --version v0.1.0 --output /tmp/simworkflow-rele
 
 `release.yml` は全体テストと6環境向けビルドに加え、macOS・Windowsランナーでクライアントコマンドの起動を確認します。`helper-image.yml` はLinuxワーカーイメージを検証・公開します。
 
+OSストアへの実際の保存・取得・削除は明示的に選んだときだけ検証できます。仮の一時エントリを作成し、テスト後に削除します。OSストアが利用できる対話環境で実行してください。
+
+```sh
+SIMWORKFLOW_TEST_OS_KEYRING=1 go test ./internal/credentials -run TestSystemStoreRoundTrip -v
+```
+
+通常のテストはOSストアへアクセスしません。
+
 ## 実装の構成
 
 | パス | 担当 |
 | --- | --- |
 | `cmd/simworkflow/` | 設定・実験・マップのCLI、TUI、ダウンロード、ワーカーの入口 |
+| `internal/credentials/` | エンドポイント別のOS資格情報ストア、認証情報の解決 |
 | `internal/config/` | 環境変数・共通YAML・.envの重ね合わせと検証 |
 | `internal/connections/` | 認証付きのサービス接続確認 |
 | `internal/experiment/` | 実験YAMLの検証、組み合わせ・マップ・シードの展開 |

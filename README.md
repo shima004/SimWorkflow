@@ -15,14 +15,16 @@ SimScopeでのリアルタイム表示・保存ログ再生も利用できます
 ## はじめる
 
 1. [GitHub Releases](https://github.com/shima004/SimWorkflow/releases) からCLIをダウンロードし、PATHに配置します。[インストール手順](docs/installation.md) を参照してください。
-2. `simworkflow config init` で共通設定を作り、Argo・S3・レジストリの接続先と認証情報を入力します。[接続設定](docs/configuration.md) に書式をまとめています。
+2. `simworkflow config init` で共通設定を作り、Argo・S3・レジストリの接続先を入力し、認証情報はOSの資格情報ストアへ登録します。[接続設定](docs/configuration.md) に書式をまとめています。
 3. エージェントイメージとマップを用意し、[最初の実験](docs/quickstart.md) に沿って実行します。
 
 ```sh
 simworkflow --version
 simworkflow config init
 simworkflow config path
-# 表示されたconfig.yamlを編集
+# 表示されたconfig.yamlを編集（認証情報は書かない）
+simworkflow credentials set s3
+# Argo・レジストリに認証が必要なら、それぞれ登録
 simworkflow config check --connect
 ```
 
@@ -50,6 +52,7 @@ simworkflow experiment download --include summary --stage simulation WORKFLOW_NA
 | 最初の実験を動かす | [クイックスタート](docs/quickstart.md) |
 | モジュール・リソース・組み合わせを定義する | [実験YAMLの仕様](docs/experiment-yaml.md) |
 | エージェントイメージを作る | [Python（uv／pip）](templates/agents/python/README.md)・[Java](templates/agents/java/README.md) |
+| 認証情報を安全に保存する | [OSの資格情報ストア](docs/credentials.md) |
 | マップを登録・管理する | [マップ](docs/maps.md) |
 | 実行を監視し、結果を取得する | [進捗・スコア](docs/progress.md)・[ダウンロード](docs/download.md) |
 | 開発・リリースする | [開発ガイド](docs/development.md) |

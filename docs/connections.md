@@ -1,6 +1,6 @@
 # サービスへの接続確認
 
-[接続設定](configuration.md) を用意した後、設定の不足や形式だけを調べる場合：
+[接続設定](configuration.md) を用意した後、設定の不足や形式を調べる場合（キーストア方式ではOSストアを参照）：
 
 ```sh
 simworkflow config check

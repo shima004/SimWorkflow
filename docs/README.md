@@ -8,6 +8,7 @@
 | --- | --- |
 | [インストール](installation.md) | OS・CPUに合う配布物の選択、チェックサム、PATH、更新 |
 | [接続設定](configuration.md) | 共通YAML、環境変数、.env、優先順位、設定項目一覧 |
+| [認証情報](credentials.md) | OSストアへの登録・削除、CI、既存ファイルからの移行 |
 | [クイックスタート](quickstart.md) | マップの登録から実験の送信・監視・結果取得まで |
 | [実験YAMLの仕様](experiment-yaml.md) | モジュールの組み合わせ、除外、マップ・シード、CPU・メモリ |
 | [モジュール切り替え](adf-module-settings.md) | ADFの設定キー、元設定への反映、ローカルでの設定生成 |
