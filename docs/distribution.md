@@ -24,32 +24,6 @@ go run ./cmd/simworkflow experiment submit \
 
 別のhelperを使用する場合は `--helper-image IMAGE` で上書きできます。`latest` はmainの更新で変わるため、デフォルトでは使用しません。別の版を選ぶ場合もdigestや `sha-<40桁のコミットSHA>` で固定できます。Argo・S3の接続設定や認証情報は利用環境ごとに設定します。
 
-## GoやソースコードなしでCLIを利用する
-
-Linux amd64／WSLでは、イメージから静的リンク済みのCLIを取り出せます。
-
-```sh
-worker_container_id=$(docker create --platform linux/amd64 ghcr.io/shima004/simworkflow-worker:latest)
-docker cp "$worker_container_id:/usr/local/bin/simworkflow" ./simworkflow
-docker rm "$worker_container_id"
-chmod +x ./simworkflow
-
-./simworkflow experiment validate -f experiment.yaml
-```
-
-このCLIにも `.env` 自動読み込み、TUI、SimScope起動機能があります。ブラウザ起動には利用環境の既定ブラウザ設定が必要です。
-
-CLIをコンテナのまま使うこともできます。作業ディレクトリをマウントして設定・実験YAML・ダウンロード結果を共有します。
-
-```sh
-docker run --rm -it \
-  -v "$PWD:/workspace" -w /workspace \
-  ghcr.io/shima004/simworkflow-worker:latest \
-  experiment validate -f experiment.yaml
-```
-
-コンテナ内の `localhost` はホストと異なります。Argo・S3に到達できるURLを設定してください。コンテナ版はホストのブラウザを起動しないため、TUIの `w` を使う場合は取り出したCLIを使用します。
-
 ## 実験用イメージ・マップとの関係
 
 helper以外に、実験YAMLで指定するシミュレーターとエージェントのイメージが必要です。シミュレーターは既存の `ghcr.io/shima004/rcrs-server:v1.0.4` を使用できます。独自エージェントは利用者がアクセス可能なレジストリへ登録します。マップは利用環境のS3へ登録し、Argoの名前空間とServiceAccountを準備してください。
