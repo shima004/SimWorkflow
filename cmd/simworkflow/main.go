@@ -42,6 +42,7 @@ func runWithCredentials(args []string, lookup func(string) (string, bool), out, 
 		fmt.Fprintln(errOut, "Usage: simworkflow [--config FILE] [-env-file .env] config <init|path|check> [options]\n       simworkflow [--config FILE] [-env-file .env] experiment <validate|plan|modules|render|submit|list|stop|status|results|download> [options]\n       simworkflow [--config FILE] [-env-file .env] map <register|list|inspect> [options]")
 		flags.PrintDefaults()
 		fmt.Fprintln(errOut, "       simworkflow credentials <set|status|delete> [argo|s3|registry] [options]")
+		fmt.Fprintln(errOut, "       simworkflow [--config FILE] [--env-file FILE] agent build [options] [CONTEXT]")
 	}
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -122,28 +123,45 @@ func runWithCredentials(args []string, lookup func(string) (string, bool), out, 
 	if flags.NArg() >= 1 && flags.Arg(0) == "credentials" {
 		return runCredentials(flags.Args()[1:], loadSettings, store, prompt, out, errOut)
 	}
-	loadConfig := func(argoOnly bool) (config.Config, error) {
+	loadConfig := func(target string, resolveCredentials bool) (config.Config, error) {
 		get, err := loadSettings()
 		if err != nil {
 			return config.Config{}, err
 		}
-		if mode, _ := get("CREDENTIALS_STORE"); mode == "keyring" {
+		if mode, _ := get("CREDENTIALS_STORE"); mode == "keyring" && resolveCredentials {
 			targets := credentials.Targets()
-			if argoOnly {
-				targets = []string{"argo"}
+			if target != "" {
+				targets = []string{target}
 			}
 			get, err = store.ResolveTargets(get, lookup, targets)
 			if err != nil {
 				return config.Config{}, err
 			}
 		}
-		if argoOnly {
+		if target == "registry" {
+			if !resolveCredentials {
+				original := get
+				get = func(key string) (string, bool) {
+					for _, field := range credentials.Fields("registry") {
+						if key == field {
+							return "", true
+						}
+					}
+					return original(key)
+				}
+			}
+			return config.LoadRegistry(get)
+		}
+		if target == "argo" {
 			return config.LoadArgo(get)
 		}
 		return config.Load(get)
 	}
+	if flags.NArg() >= 1 && flags.Arg(0) == "agent" {
+		return runAgent(flags.Args()[1:], func(push bool) (config.Config, error) { return loadConfig("registry", push) }, out, errOut)
+	}
 	if flags.NArg() >= 1 && flags.Arg(0) == "map" {
-		c, err := loadConfig(false)
+		c, err := loadConfig("", true)
 		if err != nil {
 			return err
 		}
@@ -151,7 +169,11 @@ func runWithCredentials(args []string, lookup func(string) (string, bool), out, 
 	}
 	if flags.NArg() >= 1 && flags.Arg(0) == "experiment" {
 		if flags.NArg() > 1 && remoteCommand(flags.Arg(1)) {
-			c, err := loadConfig(flags.Arg(1) == "list" || flags.Arg(1) == "stop")
+			target := ""
+			if flags.Arg(1) == "list" || flags.Arg(1) == "stop" {
+				target = "argo"
+			}
+			c, err := loadConfig(target, true)
 			if err != nil {
 				return err
 			}
@@ -175,7 +197,7 @@ func runWithCredentials(args []string, lookup func(string) (string, bool), out, 
 	if checkFlags.NArg() != 0 {
 		return errors.New("config check does not accept positional arguments")
 	}
-	c, err := loadConfig(false)
+	c, err := loadConfig("", true)
 	if err != nil {
 		return err
 	}

@@ -82,11 +82,8 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 			return Config{}, fmt.Errorf("%s is required", entry.key)
 		}
 	}
-	if (c.Registry.Username == "") != (c.Registry.Password == "") {
-		return Config{}, fmt.Errorf("REGISTRY_USERNAME and REGISTRY_PASSWORD must be set together")
-	}
-	if c.Registry.Token != "" && c.Registry.Username != "" {
-		return Config{}, fmt.Errorf("REGISTRY_TOKEN cannot be combined with REGISTRY_USERNAME/REGISTRY_PASSWORD")
+	if err := validateRegistryAuth(c.Registry); err != nil {
+		return Config{}, err
 	}
 	var err error
 	c.S3.ForcePathStyle, err = strconv.ParseBool(get("S3_FORCE_PATH_STYLE", "true"))
@@ -134,6 +131,43 @@ func LoadArgo(lookup func(string) (string, bool)) (Config, error) {
 	}
 	if strings.TrimSpace(c.Argo.Namespace) == "" {
 		return Config{}, fmt.Errorf("ARGO_WORKFLOW_NAMESPACE is required")
+	}
+	var err error
+	c.HTTPTimeout, err = parseHTTPTimeout(get("HTTP_TIMEOUT", "30s"))
+	if err != nil {
+		return Config{}, err
+	}
+	return c, nil
+}
+
+func validateRegistryAuth(registry Registry) error {
+	if (registry.Username == "") != (registry.Password == "") {
+		return fmt.Errorf("REGISTRY_USERNAME and REGISTRY_PASSWORD must be set together")
+	}
+	if registry.Token != "" && registry.Username != "" {
+		return fmt.Errorf("REGISTRY_TOKEN cannot be combined with REGISTRY_USERNAME/REGISTRY_PASSWORD")
+	}
+	return nil
+}
+
+// LoadRegistry is sufficient for building/publishing an agent image; unrelated
+// Argo and S3 settings and credentials are neither required nor validated.
+func LoadRegistry(lookup func(string) (string, bool)) (Config, error) {
+	get := func(key, fallback string) string {
+		if value, ok := lookup(key); ok {
+			return value
+		}
+		return fallback
+	}
+	c := Config{CredentialStore: get("CREDENTIALS_STORE", "environment"), Registry: Registry{URL: get("REGISTRY_URL", ""), Username: get("REGISTRY_USERNAME", ""), Password: get("REGISTRY_PASSWORD", ""), Token: get("REGISTRY_TOKEN", "")}}
+	if c.CredentialStore != "keyring" && c.CredentialStore != "environment" {
+		return Config{}, fmt.Errorf("CREDENTIALS_STORE must be keyring or environment")
+	}
+	if err := validateURL("REGISTRY_URL", c.Registry.URL); err != nil {
+		return Config{}, err
+	}
+	if err := validateRegistryAuth(c.Registry); err != nil {
+		return Config{}, err
 	}
 	var err error
 	c.HTTPTimeout, err = parseHTTPTimeout(get("HTTP_TIMEOUT", "30s"))
