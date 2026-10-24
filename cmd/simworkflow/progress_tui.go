@@ -29,6 +29,7 @@ type progressFrame struct {
 	name, phase, columns string
 	rows                 []string
 	err                  error
+	retryProgress        bool
 	plan                 *experiment.Plan
 	runs                 []experiment.Run
 }
@@ -60,14 +61,17 @@ func loadProgress(ctx context.Context, c config.Config, name string) tea.Cmd {
 		var body strings.Builder
 		prefix := snapshot.Metadata.Annotations["simworkflow.io/result-prefix"]
 		var plan *experiment.Plan
+		retryProgress := false
 		if strings.HasPrefix(prefix, "experiments/") && !strings.Contains(prefix, "..") {
 			readCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
-			defer cancel()
 			plan = new(experiment.Plan)
-			if err := store.GetJSON(readCtx, prefix+"/plan.json", plan); err != nil {
+			err := store.GetJSON(readCtx, prefix+"/plan.json", plan)
+			cancel()
+			if err != nil {
 				return progressFrame{err: err}
 			}
-			if err := writePlannedRunProgress(readCtx, store, snapshot, plan, &body); err != nil {
+			retryProgress, err = writePlannedRunProgress(ctx, store, snapshot, plan, &body)
+			if err != nil {
 				return progressFrame{err: err}
 			}
 		}
@@ -75,7 +79,7 @@ func loadProgress(ctx context.Context, c config.Config, name string) tea.Cmd {
 		if phase == "" {
 			phase = "Pending"
 		}
-		frame := progressFrame{name: screenText(snapshot.Metadata.Name), phase: screenText(phase), plan: plan}
+		frame := progressFrame{name: screenText(snapshot.Metadata.Name), phase: screenText(phase), plan: plan, retryProgress: retryProgress}
 		if plan != nil {
 			for _, run := range plan.Runs {
 				if statusRunID.MatchString(run.ID) {
@@ -190,11 +194,11 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.frame = msg
 			m.done = msg.phase == "Succeeded" || msg.phase == "Failed" || msg.phase == "Error"
 		}
-		if !m.done {
+		if !m.done || m.frame.retryProgress {
 			next = tea.Tick(5*time.Second, func(time.Time) tea.Msg { return progressTick{} })
 		}
 	case progressTick:
-		if !m.done {
+		if !m.done || m.frame.retryProgress {
 			next = m.fetch
 		}
 	case viewerOpened:
@@ -283,6 +287,9 @@ func (m progressModel) View() string {
 	status := "Refreshing every 5s"
 	if m.done {
 		status = "Finished; press q to close"
+		if m.frame.retryProgress {
+			status = "Finished; retrying unavailable results every 5s"
+		}
 	} else if m.refreshErr != nil {
 		status = "Refresh failed; retrying in 5s (showing last data)"
 	}

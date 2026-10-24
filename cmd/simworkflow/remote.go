@@ -98,16 +98,17 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 			if _, err := fmt.Fprintf(out, "%s: %s\n", snapshot.Metadata.Name, phase); err != nil {
 				return err
 			}
-			if err := writeRunProgress(ctx, storage.New(c), snapshot, out); err != nil {
+			retryProgress, err := writeRunProgress(ctx, storage.New(c), snapshot, out)
+			if err != nil {
 				return err
 			}
 			if !*watch {
 				return nil
 			}
-			if phase == "Succeeded" {
+			if phase == "Succeeded" && !retryProgress {
 				return nil
 			}
-			if phase == "Failed" || phase == "Error" {
+			if (phase == "Failed" || phase == "Error") && !retryProgress {
 				return errors.New("workflow did not succeed; inspect experiment results and Argo logs")
 			}
 			select {

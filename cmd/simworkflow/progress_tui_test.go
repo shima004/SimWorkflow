@@ -141,6 +141,31 @@ func TestProgressCanQuitDuringFetch(t *testing.T) {
 	}
 }
 
+func TestFinishedTUIKeepsPollingUntilUnavailableResultsRecover(t *testing.T) {
+	for _, phase := range []string{"Succeeded", "Failed", "Error"} {
+		m := testProgressModel()
+		frame := m.frame
+		frame.phase, frame.retryProgress = phase, true
+		m, cmd := updateProgress(m, frame)
+		if !m.done || cmd == nil || !strings.Contains(m.View(), "retrying unavailable") {
+			t.Fatal("completed workflow must keep refreshing unavailable results")
+		}
+		m, cmd = updateProgress(m, progressTick{})
+		if cmd == nil {
+			t.Fatal("retry tick must fetch again after completion")
+		}
+		frame.retryProgress = false
+		m, cmd = updateProgress(m, frame)
+		if cmd != nil || strings.Contains(m.View(), "retrying unavailable") {
+			t.Fatal("polling must stop once result reads recover")
+		}
+		_, cmd = updateProgress(m, progressTick{})
+		if cmd != nil {
+			t.Fatal("recovered terminal workflow must not fetch again")
+		}
+	}
+}
+
 func TestScreenTextRemovesTerminalControls(t *testing.T) {
 	if got := screenText("name\x1b\x07\r\t\ntext"); got != "name\ntext" {
 		t.Fatalf("unexpected sanitized text: %q", got)
