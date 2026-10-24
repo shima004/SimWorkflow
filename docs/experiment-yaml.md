@@ -32,7 +32,7 @@ Python版は [python-module-comparison.yaml](../examples/experiments/python-modu
 
 `spec.simulator.resources` と各 `spec.agents[].resources` に、割り当てるCPU・メモリを指定します。エージェントは種類ごとのコンテナに適用します。詳細は次節を参照してください。
 
-サービスの接続先・認証情報はCLIの環境変数で設定し、このYAMLには含めません。
+サービスの接続先・認証情報は [接続設定](configuration.md) と [OSの資格情報ストア](credentials.md) で管理し、この実験YAMLには含めません。
 マップの登録、`ref`・`version: latest` の解決、SHA-256の固定、ステップ数の変更は [マップの運用](maps.md) を参照してください。
 マップの `s3://bucket/key` はS3オブジェクトの参照先です。結果の保存先バケットを指定する `S3_BUCKET` とは別に、参照するバケットを表します。
 
@@ -110,7 +110,7 @@ resourcesByRole:
 
 各エージェントに `name` と `image` を指定します。
 `runtime` に `java` または `python` を指定し、起動方法と事前計算データの配置を選びます。省略時は `java` です。
-`modules` には固定するモジュールを、`matrix.modules` には切り替えるモジュールの候補を指定します。
+`modules` には固定するモジュールを、`matrix.modules` には1つずつ切り替えるモジュールの候補を指定します。複数モジュールをまとめて切り替える場合は `matrix.groups` を使います。
 モジュールのキーは差し替え箇所、値は実装の識別子です。初期仕様では実装の識別子を文字列で指定します。
 
 ```yaml
@@ -134,7 +134,48 @@ agents:
 `modules` と `matrix.modules` に同じキーを指定することはエラーとし、暗黙の上書きはしません。
 
 `matrix.modules` の各候補配列の直積から全構成を生成します。たとえばpathPlanningが2候補、clusteringが2候補なら4構成です。
-候補配列の空配列、重複する候補、空の実装識別子はエラーとします。`matrix` を指定する場合は、1つ以上のモジュール軸が必要です。
+候補配列の空配列、重複する候補、空の実装識別子はエラーとします。`matrix` を指定する場合は、1つ以上のモジュール軸またはグループが必要です。
+
+## 複数モジュールをセットで組み合わせる
+
+`matrix.groups` は、グループ内のモジュールをまとめて選び、グループ間の直積を作ります。以下はエージェント定義内の抜粋です。キー・実装名は説明用です。
+
+```yaml
+matrix:
+  groups:
+    A:
+      - name: a1
+        modules:
+          Agent.PathPlanning: impl.A1.PathPlanning
+          Agent.Clustering: impl.A1.Clustering
+      - name: a2
+        modules:
+          Agent.PathPlanning: impl.A2.PathPlanning
+          Agent.Clustering: impl.A2.Clustering
+    B:
+      - name: b1
+        modules:
+          Agent.Search: impl.B1.Search
+          Agent.TargetSelection: impl.B1.TargetSelection
+      - name: b2
+        modules:
+          Agent.Search: impl.B2.Search
+          Agent.TargetSelection: impl.B2.TargetSelection
+```
+
+この例は `A=a1/B=b1`、`A=a1/B=b2`、`A=a2/B=b1`、`A=a2/B=b2` の4構成です。a1のPathPlanningとa2のClusteringのように、セット内部の組み合わせが崩れることはありません。
+
+- グループ名・候補名は1～63文字のASCII英数字・アンダースコア・ハイフンで、先頭は英字です。大文字・小文字は区別します。
+- 各グループには1つ以上の候補が必要です。候補名はグループ内で一意とし、同一内容のセットの重複もエラーです。
+- 各候補は1つ以上のモジュールを持ち、同じグループの全候補でモジュールキーを揃えます。1つだけのモジュールを持つセットも指定できます。
+- 別グループ同士、固定の `modules`、単独の `matrix.modules` で同じモジュールキーは使えません。値が同じでも暗黙に上書きしません。
+- 固定設定・各グループの選択・単独のモジュール軸を統合した設定を、既存のJava／Pythonワーカーへ渡します。候補の実装はイメージに含めてください。
+
+グループ2候補 × グループ3候補 × 単独モジュール2候補なら、除外前は12構成です。さらにマップ数とシード数を掛けます。
+
+選択名は実行計画の `configuration.groups`、モジュール生成の `manifest.json`、TUI詳細、`experiment results` へ残します。新しいワーカーは結果要約にも保持します。旧helperの結果要約に選択名がない場合、CLIの `results` は実行ID・構成IDを照合して保存済み計画から補完します。ダウンロードする要約自体は元ファイルなので、旧helperの結果と選択名を一緒に保存するには `--include plan,summary` を指定してください。
+
+完全なPython向け定義と設定生成用の元設定は [grouped-modules.yaml](../examples/experiments/grouped-modules.yaml) と [grouped-python.yaml](../examples/module-configs/grouped-python.yaml) を参照してください。イメージ・マップを自分の環境へ合わせて変更します。
 
 ## 組み合わせの除外
 
@@ -152,8 +193,17 @@ exclude:
 一部のモジュールだけを指定した場合、その他のモジュールの値にかかわらず一致した構成を除外します。
 比較は実装識別子の完全一致です。
 
-除外条件には `matrix.modules` 内のキーと、その軸に存在する候補を指定します。
-空の除外条件、存在しないキー・候補はエラーとします。
+除外条件の `modules` には、`matrix.modules` またはグループ内に存在するモジュールキーと候補の値を指定します。固定の `modules` だけに存在するキーは使えません。
+セット名で除外する場合は `groups` を指定します。
+
+```yaml
+exclude:
+  - groups: {A: a1, B: b2}
+```
+
+この例は `A=a1` かつ `B=b2` だけを除外します。同じ除外条件で `groups` と `modules` を併記した場合も、両方が一致した場合に除外します。異なる除外条件同士はいずれかが一致すれば除外します。
+
+空の除外条件、存在しないグループ・候補名・モジュールキー・候補値はエラーとします。
 除外の結果、エージェントの構成が0件になった場合もエラーとします。
 
 ## 実行回数と結果
@@ -185,9 +235,9 @@ exclude:
 CPUは引用符のない数値で指定し、JSON計画では精度を維持するため文字列で出力します。
 タイムアウトは正の秒数に相当する期間とし、秒未満の端数は受け付けません。
 
-軸名の辞書順、候補の記述順、マップの記述順、シードの記述順に展開します。
+グループ名の辞書順、単独モジュール軸名の辞書順で軸を並べ、それぞれの候補の記述順、マップの記述順、シードの記述順に展開します。
 各構成に `config-...`、各実行に `run-...` のIDを付け、解決後の設定から生成します。
-同じ計画は同じIDになります。これらは実行計画上の識別子であり、再実行の履歴を区別する実行IDは送信・生成のたびに新しく発行します。
+同じ計画は同じIDになります。グループの選択名もIDに含めるため、同じ実装でも選択名を変更するとIDが変わります。グループを使用しない既存定義のIDは変わりません。これらは実行計画上の識別子であり、再実行の履歴を区別する実行IDは送信・生成のたびに新しく発行します。
 
 ## コンテナとの接続と今後の拡張
 

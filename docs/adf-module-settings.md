@@ -17,7 +17,7 @@ PythonのModuleConfigはネストしたキーをドット区切りに平坦化�
 
 ## 実行時の適用
 
-実験YAMLの `modules` と `matrix.modules` では、ADFが実際に参照する設定キーを使います。
+実験YAMLの `modules`・`matrix.modules`・`matrix.groups.<グループ名>[].modules` では、ADFが実際に参照する設定キーを使います。
 実験サンプルも `SampleRoadDetector.PathPlanning` などADFが参照するキーを使います。
 
 Java版の指定例（エージェント定義の抜粋）:
@@ -36,6 +36,8 @@ matrix:
 Pythonでも同じ設定キーを使えますが、候補の値にはPythonのインポートパスを指定します。
 サンプルの値は `adf_core_python.implement.module.algorithm.a_star_path_planning.AStarPathPlanning` です。
 JavaとPythonの実装クラス名を相互に置き換えることはしません。
+
+複数のキーをセットで切り替える場合は [グループ指定](experiment-yaml.md#複数モジュールをセットで組み合わせる) を使用します。
 
 処理は以下の順序です。
 
@@ -90,6 +92,16 @@ simworkflow experiment modules \
 同梱の元設定は生成処理を試すための最小例です。実際の実験では自分のエージェントの完全な設定ファイルを `--base` に指定してください。
 `my_team` や `src.my_team` の実装は例示用なので、実際にイメージに含めた実装に置き換えます。
 生成ファイルをコンテナに渡す手順は [Java](../templates/agents/java/README.md)／[Python](../templates/agents/python/README.md) のテンプレートを参照してください。
+
+グループの設定生成は次の例で試せます。4構成の設定と、選択したグループ名を含むマニフェストを作ります。
+
+```sh
+simworkflow experiment modules \
+  -f examples/experiments/grouped-modules.yaml \
+  --agent grouped-python \
+  --base examples/module-configs/grouped-python.yaml \
+  --format python --output-dir /tmp/grouped-module-configs
+```
 
 ## 参考：確認したサンプルとソース
 

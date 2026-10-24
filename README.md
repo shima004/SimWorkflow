@@ -4,7 +4,7 @@ RoboCup Rescue Simulationの比較実験を、YAMLで定義してArgo Workflows�
 
 ## できること
 
-- エージェントのモジュール候補を組み合わせて比較する
+- エージェントのモジュール候補や、複数モジュールをまとめたセットを組み合わせて比較する
 - シミュレーターと消防・警察・救急ごとのCPU・メモリを指定する
 - 事前計算データをS3へ保存し、別ステップの本実行へ引き継ぐ
 - TUIで実行を選択し、進捗・スコア・設定詳細を確認する
@@ -51,7 +51,7 @@ simworkflow experiment download --include summary --stage simulation WORKFLOW_NA
 | 目的 | ガイド |
 | --- | --- |
 | 最初の実験を動かす | [クイックスタート](docs/quickstart.md) |
-| モジュール・リソース・組み合わせを定義する | [実験YAMLの仕様](docs/experiment-yaml.md) |
+| モジュール単位・セット単位の比較やリソースを定義する | [実験YAMLの仕様](docs/experiment-yaml.md) |
 | エージェントイメージを作る | [Python（uv／pip）](templates/agents/python/README.md)・[Java](templates/agents/java/README.md) |
 | 認証情報を安全に保存する | [OSの資格情報ストア](docs/credentials.md) |
 | マップを登録・管理する | [マップ](docs/maps.md) |
