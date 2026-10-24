@@ -84,12 +84,15 @@ simworkflow experiment submit -f experiment.yaml
 ## 5. 進捗と結果を確認する
 
 ```sh
+simworkflow experiment list
 simworkflow experiment status --watch WORKFLOW_NAME
 simworkflow experiment results WORKFLOW_NAME
 simworkflow experiment download --include summary --stage simulation WORKFLOW_NAME
 ```
 
 TUIは `q` で閉じられます。閉じても実験は継続します。実行は事前計算 → 本実行の順に進み、要約のダウンロード先は `artifacts/WORKFLOW_NAME/` です。
+
+途中で実験を停止する場合は `simworkflow experiment stop WORKFLOW_NAME` を使います。[停止時の結果保存と必要な権限](progress.md#実験を停止する) を確認してください。
 
 モジュールの候補を増やす場合は [実験YAML](experiment-yaml.md)、詳しい操作は [進捗・スコア](progress.md) と [ダウンロード](download.md) を参照してください。
 

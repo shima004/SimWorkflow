@@ -19,7 +19,7 @@ CLIからArgo・S3・レジストリへ、実行PodからS3と各イメージへ
 
 次のRBACサンプルは `argo-workflows` 名前空間と `simworkflow` ServiceAccountを使用します。管理者が利用環境へ合わせて変更・適用してください。CLIはRBACを自動変更しません。
 
-- [client-rbac.yaml](../examples/kubernetes/client-rbac.yaml)：CLIからWorkflowを作成・参照し、Podログを参照する権限
+- [client-rbac.yaml](../examples/kubernetes/client-rbac.yaml)：CLIからWorkflowを作成・参照・停止し、Podログを参照する権限
 - [executor-rbac.yaml](../examples/kubernetes/executor-rbac.yaml)：実行Podのexecutor権限
 
 実行用ServiceAccountは `experiment submit --service-account NAME` で選べます。デフォルトは `simworkflow` です。Argoの接続エラーは [接続確認](connections.md) を参照してください。

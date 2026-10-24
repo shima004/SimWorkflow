@@ -38,6 +38,7 @@ simworkflow config check --connect
 simworkflow experiment validate -f experiment.yaml
 simworkflow experiment plan -f experiment.yaml
 simworkflow experiment submit -f experiment.yaml
+simworkflow experiment list
 simworkflow experiment status --watch WORKFLOW_NAME
 simworkflow experiment results WORKFLOW_NAME
 simworkflow experiment download --include summary --stage simulation WORKFLOW_NAME
@@ -54,7 +55,7 @@ simworkflow experiment download --include summary --stage simulation WORKFLOW_NA
 | エージェントイメージを作る | [Python（uv／pip）](templates/agents/python/README.md)・[Java](templates/agents/java/README.md) |
 | 認証情報を安全に保存する | [OSの資格情報ストア](docs/credentials.md) |
 | マップを登録・管理する | [マップ](docs/maps.md) |
-| 実行を監視し、結果を取得する | [進捗・スコア](docs/progress.md)・[ダウンロード](docs/download.md) |
+| 実験を一覧表示・停止・監視し、結果を取得する | [進捗・スコア](docs/progress.md)・[ダウンロード](docs/download.md) |
 | 開発・リリースする | [開発ガイド](docs/development.md) |
 
 [ドキュメント一覧](docs/README.md) に、接続トラブル、実行の仕組み、SimScope連携、検証記録もまとめています。

@@ -36,11 +36,13 @@ Bearerチャレンジには匿名または同じオリジンのトークン取�
 使用するトークンのServiceAccountについて、対象名前空間にRoleとRoleBindingが必要です。
 
 [client-rbac.yaml](../examples/kubernetes/client-rbac.yaml) は、`argo-workflows` 名前空間の `simworkflow` ServiceAccount向けの例です。
-Workflowの作成・参照とPodログの参照を許可します。クラスタ管理者が対象名前空間とServiceAccountを確認したうえで適用してください。
+Workflowの作成・参照・停止に必要なpatchと、Podログの参照を許可します。クラスタ管理者が対象名前空間とServiceAccountを確認したうえで適用してください。
 
 ```sh
 kubectl apply -f examples/kubernetes/client-rbac.yaml
 ```
+
+`experiment stop` はArgoのStop APIを使用し、内部で `workflows` の `patch` が必要です。一覧・送信に成功しても停止だけ403になる場合は、この権限を確認してください。以前のRBACサンプルを適用した環境では、管理者が更新版を確認・適用する必要があります。CLIコマンド自体はRBACを変更しません。
 
 このファイルはCLIの利用者向けです。Workflow自身の実行に使うServiceAccountとexecutor権限には [executor-rbac.yaml](../examples/kubernetes/executor-rbac.yaml) を使用します。
 CLIはRBACを変更しません。
