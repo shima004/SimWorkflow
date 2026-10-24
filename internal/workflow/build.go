@@ -19,8 +19,10 @@ type Options struct {
 }
 
 type RunConfig struct {
-	Precompute worker.Config
-	Simulation worker.Config
+	Precompute    worker.Config
+	Simulation    worker.Config
+	PrecomputeURL string
+	SimulationURL string
 }
 
 func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[string]any, error) {
@@ -58,6 +60,14 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 			if err != nil {
 				return nil, err
 			}
+			env := map[string]any{"name": "SIMWORKFLOW_RUN", "value": string(encoded)}
+			configURL := pair.PrecomputeURL
+			if c.Stage == worker.Simulation {
+				configURL = pair.SimulationURL
+			}
+			if configURL != "" {
+				env = map[string]any{"name": "SIMWORKFLOW_RUN_URL", "value": configURL}
+			}
 			containers := []any{
 				map[string]any{"name": "simulator", "image": run.Simulator.Image, "command": []string{"/tools/simworkflow", "worker", "server"}, "resources": resource(run.Simulator.Resources)},
 				map[string]any{"name": "main", "image": options.HelperImage, "command": []string{"/tools/simworkflow", "worker", "collect"}, "env": []any{map[string]any{"name": "SIMWORKFLOW_POD_IP", "valueFrom": map[string]any{"fieldRef": map[string]any{"fieldPath": "status.podIP"}}}}, "resources": resource(experiment.Resources{CPU: "0.1", Memory: "256Mi"})},
@@ -67,7 +77,7 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 			}
 			template := map[string]any{
 				"name": run.ID + "-" + c.Stage, "activeDeadlineSeconds": c.TimeoutSeconds + 180,
-				"initContainers": []any{map[string]any{"name": "prepare-experiment", "image": options.HelperImage, "command": []string{"/usr/local/bin/simworkflow", "worker", "prepare"}, "env": []any{map[string]any{"name": "SIMWORKFLOW_RUN", "value": string(encoded)}}, "volumeMounts": mounts, "resources": resource(experiment.Resources{CPU: "0.1", Memory: "256Mi"})}},
+				"initContainers": []any{map[string]any{"name": "prepare-experiment", "image": options.HelperImage, "command": []string{"/usr/local/bin/simworkflow", "worker", "prepare"}, "env": []any{env}, "volumeMounts": mounts, "resources": resource(experiment.Resources{CPU: "0.1", Memory: "256Mi"})}},
 				"containerSet":   map[string]any{"volumeMounts": mounts, "containers": containers},
 			}
 			// Retry simulation once without recomputing or modifying its input data.

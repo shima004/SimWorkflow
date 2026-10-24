@@ -120,6 +120,7 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	account := flags.String("service-account", "simworkflow", "workflow executor ServiceAccount")
 	maxRuns := flags.Int("max-runs", experiment.DefaultMaxRuns, "maximum expanded runs")
 	output := flags.String("output", "", "new private YAML file for render; contains temporary signed URLs")
+	configStorage := flags.String("config-storage", "inline", "worker configuration: inline or s3 (s3 requires a remote-config-capable helper image)")
 	if err := flags.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -128,6 +129,9 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	}
 	if flags.NArg() != 0 || *file == "" || *helper == "" {
 		return errors.New("specify -f FILE and --helper-image IMAGE")
+	}
+	if *configStorage != "inline" && *configStorage != "s3" {
+		return errors.New("config-storage must be inline or s3")
 	}
 	if command == "render" && *output == "" {
 		return errors.New("render requires --output FILE; temporary signed URLs are never printed")
@@ -206,12 +210,36 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 				c.PrecomputeDownload = &transfer
 				pair.Simulation = c
 			}
+			if *configStorage == "s3" {
+				configKey := prefix + "/configs/" + run.ID + "/" + stage + ".json"
+				if err := store.PutJSON(ctx, configKey, c); err != nil {
+					return err
+				}
+				transfer, err := store.SignDownload(ctx, store.Bucket, configKey)
+				if err != nil {
+					return err
+				}
+				if stage == worker.Precompute {
+					pair.PrecomputeURL = transfer.URL
+				} else {
+					pair.SimulationURL = transfer.URL
+				}
+			}
 		}
 		configs = append(configs, pair)
 	}
 	wf, err := workflow.Build(plan, configs, workflow.Options{Namespace: c.Argo.Namespace, HelperImage: *helper, ServiceAccount: *account, ExecutionID: executionID, ResultPrefix: prefix})
 	if err != nil {
 		return err
+	}
+	// Leave room for node status under Argo's 1MiB Workflow limit. Reject before
+	// submitting an oversized inline spec rather than creating a doomed run.
+	encodedWorkflow, err := json.Marshal(wf)
+	if err != nil {
+		return err
+	}
+	if len(encodedWorkflow) > 900*1024 {
+		return errors.New("workflow definition is too large; use --config-storage s3 with a compatible helper image or split the experiment")
 	}
 	if command == "render" {
 		data, err := yaml.Marshal(wf)

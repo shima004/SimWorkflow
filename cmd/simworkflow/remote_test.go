@@ -97,6 +97,33 @@ func TestRemoteCommands(t *testing.T) {
 	if wasSubmitted {
 		t.Fatal("render must not submit a workflow")
 	}
+	remoteOutput := filepath.Join(t.TempDir(), "remote-config.yaml")
+	if err := run([]string{"experiment", "render", "-f", file, "--helper-image", "registry/worker:test", "--config-storage", "s3", "--output", remoteOutput}, lookup, &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	remoteYAML, err := os.ReadFile(remoteOutput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	configCount := 0
+	for key, raw := range objects {
+		if !strings.Contains(key, "/configs/") {
+			continue
+		}
+		var c worker.Config
+		if json.Unmarshal(raw, &c) != nil || !strings.Contains(key, "/"+c.Run.ID+"/"+c.Stage+".json") || c.ExecutionID == "" || c.Map.URL == "" {
+			t.Error("stored configuration must match run and stage")
+		}
+		if bytes.Contains(remoteYAML, []byte(c.Map.URL)) {
+			t.Error("external configuration contents must not be embedded in Workflow")
+		}
+		configCount++
+	}
+	mu.Unlock()
+	if configCount != 18 || bytes.Count(remoteYAML, []byte("SIMWORKFLOW_RUN_URL")) != 18 || bytes.Contains(remoteYAML, []byte("SIMWORKFLOW_RUN:")) {
+		t.Fatal("all nine runs must reference both stage configurations in S3")
+	}
 	out.Reset()
 	if err := run([]string{"experiment", "submit", "-f", file, "--helper-image", "registry/worker:test"}, lookup, &out, &errOut); err != nil {
 		t.Fatal(err)

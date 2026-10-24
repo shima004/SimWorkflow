@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"simworkflow/internal/experiment"
@@ -118,5 +119,62 @@ func TestBuildTwoPhaseWorkflow(t *testing.T) {
 	configs[0].Simulation.Run.ID = "mismatch"
 	if _, err := Build(plan, configs, options); err == nil {
 		t.Fatal("mismatched worker configs must be rejected")
+	}
+}
+
+func TestHundredRunRemoteConfigurationsKeepWorkflowBelowSizeLimit(t *testing.T) {
+	e, err := experiment.ReadFile("../../examples/experiments/python-module-comparison.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Two independent module axes and 25 seeds form 100 synthetic runs.
+	e.Spec.Agents[0].Matrix.Modules["SampleSearch.PathPlanning"] = []string{
+		"my_team.path_planning.FirstPathPlanning",
+		"my_team.path_planning.SecondPathPlanning",
+	}
+	e.Spec.Conditions.Seeds = make([]int64, 25)
+	for i := range e.Spec.Conditions.Seeds {
+		e.Spec.Conditions.Seeds[i] = int64(i + 1)
+	}
+	e.Spec.Execution.MaxParallelRuns = 10
+	plan, err := experiment.BuildPlan(e, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var configs []RunConfig
+	secret := strings.Repeat("embedded-capability-", 200)
+	for _, run := range plan.Runs {
+		configs = append(configs, RunConfig{
+			Precompute:    worker.Config{Stage: worker.Precompute, Run: run, TimeoutSeconds: 2700, PrecomputeUpload: &storage.Transfer{URL: secret}},
+			Simulation:    worker.Config{Stage: worker.Simulation, Run: run, TimeoutSeconds: 2700, PrecomputeDownload: &storage.Transfer{URL: secret}},
+			PrecomputeURL: "https://s3.example/config/" + run.ID + "/precompute.json?signature=" + strings.Repeat("a", 300),
+			SimulationURL: "https://s3.example/config/" + run.ID + "/simulation.json?signature=" + strings.Repeat("b", 300),
+		})
+	}
+	wf, err := Build(plan, configs, Options{Namespace: "argo", HelperImage: "worker:test", ServiceAccount: "runner", ExecutionID: "test", ResultPrefix: "experiments/test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(wf)
+	if len(data) > 900*1024 || strings.Contains(string(data), secret) {
+		t.Fatalf("remote-config Workflow must stay below size limit: %d bytes", len(data))
+	}
+	spec := wf["spec"].(map[string]any)
+	if spec["parallelism"] != 10 {
+		t.Fatal("parallelism must remain 10")
+	}
+	count := 0
+	for _, raw := range spec["templates"].([]any) {
+		template := raw.(map[string]any)
+		if init, ok := template["initContainers"]; ok {
+			env := init.([]any)[0].(map[string]any)["env"].([]any)[0].(map[string]any)
+			if env["name"] != "SIMWORKFLOW_RUN_URL" {
+				t.Fatal("configuration must be a URL reference")
+			}
+			count++
+		}
+	}
+	if count != 200 {
+		t.Fatal("all 100 runs must retain both stages")
 	}
 }

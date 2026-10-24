@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"io"
@@ -33,9 +32,9 @@ func runWorker(args []string, errOut io.Writer) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer cancel()
 	if args[0] == "prepare" {
-		var c worker.Config
-		if json.Unmarshal([]byte(os.Getenv("SIMWORKFLOW_RUN")), &c) != nil {
-			return errors.New("SIMWORKFLOW_RUN must contain run configuration JSON")
+		c, err := worker.ReadRunConfig(ctx, os.Getenv("SIMWORKFLOW_RUN"), os.Getenv("SIMWORKFLOW_RUN_URL"))
+		if err != nil {
+			return err
 		}
 		if err := os.MkdirAll(*tools, 0755); err != nil {
 			return err
