@@ -394,3 +394,26 @@ func TestUnavailableAppendDoesNotCountOldFilesAsSuccess(t *testing.T) {
 		t.Fatalf("%v %+v", err, r)
 	}
 }
+
+func TestAppendPreservesUnselectedLocalEdits(t *testing.T) {
+	s, p, out := fixture(t)
+	opts := Options{Output: out, Include: []string{"summary"}, Stage: "simulation"}
+	if _, err := Download(context.Background(), s, p, testPrefix, opts); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(out, firstRun, "simulation/summary.json")
+	edited := []byte("locally formatted or annotated summary")
+	if err := os.WriteFile(path, edited, 0600); err != nil {
+		t.Fatal(err)
+	}
+	opts.Include = nil
+	opts.Files = []string{"logs/simulation/rescue.log.7z"}
+	r, err := Download(context.Background(), s, p, testPrefix, opts)
+	if err != nil || r.Added != 2 || len(r.Downloaded) != 4 {
+		t.Fatalf("%v %+v", err, r)
+	}
+	body, _ := os.ReadFile(path)
+	if !bytes.Equal(body, edited) {
+		t.Fatal("unselected local edits changed")
+	}
+}
