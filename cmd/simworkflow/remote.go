@@ -38,7 +38,11 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	flags := flag.NewFlagSet("experiment "+command, flag.ContinueOnError)
 	flags.SetOutput(errOut)
 	if command == "status" || command == "results" {
-		watch := flags.Bool("watch", false, "show per-run progress every 5 seconds until workflow finishes (status only)")
+		watch := flags.Bool("watch", false, "watch per-run progress every 5 seconds; interactive in a terminal (status only)")
+		var plain bool
+		if command == "status" {
+			flags.BoolVar(&plain, "plain", false, "use text output instead of the interactive watch screen")
+		}
 		if err := flags.Parse(args[1:]); err != nil {
 			if errors.Is(err, flag.ErrHelp) {
 				return nil
@@ -49,6 +53,9 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 			return errors.New("specify one workflow name after command options")
 		}
 		client := argo.New(c)
+		if command == "status" && *watch && !plain && interactiveOutput(os.Stdin, out) {
+			return watchProgress(ctx, c, flags.Arg(0), os.Stdin, out)
+		}
 		for {
 			snapshot, err := client.Get(ctx, flags.Arg(0))
 			if err != nil {

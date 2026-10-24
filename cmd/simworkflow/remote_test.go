@@ -111,6 +111,16 @@ func TestRemoteCommands(t *testing.T) {
 	if !strings.Contains(out.String(), "Succeeded") {
 		t.Fatal(out.String())
 	}
+	if strings.Contains(out.String(), "\x1b") {
+		t.Fatal("non-terminal output must remain plain text")
+	}
+	out.Reset()
+	if err := run([]string{"experiment", "status", "--watch", "--plain", "smoke-run"}, lookup, &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Succeeded") || strings.Contains(out.String(), "\x1b") {
+		t.Fatal("--plain must retain the existing text watch output")
+	}
 	out.Reset()
 	if err := run([]string{"experiment", "results", "smoke-run"}, lookup, &out, &errOut); err != nil {
 		t.Fatal(err)

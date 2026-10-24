@@ -46,7 +46,7 @@ go run ./cmd/simworkflow experiment results WORKFLOW_NAME
 go run ./cmd/simworkflow experiment download --include summary --stage simulation WORKFLOW_NAME
 ```
 
-`experiment status --watch` で構成別の段階・状態・ステップ進捗・最新スコアを約5秒ごとに確認できます。ステップ進捗には進捗対応ワーカーを使用します。
+`experiment status --watch` で構成別の段階・状態・ステップ進捗・最新スコアを約5秒ごとに確認できます。端末では上下キー・マウスホイールでスクロール、左右キーで横移動、`q` で終了できます。完了後も結果を表示します。従来のテキスト表示は `--plain` を追加します。ステップ進捗には進捗対応ワーカーを使用します。
 
 マップの形式、事前計算データの引き継ぎ、生成Workflowの確認方法は [実行手順](docs/execution.md) を参照してください。
 
