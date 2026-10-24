@@ -22,11 +22,11 @@ uvテンプレートは、実行確認済みのPython 3.14・ADF Core v0.2.14に
 
 ```sh
 uv lock --python 3.14
-docker build --platform linux/amd64 -f Dockerfile.uv \
-  -t registry.example.com/my-team/agent-python:v1 .
-docker login registry.example.com
-docker push registry.example.com/my-team/agent-python:v1
+simworkflow agent build --dockerfile Dockerfile.uv \
+  --repository my-team/agent-python --tag v1 --push .
 ```
+
+`agent build` は設定済みの `REGISTRY_URL` へ登録し、実験YAMLに指定するdigest付きの `image:` を表示します。Docker CLI・Buildxと稼働中のDockerデーモンが必要です。認証やビルドのみの使い方は [ビルド・登録ガイド](../../../docs/agent-build.md) を参照してください。
 
 `uv lock` は依存関係とPython 3.14の取得にネットワークを使う場合があります。
 生成した `uv.lock` と `pyproject.toml` はエージェントリポジトリで管理してください。既存のロックをそのまま使う場合は `uv lock --check --python 3.14` で整合性だけを確認できます。
@@ -73,7 +73,7 @@ agent/
 └── src/
 ```
 
-出典ラベルを設定したい場合はビルド時に `--build-arg AGENT_SOURCE=https://github.com/OWNER/AGENT --build-arg AGENT_REVISION=COMMIT` を追加します。
+出典ラベルを設定したい場合は `docker build` を直接使い、 `--build-arg AGENT_SOURCE=https://github.com/OWNER/AGENT --build-arg AGENT_REVISION=COMMIT` を追加します。
 [rescue-pythonの検証例](../../../examples/validation/rescue-python-vc/README.md) もこの `Dockerfile.uv` を使用します。
 
 ## pipを使う場合
@@ -83,12 +83,10 @@ agent/
 3. 同じディレクトリで次のコマンドを実行します。
 
 ```sh
-docker build -t registry.example.com/my-team/agent-python:v1 .
-docker login registry.example.com
-docker push registry.example.com/my-team/agent-python:v1
+simworkflow agent build --repository my-team/agent-python --tag v1 --push .
 ```
 
-イメージ名は利用するレジストリ・チーム名に変更してください。
+登録先は設定済みの `REGISTRY_URL` を使います。リポジトリ名は自分のチームに合わせて変更します。
 ビルド時にGitリポジトリとPythonパッケージを取得するため、ネットワーク接続が必要です。
 
 ADF Coreの `uv.sources` で指定されている `rcrscore` は、pip用に先にGitからインストールします。

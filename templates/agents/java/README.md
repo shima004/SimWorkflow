@@ -11,12 +11,10 @@ Java 21でビルドし、元の `launch.sh` で起動します。ビルドと起
 3. 同じディレクトリで次のコマンドを実行します。
 
 ```sh
-docker build -t registry.example.com/my-team/agent-java:v1 .
-docker login registry.example.com
-docker push registry.example.com/my-team/agent-java:v1
+simworkflow agent build --repository my-team/agent-java --tag v1 --push .
 ```
 
-イメージ名は利用するレジストリ・チーム名に変更してください。
+登録先は設定済みの `REGISTRY_URL` を使います。リポジトリ名は自分のチームに合わせて変更します。Docker CLI・Buildxと稼働中のDockerデーモンが必要です。認証やビルドのみの使い方は [ビルド・登録ガイド](../../../docs/agent-build.md) を参照してください。表示されたdigest付きの `image:` を実験YAMLに指定します。
 ビルド時にGradle本体と依存ライブラリを取得するため、ネットワーク接続が必要です。
 `simworkflow-runtime.gradle` は `runtimeClasspath` も解決し、実行時に必要な推移依存をイメージ内に取得します。コンパイルのみでは、テストのないプロジェクトの実行時依存は取得されないことがあります。
 元のサンプルは一部の依存に `master-SNAPSHOT` を使用しています。実験を再現する際には、依存バージョンとイメージのダイジェストを固定してください。

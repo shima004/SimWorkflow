@@ -22,6 +22,7 @@
 
 | ガイド | 内容 |
 | --- | --- |
+| [ビルド・登録](agent-build.md) | REGISTRY_URLを使ったagent build、認証、実験YAML用のimage出力 |
 | [Pythonエージェント](../templates/agents/python/README.md) | uv／pipでのイメージ作成、依存関係、設定ファイルの配置 |
 | [Javaエージェント](../templates/agents/java/README.md) | イメージ作成、Gradle依存の同梱、設定ファイルの配置 |
 | [実行環境の準備](distribution.md) | Argo・S3・レジストリ・RBAC、公開helper、独自helper |

@@ -4,6 +4,7 @@ RoboCup Rescue Simulationの比較実験を、YAMLで定義してArgo Workflows�
 
 ## できること
 
+- 設定済みレジストリへエージェントイメージをビルド・登録する
 - エージェントのモジュール候補や、複数モジュールをまとめたセットを組み合わせて比較する
 - シミュレーターと消防・警察・救急ごとのCPU・メモリを指定する
 - 事前計算データをS3へ保存し、別ステップの本実行へ引き継ぐ
@@ -28,7 +29,7 @@ simworkflow credentials set s3
 simworkflow config check --connect
 ```
 
-実験には、Argo Workflowsを導入したKubernetesクラスタ、S3互換サービス、実行ノードから取得できるコンテナイメージが必要です。クラスタの準備は [実行環境の準備](docs/distribution.md) を参照してください。CLIの起動にGoやDockerは不要です。
+実験には、Argo Workflowsを導入したKubernetesクラスタ、S3互換サービス、実行ノードから取得できるコンテナイメージが必要です。クラスタの準備は [実行環境の準備](docs/distribution.md) を参照してください。CLIの起動にGoやDockerは不要です。`agent build` を使う場合はDockerが必要です。
 
 ## 実験の基本操作
 
@@ -52,7 +53,7 @@ simworkflow experiment download --include summary --stage simulation WORKFLOW_NA
 | --- | --- |
 | 最初の実験を動かす | [クイックスタート](docs/quickstart.md) |
 | モジュール単位・セット単位の比較やリソースを定義する | [実験YAMLの仕様](docs/experiment-yaml.md) |
-| エージェントイメージを作る | [Python（uv／pip）](templates/agents/python/README.md)・[Java](templates/agents/java/README.md) |
+| エージェントイメージを作る | [ビルド・登録](docs/agent-build.md)・[Python（uv／pip）](templates/agents/python/README.md)・[Java](templates/agents/java/README.md) |
 | 認証情報を安全に保存する | [OSの資格情報ストア](docs/credentials.md) |
 | マップを登録・管理する | [マップ](docs/maps.md) |
 | 実験を一覧表示・停止・監視し、結果を取得する | [進捗・スコア](docs/progress.md)・[ダウンロード](docs/download.md) |

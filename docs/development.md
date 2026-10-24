@@ -48,6 +48,7 @@ SIMWORKFLOW_TEST_OS_KEYRING=1 go test ./internal/credentials -run TestSystemStor
 | パス | 担当 |
 | --- | --- |
 | `cmd/simworkflow/` | 設定・実験・マップのCLI、TUI、ダウンロード、ワーカーの入口 |
+| `internal/agentbuild/` | Dockerビルド・単一イメージの登録、レジストリ認証・digest検証 |
 | `internal/credentials/` | エンドポイント別のOS資格情報ストア、認証情報の解決 |
 | `internal/config/` | 環境変数・共通YAML・.envの重ね合わせと検証 |
 | `internal/connections/` | 認証付きのサービス接続確認 |

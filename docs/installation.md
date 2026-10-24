@@ -1,6 +1,6 @@
 # SimWorkflow CLIのインストール
 
-[GitHub Releases](https://github.com/shima004/SimWorkflow/releases) から利用するOSとCPUに合うアーカイブと `checksums.txt` をダウンロードします。GoやDockerはCLIの起動には不要です。実験ワーカーはLinuxコンテナ上で動作し、Windows・macOSではクライアントコマンドを利用します。
+[GitHub Releases](https://github.com/shima004/SimWorkflow/releases) から利用するOSとCPUに合うアーカイブと `checksums.txt` をダウンロードします。GoやDockerはCLIの起動には不要です。`agent build` を使用する場合はDocker CLI・BuildxとDockerデーモンが必要です。詳しくは [ビルド・登録ガイド](https://github.com/shima004/SimWorkflow/blob/main/docs/agent-build.md) を参照してください。実験ワーカーはLinuxコンテナ上で動作し、Windows・macOSではクライアントコマンドを利用します。
 
 ## 配布物の選択
 
