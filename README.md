@@ -13,6 +13,7 @@ Go 1.24以降が必要です。YAMLの処理には `go.yaml.in/yaml/v3` を使�
 エージェントは消防・警察・救急ごとにコンテナを分け、`resourcesByRole` で種類別に上書きできます。各センターは対応する種類と同じコンテナで動作します。
 
 - [事前計算から本実行までの実行手順](docs/execution.md)
+- [必要な実験結果を選んでダウンロード](docs/download.md)
 - [マップの登録・版管理とステップ数の指定](docs/maps.md)
 - [最小の実験定義](examples/experiments/precompute-baseline.yaml)
 - [実装切り替え・並列実行の検証サンプル](examples/validation/module-comparison/README.md)
@@ -41,6 +42,8 @@ go run ./cmd/simworkflow experiment submit \
   -f experiment.yaml --helper-image registry.example.com/simworkflow/worker:v1
 go run ./cmd/simworkflow experiment status --watch WORKFLOW_NAME
 go run ./cmd/simworkflow experiment results WORKFLOW_NAME
+# 本実行のスコア要約だけを保存
+go run ./cmd/simworkflow experiment download --include summary --stage simulation WORKFLOW_NAME
 ```
 
 `experiment status --watch` で構成別の段階・状態・ステップ進捗・最新スコアを約5秒ごとに確認できます。ステップ進捗には進捗対応ワーカーを使用します。

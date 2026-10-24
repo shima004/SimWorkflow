@@ -109,6 +109,8 @@ go run ./cmd/simworkflow experiment results WORKFLOW_NAME
 本実行の要約がまだない場合は事前計算の要約を返します。事前計算のSucceededは実験全体の完了を意味しません。
 スコアは本実行の `kernel.log` に記録された最後の `Score:` または `Score=` の数値です。取得できない場合は `score` を省略し、値を推測しません。
 
+`experiment download` で要約・ログ・設定・事前計算データを選んで取得できます。構成・段階・ログ単体での絞り込みは [ダウンロード手順](download.md) を参照してください。
+
 S3では実行ごとに一意のプレフィックスを生成します。
 
 ```text
