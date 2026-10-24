@@ -8,7 +8,7 @@ metadata:
 rules:
   - apiGroups: [argoproj.io]
     resources: [workflows]
-    verbs: [get, list, watch, create]
+    verbs: [get, list, watch, create, patch]
   - apiGroups: [""]
     resources: [pods]
     verbs: [get, list]

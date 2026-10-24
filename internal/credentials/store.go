@@ -169,9 +169,17 @@ func (s *Store) Delete(account string) error {
 // Resolve replaces all authentication fields as a group. In keyring mode,
 // authentication never falls through to a plaintext .env or YAML file.
 func (s *Store) Resolve(settings, environment func(string) (string, bool)) (func(string) (string, bool), error) {
+	return s.ResolveTargets(settings, environment, Targets())
+}
+
+// ResolveTargets avoids unlocking unrelated credentials for Argo-only commands.
+func (s *Store) ResolveTargets(settings, environment func(string) (string, bool), targets []string) (func(string) (string, bool), error) {
 	values := map[string]string{}
-	for _, target := range Targets() {
+	for _, target := range targets {
 		fields := Fields(target)
+		if fields == nil {
+			return nil, errors.New("invalid credential target")
+		}
 		useEnvironment := false
 		for _, field := range fields {
 			if _, ok := environment(field); ok {

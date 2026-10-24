@@ -186,3 +186,20 @@ func TestResolveIgnoresPlaintextAndOverridesCompleteGroups(t *testing.T) {
 		t.Fatal("unavailable OS store must fail without plaintext fallback")
 	}
 }
+
+func TestResolveOnlyArgoDoesNotUnlockOtherCredentials(t *testing.T) {
+	backend := &memoryBackend{}
+	store := &Store{Backend: backend}
+	values := map[string]string{"ARGO_WORKFLOW_SERVER": "https://argo.example"}
+	account, _ := Account("argo", lookup(values))
+	if err := store.Set("argo", account, map[string]string{"ARGO_WORKFLOW_TOKEN": "stored-token"}); err != nil {
+		t.Fatal(err)
+	}
+	get, err := store.ResolveTargets(lookup(values), lookup(nil), []string{"argo"})
+	if err != nil || backend.reads != 1 {
+		t.Fatal("Argo-only commands must not access other stores")
+	}
+	if token, _ := get("ARGO_WORKFLOW_TOKEN"); token != "stored-token" {
+		t.Fatal("stored Argo token must resolve")
+	}
+}

@@ -70,9 +70,8 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 		if entry.key == "SIMSCOPE_URL" && entry.value == "" {
 			continue
 		}
-		u, err := url.Parse(entry.value)
-		if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-			return Config{}, fmt.Errorf("%s must be an http(s) URL without credentials, query, or fragment", entry.key)
+		if err := validateURL(entry.key, entry.value); err != nil {
+			return Config{}, err
 		}
 	}
 	for _, entry := range []struct{ key, value string }{
@@ -94,9 +93,52 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("S3_FORCE_PATH_STYLE must be a boolean")
 	}
-	c.HTTPTimeout, err = time.ParseDuration(get("HTTP_TIMEOUT", "30s"))
-	if err != nil || c.HTTPTimeout <= 0 {
-		return Config{}, fmt.Errorf("HTTP_TIMEOUT must be a positive duration such as 30s")
+	c.HTTPTimeout, err = parseHTTPTimeout(get("HTTP_TIMEOUT", "30s"))
+	if err != nil {
+		return Config{}, err
+	}
+	return c, nil
+}
+
+func validateURL(key, value string) error {
+	u, err := url.Parse(value)
+	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("%s must be an http(s) URL without credentials, query, or fragment", key)
+	}
+	return nil
+}
+
+func parseHTTPTimeout(value string) (time.Duration, error) {
+	duration, err := time.ParseDuration(value)
+	if err != nil || duration <= 0 {
+		return 0, fmt.Errorf("HTTP_TIMEOUT must be a positive duration such as 30s")
+	}
+	return duration, nil
+}
+
+// LoadArgo permits operational list/stop commands even when storage credentials
+// are absent or unavailable. These commands never use S3 or the registry.
+func LoadArgo(lookup func(string) (string, bool)) (Config, error) {
+	get := func(key, fallback string) string {
+		if value, ok := lookup(key); ok {
+			return value
+		}
+		return fallback
+	}
+	c := Config{CredentialStore: get("CREDENTIALS_STORE", "environment"), Argo: Argo{Server: get("ARGO_WORKFLOW_SERVER", ""), Namespace: get("ARGO_WORKFLOW_NAMESPACE", "argo"), Token: get("ARGO_WORKFLOW_TOKEN", "")}}
+	if c.CredentialStore != "keyring" && c.CredentialStore != "environment" {
+		return Config{}, fmt.Errorf("CREDENTIALS_STORE must be keyring or environment")
+	}
+	if err := validateURL("ARGO_WORKFLOW_SERVER", c.Argo.Server); err != nil {
+		return Config{}, err
+	}
+	if strings.TrimSpace(c.Argo.Namespace) == "" {
+		return Config{}, fmt.Errorf("ARGO_WORKFLOW_NAMESPACE is required")
+	}
+	var err error
+	c.HTTPTimeout, err = parseHTTPTimeout(get("HTTP_TIMEOUT", "30s"))
+	if err != nil {
+		return Config{}, err
 	}
 	return c, nil
 }

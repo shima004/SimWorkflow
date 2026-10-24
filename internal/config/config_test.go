@@ -68,6 +68,21 @@ func TestRegistryAuthentication(t *testing.T) {
 	}
 }
 
+func TestLoadArgoDoesNotRequireOtherServices(t *testing.T) {
+	values := map[string]string{"ARGO_WORKFLOW_SERVER": "https://argo.example.com", "S3_ENDPOINT": "invalid", "REGISTRY_URL": "invalid"}
+	c, err := LoadArgo(lookup(values))
+	if err != nil || c.Argo.Namespace != "argo" || c.HTTPTimeout != 30*time.Second || c.S3.Endpoint != "" || c.Registry.URL != "" {
+		t.Fatal("Argo-only operations must not require unrelated credentials")
+	}
+	for _, tc := range []struct{ key, value string }{{"ARGO_WORKFLOW_SERVER", "https://user:private-secret@argo.example.com"}, {"ARGO_WORKFLOW_NAMESPACE", ""}, {"HTTP_TIMEOUT", "0s"}, {"CREDENTIALS_STORE", "invalid"}} {
+		copy := map[string]string{"ARGO_WORKFLOW_SERVER": "https://argo.example.com"}
+		copy[tc.key] = tc.value
+		if _, err := LoadArgo(lookup(copy)); err == nil || strings.Contains(err.Error(), "private-secret") {
+			t.Fatal("Argo settings must still be validated safely")
+		}
+	}
+}
+
 func TestReadEnvFileAndPrecedence(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".env")
 	content := "# comment\nexport ARGO_WORKFLOW_TOKEN='literal$token#value'\nREGISTRY_PASSWORD=\"password with spaces\" # comment\nS3_BUCKET=workflows # comment\nEMPTY=\n"
