@@ -20,7 +20,7 @@ PythonのModuleConfigはネストしたキーをドット区切りに平坦化�
 実験YAMLの `modules`・`matrix.modules`・`matrix.groups.<グループ名>[].modules` では、ADFが実際に参照する設定キーを使います。
 実験サンプルも `SampleRoadDetector.PathPlanning` などADFが参照するキーを使います。
 
-Java版の指定例（エージェント定義の抜粋）:
+Javaエージェントの指定例（エージェント定義の抜粋）:
 
 ```yaml
 modules:
@@ -71,14 +71,14 @@ Argo上でも同じ設定生成処理を使用します。[事前計算付き実
 実験YAMLと元設定から、構成ごとに設定ファイルを作成できます。マップやシードが異なっても、同じモジュール構成のファイルは1つだけ作成します。
 
 ```sh
-# Java版: 3構成の.cfgとmanifest.jsonを生成
+# Javaエージェント: 3構成の.cfgとmanifest.jsonを生成
 simworkflow experiment modules \
   -f examples/experiments/module-comparison.yaml \
   --agent comparison \
   --base examples/module-configs/java.cfg \
   --format java --output-dir /tmp/module-configs-java
 
-# Python版: 2構成の.yamlとmanifest.jsonを生成
+# Pythonエージェント: 2構成の.yamlとmanifest.jsonを生成
 simworkflow experiment modules \
   -f examples/experiments/python-module-comparison.yaml \
   --agent python-comparison \
@@ -105,15 +105,15 @@ simworkflow experiment modules \
 
 ## 参考：確認したサンプルとソース
 
-以下は設定方式を確認した時点のソースです。Python uv版テンプレートの対象・依存バージョンは [Pythonテンプレート](../templates/agents/python/README.md) を参照してください。
+以下は設定方式を確認した時点のソースです。Pythonのuvテンプレートの対象・依存バージョンは [Pythonテンプレート](../templates/agents/python/README.md) を参照してください。
 
-Java版の根拠:
+Javaエージェントの根拠:
 
 - [module.cfg](https://github.com/roborescue/adf-sample-agent-java/blob/e9339b10a5188ae15747fba836b6ea035b3b570d/config/module.cfg)
 - [launch.sh](https://github.com/roborescue/adf-sample-agent-java/blob/e9339b10a5188ae15747fba836b6ea035b3b570d/launch.sh)
 - [SampleRoadDetector.java](https://github.com/roborescue/adf-sample-agent-java/blob/e9339b10a5188ae15747fba836b6ea035b3b570d/src/main/java/sample_team/module/complex/SampleRoadDetector.java)
 
-Python版の根拠:
+Pythonエージェントの根拠:
 
 - [module.yaml](https://github.com/adf-python/adf-sample-agent-python/blob/042a3477fb60f388e277e691dc2035e1a6555807/config/module.yaml)
 - [launcher.yaml](https://github.com/adf-python/adf-sample-agent-python/blob/042a3477fb60f388e277e691dc2035e1a6555807/config/launcher.yaml)

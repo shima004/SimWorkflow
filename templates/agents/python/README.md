@@ -1,7 +1,7 @@
 # Pythonエージェントのコンテナテンプレート
 
-ADF互換のPythonエージェント用です。uv版は [rescue-python](https://github.com/shima004/rescue-python) の実行確認済み構成を基準にしています。pip版は従来の [adf-sample-agent-python](https://github.com/adf-python/adf-sample-agent-python) 向けです。
-uv版は、実行確認済みのPython 3.14・ADF Core v0.2.14に統一しています。pip版は従来のPython 3.13向けです。
+ADF互換のPythonエージェント用です。uvテンプレートは [rescue-python](https://github.com/shima004/rescue-python) の実行確認済み構成を基準にしています。pipテンプレートは従来の [adf-sample-agent-python](https://github.com/adf-python/adf-sample-agent-python) 向けです。
+uvテンプレートは、実行確認済みのPython 3.14・ADF Core v0.2.14に統一しています。pipテンプレートは従来のPython 3.13向けです。
 このテンプレート自体はエージェントのソースコードを含みません。Java連携を使わないPythonエージェントを対象とします。
 
 | 方式 | 対象 | Dockerfile |
@@ -12,7 +12,7 @@ uv版は、実行確認済みのPython 3.14・ADF Core v0.2.14に統一してい
 ## uvを使う場合
 
 `pyproject.toml` と `uv.lock` で依存関係を管理する例です。
-共通の `Dockerfile.uv` を使用します。Python 3.14とuv 0.13.5が入った公式イメージ `ghcr.io/astral-sh/uv:0.13.5-python3.14-trixie-slim` で `uv sync --locked` を実行し、作成した仮想環境を `python:3.14-slim-trixie` の実行用イメージへ配置します。ビルド側と実行側でPython・Debianの版をそろえています。
+共通の `Dockerfile.uv` を使用します。Python 3.14とuv 0.13.5が入った公式イメージ `ghcr.io/astral-sh/uv:0.13.5-python3.14-trixie-slim` で `uv sync --locked` を実行し、作成した仮想環境を `python:3.14-slim-trixie` の実行用イメージへ配置します。ビルド側と実行側でPython・Debianのバージョンをそろえています。
 使用できるイメージとタグは [公式のDocker連携手順](https://docs.astral.sh/uv/guides/integration/docker/) を参照してください。
 
 1. `Dockerfile.uv` と `.dockerignore` をエージェントリポジトリのルートへコピーします。
@@ -53,12 +53,12 @@ uv run --locked python main.py --host localhost --port 27931
 ```
 
 Docker内ではビルド時に `/app/.venv` へインストールし、起動時は `/app/.venv/bin/python main.py` を直接実行します。
-起動時にはuvによる依存の解決・同期を行いません。設定ファイルの配置先と、以下の `docker run` の使い方はpip版と共通です。
+起動時にはuvによる依存の解決・同期を行いません。設定ファイルの配置先と、以下の `docker run` の使い方はpipテンプレートと共通です。
 ホストの `.venv` は同梱の `.dockerignore` で除外し、イメージ内で作成した環境を使います。
 
 詳細は [uvの依存管理](https://docs.astral.sh/uv/concepts/projects/dependencies/) を参照してください。
 
-uv版の標準レイアウトは次のとおりです。追加のデータディレクトリが必要な場合は `Dockerfile.uv` の実行ステージに `COPY` を追加してください。起動時に使う `python` は `/app/.venv/bin/python` です。
+uvテンプレートの標準レイアウトは次のとおりです。追加のデータディレクトリが必要な場合は `Dockerfile.uv` の実行ステージに `COPY` を追加してください。起動時に使う `python` は `/app/.venv/bin/python` です。
 
 ```text
 agent/
@@ -137,5 +137,5 @@ docker run --rm \
 Javaモジュールの利用にはJVMやゲートウェイなどの追加設定が必要で、このテンプレートには含めていません。
 
 プラットフォームは元設定へ選択したモジュールを反映し、`launcher.yaml` の参照先を実験専用の生成ファイルへ変更します。事前計算データも実験専用領域に保持し、本実行へ引き継ぎます。[実行手順](../../../docs/execution.md) を参照してください。
-現行uv版は `rescue-python` の既存ロックと、新規プロジェクト用ひな形から生成したロックの両方でDockerビルド・ヘルプ起動・A*／D* Lite／クラスタリングのインポートを確認しています。ロックが古い場合のビルド拒否も確認済みです。
-Argo上の事前計算・本実行・S3保存の検証は従来の実験イメージの記録で、今回の統一後にArgo実験は再実行していません。pip版のDockerビルドも未確認です。[検証記録](../../../docs/validation.md)を参照してください。
+現行のuvテンプレートは `rescue-python` の既存ロックと、新規プロジェクト用ひな形から生成したロックの両方でDockerビルド・ヘルプ起動・A*／D* Lite／クラスタリングのインポートを確認しています。ロックが古い場合のビルド拒否も確認済みです。
+Argo上の事前計算・本実行・S3保存の検証は従来の実験イメージの記録で、今回の統一後にArgo実験は再実行していません。pipテンプレートのDockerビルドも未確認です。[検証記録](../../../docs/validation.md)を参照してください。

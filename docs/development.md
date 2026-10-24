@@ -53,7 +53,7 @@ SIMWORKFLOW_TEST_OS_KEYRING=1 go test ./internal/credentials -run TestSystemStor
 | `internal/connections/` | 認証付きのサービス接続確認 |
 | `internal/experiment/` | 実験YAMLの検証、組み合わせ・マップ・シードの展開 |
 | `internal/moduleconfig/` | Java／Pythonのモジュール設定生成 |
-| `internal/maparchive/`・`internal/mapcatalog/` | マップの検査・登録・版解決 |
+| `internal/maparchive/`・`internal/mapcatalog/` | マップの検査・登録・バージョン解決 |
 | `internal/workflow/`・`internal/argo/` | Workflow生成・送信・状態参照 |
 | `internal/worker/` | マップ準備、事前計算、本実行、結果収集 |
 | `internal/storage/`・`internal/artifacts/` | S3保存・転送、結果の選択・取得 |

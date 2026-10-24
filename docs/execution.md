@@ -39,7 +39,7 @@ CPU・メモリはシミュレーターと種類別の各コンテナに指定�
 事前計算では、マップに存在する各platoon種別について1体ずつ接続します。全種類の正常終了と生成データのS3保存が完了してから、本実行ステップへ進みます。
 本実行では `map/scenario.xml` に記載された各種別の数と、対応するセンターの数を接続します。マップに存在しない種類はプロセス起動を省略します。
 いずれかの種類が失敗した場合はサーバーと他の種類の処理も中止し、失敗結果を保存します。
-Javaは `PRECOMPUTED`、Pythonは構造化ログの `mode: 1`（PRECOMPUTED）を確認します。ログ形式はテンプレートが対象とするADFの版に依存します。
+Javaは `PRECOMPUTED`、Pythonは構造化ログの `mode: 1`（PRECOMPUTED）を確認します。ログ形式はテンプレートが対象とするADFのバージョンに依存します。
 事前計算データは `/work/precompute/<role>/`、解決後のモジュール設定は `/work/modules/<role>/` に分けます。Javaの `/app/precomp_data` は種類専用領域へのリンク、Pythonは `launcher.yaml` で種類専用領域を指定します。
 ログも `agent-fire-brigade.log` など種類別のファイルに分けます。結果要約の `agents` に種類別の成功・失敗、`agent` に全種類の集約状態を保存します。
 
@@ -47,7 +47,7 @@ Javaは `PRECOMPUTED`、Pythonは構造化ログの `mode: 1`（PRECOMPUTED）�
 
 接続設定、エージェントイメージ、登録済みマップを用意します。最初の送信は [クイックスタート](quickstart.md)、クラスタ・バケット・helperの準備は [実行環境の準備](distribution.md) を参照してください。
 
-エージェントは [Java](../templates/agents/java/README.md) または [Python](../templates/agents/python/README.md) のテンプレートに従って作成します。標準の実行環境は `linux/amd64` です。Java版は起動時にGradleをofflineモードで使用するため、依存ライブラリを含むテンプレートイメージを使います。
+エージェントは [Java](../templates/agents/java/README.md) または [Python](../templates/agents/python/README.md) のテンプレートに従って作成します。標準の実行環境は `linux/amd64` です。Javaエージェントは起動時にGradleをofflineモードで使用するため、依存ライブラリを含むテンプレートイメージを使います。
 
 ## Argoの実行権限
 

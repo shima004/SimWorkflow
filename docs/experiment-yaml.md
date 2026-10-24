@@ -5,8 +5,8 @@ YAMLの検証、計画の展開、事前計算付きの実行、結果要約の�
 
 完全な定義例は [module-comparison.yaml](../examples/experiments/module-comparison.yaml) を参照してください。
 イメージ、マップの場所、モジュール名は例示用です。
-Java版サンプルはADFの実際のキーを使用し、独自モジュールの候補は仮名としています。
-Python版は [python-module-comparison.yaml](../examples/experiments/python-module-comparison.yaml) を参照してください。
+JavaエージェントのサンプルはADFの実際のキーを使用し、独自モジュールの候補は仮名としています。
+Pythonエージェントの定義例は [python-module-comparison.yaml](../examples/experiments/python-module-comparison.yaml) を参照してください。
 シミュレーターには `ghcr.io/shima004/rcrs-server:v1.0.4` を使用します。[起動仕様の確認結果](simulator.md)も参照してください。
 
 ## 基本構造

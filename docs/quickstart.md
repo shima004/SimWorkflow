@@ -32,7 +32,7 @@ simworkflow map register --name my-map --version v1 --path ./my-map
 simworkflow map inspect --name my-map --version v1
 ```
 
-登録済みなら再登録は不要です。同じ名前・版は更新できません。形式や版管理の詳細は [マップ](maps.md) を参照してください。
+登録済みなら再登録は不要です。同じ名前・バージョンは更新できません。形式やバージョン管理の詳細は [マップ](maps.md) を参照してください。
 
 ## 3. 実験YAMLを用意する
 
@@ -77,7 +77,7 @@ simworkflow experiment plan -f experiment.yaml
 simworkflow experiment submit -f experiment.yaml
 ```
 
-`validate` と `plan` はオフラインです。イメージの存在や登録マップへのアクセスまでは確認しません。`submit` が登録マップの版とハッシュを確定し、Argoへ送信します。公開helperとS3へのワーカー設定保存がデフォルトなので、通常は追加オプションは不要です。
+`validate` と `plan` はオフラインです。イメージの存在や登録マップへのアクセスまでは確認しません。`submit` が登録マップのバージョンとハッシュを確定し、Argoへ送信します。公開helperとS3へのワーカー設定保存がデフォルトなので、通常は追加オプションは不要です。
 
 送信時に表示されたWorkflow名を、以後の `WORKFLOW_NAME` に指定します。
 

@@ -19,7 +19,7 @@ simScope:
 SIMSCOPE_URL=http://172.16.201.173
 ```
 
-SimScopeの [URLパラメータ](https://github.com/shima004/SimScope#url-パラメータ) に合わせ、エージェント名を `team`、マップ名と版を `map` に渡します。
+SimScopeの [URLパラメータ](https://github.com/shima004/SimScope#url-パラメータ) に合わせ、エージェント名を `team`、マップ名とバージョンを `map` に渡します。
 
 ## 実行中：リアルタイム接続
 
