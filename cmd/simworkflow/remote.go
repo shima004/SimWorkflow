@@ -122,7 +122,7 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	account := flags.String("service-account", "simworkflow", "workflow executor ServiceAccount")
 	maxRuns := flags.Int("max-runs", experiment.DefaultMaxRuns, "maximum expanded runs")
 	output := flags.String("output", "", "new private YAML file for render; contains temporary signed URLs")
-	configStorage := flags.String("config-storage", "inline", "worker configuration: inline or s3 (s3 requires a remote-config-capable helper image)")
+	configStorage := flags.String("config-storage", "s3", "worker configuration: s3 or inline (inline supports older helper images)")
 	if err := flags.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -244,6 +244,9 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 		return err
 	}
 	if len(encodedWorkflow) > 900*1024 {
+		if *configStorage == "s3" {
+			return errors.New("workflow definition is too large even with S3 configuration; split the experiment")
+		}
 		return errors.New("workflow definition is too large; use --config-storage s3 with a compatible helper image or split the experiment")
 	}
 	if command == "render" {

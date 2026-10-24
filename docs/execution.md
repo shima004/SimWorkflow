@@ -149,19 +149,18 @@ PodにはS3の長期アクセスキーやArgoのトークンを渡しません�
 署名URLの有効期限は24時間です。1実行20時間まで、計画上の総所要時間23時間までに制限します。キュー待ちで期限を超えた場合や元の一時認証情報が早く失効した場合は、再送信が必要です。
 URLを含むワーカー設定は結果バンドルに含めません。
 
-## 大きな実験のWorkflowサイズ
+## ワーカー設定とWorkflowサイズ
 
-実行数が多い場合は `render`／`submit` に `--config-storage s3` を追加します。段階ごとのワーカー設定をS3の `experiments/<execution-id>/configs/<run-id>/<stage>.json` に保存し、Workflowには当該設定のGET用署名付きURLだけを渡します。ワーカーは起動時に設定を取得します。100実行でも事前計算・本実行を分け、同じWorkflow内で指定した並列数を維持します。
+`render`／`submit` はデフォルトで `--config-storage s3` を使用します。段階ごとのワーカー設定をS3の `experiments/<execution-id>/configs/<run-id>/<stage>.json` に保存し、Workflowには当該設定のGET用署名付きURLだけを渡します。ワーカーは起動時に設定を取得します。100実行でも事前計算・本実行を分け、同じWorkflow内で指定した並列数を維持します。
 
 ```sh
 go run ./cmd/simworkflow experiment submit \
-  -f examples/validation/rescue-python-vc-100/experiment.yaml \
-  --config-storage s3
+  -f examples/validation/rescue-python-vc-100/experiment.yaml
 ```
 
-`s3` 方式はCLI既定の公開helperイメージで利用できます。独自のhelperに切り替える場合は `remote-config-20261024` 以降に相当する設定取得機能が必要です。このワーカーは進捗・SimScope用Pod IPの保存にも対応します。設定取得の署名URLも24時間有効で、Podに長期アクセスキーは渡しません。設定オブジェクトには他の転送用URLも含まれるため、バケットは非公開で管理します。設定オブジェクトは結果バンドルや通常の結果ダウンロードには含めません。
+`s3` 方式はCLI既定の公開helperイメージで利用できます。独自のhelperに切り替える場合は `remote-config-20261024` 以降に相当する設定取得機能が必要です。このワーカーは進捗・SimScope用Pod IPの保存にも対応します。設定取得の署名URLも24時間有効で、Podに長期アクセスキーは渡しません。設定オブジェクトには他の転送用URLも含まれるため、バケットは非公開で管理します。設定オブジェクトは結果バンドルや通常の結果ダウンロードには含めません。各実行につき2個の設定JSONを保存し、自動削除は行いません。
 
-既定の `--config-storage inline` は従来どおり設定JSONをWorkflowに埋め込み、旧ワーカーと互換性があります。CLIは生成定義が900KiBを超える場合、Argoへ送信する前にエラーにします。これはノード状態用の余裕を残すための検査で、クラスタ側のWorkflowサイズ制限は変更しません。
+`--config-storage inline` を明示すると従来どおり設定JSONをWorkflowに埋め込み、旧ワーカーを使用できます。CLIは生成定義が900KiBを超える場合、Argoへ送信する前にエラーにします。これはノード状態用の余裕を残すための検査で、クラスタ側のWorkflowサイズ制限は変更しません。
 
 ## タイムアウト
 

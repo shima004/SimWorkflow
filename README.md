@@ -46,7 +46,7 @@ go run ./cmd/simworkflow experiment results WORKFLOW_NAME
 go run ./cmd/simworkflow experiment download --include summary --stage simulation WORKFLOW_NAME
 ```
 
-helperイメージは公開済みの動作確認済みGHCRイメージをdigest固定で使用します。別のイメージを使う場合は `--helper-image IMAGE` を指定してください。大きな実験では `--config-storage s3` を追加します。
+helperイメージは公開済みの動作確認済みGHCRイメージをdigest固定で使用します。別のイメージを使う場合は `--helper-image IMAGE` を指定してください。ワーカー設定はデフォルトでS3に保存します。旧ワーカーを使う場合は `--config-storage inline` で埋め込み方式に戻せます。
 
 `experiment status --watch` で構成別の段階・状態・ステップ進捗・最新スコアを約5秒ごとに確認できます。端末では上下キーで実行を選択し、Enterでモジュールやリソースなどの設定詳細、Escで一覧へ戻れます。マウスホイールでスクロール、左右キーで横移動、`q` で終了できます。完了後も結果を表示します。従来のテキスト表示は `--plain` を追加します。ステップ進捗には進捗対応ワーカーを使用します。
 詳細画面では `w` で [SimScope](docs/simscope.md) をブラウザに開けます。実行中はリアルタイム接続、終了後は保存ログを再生します。接続先は `SIMSCOPE_URL`（既定: `http://172.16.201.173`）です。リアルタイム接続には対応ワーカーで新規送信してください。

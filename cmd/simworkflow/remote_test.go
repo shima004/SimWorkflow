@@ -42,6 +42,10 @@ func TestRemoteCommands(t *testing.T) {
 						Templates []struct {
 							InitContainers []struct {
 								Image string `json:"image"`
+								Env   []struct {
+									Name  string `json:"name"`
+									Value string `json:"value"`
+								} `json:"env"`
 							} `json:"initContainers"`
 							ContainerSet struct {
 								Containers []struct {
@@ -63,6 +67,9 @@ func TestRemoteCommands(t *testing.T) {
 					helperCount++
 					if init.Image != defaultHelperImage {
 						t.Error("prepare must use the pinned default helper")
+					}
+					if len(init.Env) != 1 || init.Env[0].Name != "SIMWORKFLOW_RUN_URL" || !strings.Contains(init.Env[0].Value, "/configs/") {
+						t.Error("submit without config-storage must use S3 configuration URLs")
 					}
 				}
 				for _, c := range template.ContainerSet.Containers {
@@ -110,7 +117,7 @@ func TestRemoteCommands(t *testing.T) {
 	file := "../../examples/experiments/module-comparison.yaml"
 	var out, errOut bytes.Buffer
 	output := filepath.Join(t.TempDir(), "workflow.yaml")
-	if err := run([]string{"experiment", "render", "-f", file, "--helper-image", "registry/worker:test", "--output", output}, lookup, &out, &errOut); err != nil {
+	if err := run([]string{"experiment", "render", "-f", file, "--helper-image", "registry/worker:test", "--config-storage", "inline", "--output", output}, lookup, &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(output)
@@ -127,6 +134,9 @@ func TestRemoteCommands(t *testing.T) {
 	if !bytes.Contains(data, []byte("registry/worker:test")) || bytes.Contains(data, []byte(defaultHelperImage)) {
 		t.Fatal("explicit helper-image must override the default")
 	}
+	if bytes.Count(data, []byte("name: SIMWORKFLOW_RUN\n")) != 18 || bytes.Contains(data, []byte("SIMWORKFLOW_RUN_URL")) {
+		t.Fatal("explicit inline storage must embed each stage configuration")
+	}
 	mu.Lock()
 	wasSubmitted := submitted
 	mu.Unlock()
@@ -134,7 +144,7 @@ func TestRemoteCommands(t *testing.T) {
 		t.Fatal("render must not submit a workflow")
 	}
 	remoteOutput := filepath.Join(t.TempDir(), "remote-config.yaml")
-	if err := run([]string{"experiment", "render", "-f", file, "--helper-image", "registry/worker:test", "--config-storage", "s3", "--output", remoteOutput}, lookup, &out, &errOut); err != nil {
+	if err := run([]string{"experiment", "render", "-f", file, "--output", remoteOutput}, lookup, &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
 	remoteYAML, err := os.ReadFile(remoteOutput)

@@ -12,14 +12,13 @@
 ghcr.io/shima004/simworkflow-worker@sha256:2e204474aa5c348c0d2196cc83adde038170fd9885bb09c2e83b4a4fd31cc027
 ```
 
-`--helper-image` を省略して実験を送信できます。
+`--helper-image` と `--config-storage` を省略して実験を送信できます。helperは上記の固定digest、設定保存先はS3がデフォルトです。
 
 ```sh
 docker pull ghcr.io/shima004/simworkflow-worker:latest
 
 go run ./cmd/simworkflow experiment submit \
-  -f experiment.yaml \
-  --config-storage s3
+  -f experiment.yaml
 ```
 
 別のhelperを使用する場合は `--helper-image IMAGE` で上書きできます。`latest` はmainの更新で変わるため、デフォルトでは使用しません。別の版を選ぶ場合もdigestや `sha-<40桁のコミットSHA>` で固定できます。Argo・S3の接続設定や認証情報は利用環境ごとに設定します。
