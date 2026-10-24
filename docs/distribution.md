@@ -74,7 +74,7 @@ GHCRへの登録と `latest`・`sha-58fd58333b221537b282ad160d34ee0407d227a8` �
 ghcr.io/shima004/simworkflow-worker@sha256:2e204474aa5c348c0d2196cc83adde038170fd9885bb09c2e83b4a4fd31cc027
 ```
 
-ビルド・Goの全体テスト・actionlint・コンテナ内でのCLI起動を確認済みです。現時点では匿名取得が拒否されており、[パッケージ設定](https://github.com/users/shima004/packages/container/simworkflow-worker/settings)でPublicへの切り替えが必要です。切り替え後に認証なしでの取得を確認します。
+ビルド・Goの全体テスト・actionlint・コンテナ内でのCLI起動を確認済みです。パッケージをPublicへ変更後、空のDocker認証設定からmanifestと全イメージを取得できることを確認済みです。取得したdigestは上記の固定digestと一致しています。
 
 GitHub Actionsの設定はローカルで作成済みですが、現在の接続からリポジトリへのアクセス権がないため、GitHubへの反映は未完了です。リポジトリへアクセス可能な環境から今回のコミットをpushすると、その後のmain更新・タグ作成で公開処理が動きます。
 
