@@ -25,13 +25,16 @@ import (
 )
 
 func remoteCommand(command string) bool {
-	return command == "render" || command == "submit" || command == "status" || command == "results"
+	return command == "render" || command == "submit" || command == "status" || command == "results" || command == "download"
 }
 
 func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 	command := args[0]
+	if command == "download" {
+		return runDownload(ctx, args[1:], c, out, errOut)
+	}
 	flags := flag.NewFlagSet("experiment "+command, flag.ContinueOnError)
 	flags.SetOutput(errOut)
 	if command == "status" || command == "results" {

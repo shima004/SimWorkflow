@@ -57,6 +57,20 @@ func (s *Store) GetJSON(ctx context.Context, key string, value any) error {
 	return nil
 }
 
+// Open streams a single result object using the longer artifact transfer timeout.
+// The signed capability remains internal and must never be printed.
+func (s *Store) Open(ctx context.Context, key string) (io.ReadCloser, error) {
+	transfer, err := s.SignDownload(ctx, s.Bucket, key)
+	if err != nil {
+		return nil, err
+	}
+	response, err := Request(ctx, http.MethodGet, transfer, nil)
+	if err != nil {
+		return nil, err
+	}
+	return response.Body, nil
+}
+
 func (s *Store) Download(ctx context.Context, source string) (Transfer, error) {
 	u, err := url.Parse(source)
 	if err != nil || u.Scheme != "s3" || u.Host == "" || u.Path == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
@@ -133,6 +147,9 @@ func Request(ctx context.Context, method string, transfer Transfer, body io.Read
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		resp.Body.Close()
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, ErrNotFound
+		}
 		return nil, fmt.Errorf("object transfer HTTP %d", resp.StatusCode)
 	}
 	return resp, nil

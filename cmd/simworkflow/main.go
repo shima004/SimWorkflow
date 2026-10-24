@@ -27,7 +27,7 @@ func run(args []string, lookup func(string) (string, bool), out, errOut io.Write
 	flags.SetOutput(errOut)
 	envFile := flags.String("env-file", ".env", "environment file (default: .env in current directory if present; empty disables loading)")
 	flags.Usage = func() {
-		fmt.Fprintln(errOut, "Usage: simworkflow [-env-file .env] config check [--connect]\n       simworkflow [-env-file .env] experiment <validate|plan|modules|render|submit|status|results> [options]\n       simworkflow [-env-file .env] map <register|list|inspect> [options]")
+		fmt.Fprintln(errOut, "Usage: simworkflow [-env-file .env] config check [--connect]\n       simworkflow [-env-file .env] experiment <validate|plan|modules|render|submit|status|results|download> [options]\n       simworkflow [-env-file .env] map <register|list|inspect> [options]")
 		flags.PrintDefaults()
 	}
 	if err := flags.Parse(args); err != nil {
