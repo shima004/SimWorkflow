@@ -30,6 +30,11 @@ func writeRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.
 		_, writeErr := fmt.Fprintf(out, "Run details unavailable: %v\n", err)
 		return writeErr
 	}
+	return writePlannedRunProgress(ctx, store, snapshot, &plan, out)
+}
+
+func writePlannedRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.Snapshot, plan *experiment.Plan, out io.Writer) error {
+	prefix := snapshot.Metadata.Annotations["simworkflow.io/result-prefix"]
 	writer := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(writer, "RUN\tMAP\tSEED\tSTAGE\tSTATE\tSTEP\tSCORE\tUPDATED")
 	for _, run := range plan.Runs {
