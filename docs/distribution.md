@@ -21,7 +21,7 @@ go run ./cmd/simworkflow experiment submit \
   -f experiment.yaml
 ```
 
-別のhelperを使用する場合は `--helper-image IMAGE` で上書きできます。`latest` はmainの更新で変わるため、デフォルトでは使用しません。別の版を選ぶ場合もdigestや `sha-<40桁のコミットSHA>` で固定できます。Argo・S3の接続設定や認証情報は利用環境ごとに設定します。
+別のhelperを使用する場合は `--helper-image IMAGE` で上書きできます。`latest` はmainの更新で変わるため、デフォルトでは使用しません。別の版を選ぶ場合もdigestや `sha-<40桁のコミットSHA>` で固定できます。Argo・S3の接続設定や認証情報は利用環境ごとに設定します。`simworkflow config init` でユーザー共通のYAMLを作成でき、以後は実行するディレクトリに依存しません。[設定手順](configuration.md) を参照してください。
 
 ## 実験用イメージ・マップとの関係
 

@@ -1,0 +1,26 @@
+# Fill in connection settings and credentials for your environment.
+# Environment variables override .env; .env overrides this file.
+argoWorkflow:
+  server: https://argo.example.com
+  namespace: argo-workflows
+  token: ""
+
+s3:
+  endpoint: https://s3.example.com
+  region: us-east-1
+  bucket: simworkflows
+  accessKeyID: ""
+  secretAccessKey: ""
+  sessionToken: ""
+  forcePathStyle: true
+
+registry:
+  url: https://ghcr.io
+  username: ""
+  password: ""
+  token: ""
+
+simScope:
+  url: http://localhost:3000
+
+httpTimeout: 30s

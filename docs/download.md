@@ -1,6 +1,6 @@
 # 実験結果のダウンロード
 
-`experiment download` で、Workflowに保存された結果から必要な要素を取得できます。環境変数またはカレントディレクトリの `.env` を使用し、AWS CLIの設定は不要です。
+`experiment download` で、Workflowに保存された結果から必要な要素を取得できます。[ユーザー共通のconfig.yaml](configuration.md)、環境変数、カレントディレクトリの `.env` を使用でき、AWS CLIの設定は不要です。
 オプションはWorkflow名より前に置きます。
 
 ```sh

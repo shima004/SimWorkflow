@@ -1,7 +1,7 @@
 # SimWorkflow CLI
 
 RoboCup Rescue Simulationの実験をYAMLで定義し、Argo Workflowsで実行するGo製CLIです。
-モジュールの組み合わせを展開し、サーバー・エージェントの事前計算と本実行を別のArgoステップで実行し、データをS3経由で引き継いで結果を保存します。サービスの接続設定は環境変数から読み込みます。
+モジュールの組み合わせを展開し、サーバー・エージェントの事前計算と本実行を別のArgoステップで実行し、データをS3経由で引き継いで結果を保存します。サービスの接続設定はユーザー共通の `config.yaml`・環境変数・開発用の `.env` から読み込みます。
 
 Go 1.24以降が必要です。YAMLの処理には `go.yaml.in/yaml/v3` を使用します。
 
@@ -91,7 +91,19 @@ go run ./cmd/simworkflow experiment modules \
 テンプレートにはエージェント本体を含みません。Java版・Python uv版のDockerビルドと、生成設定のADFでの読み込みを確認済みです。
 Java版・Python uv版とも、Argo上で事前計算、本実行、結果のS3保存を確認しています。確認条件は [検証記録](docs/validation.md) を参照してください。
 
-## 動作確認
+## 設定と動作確認
+
+どの作業ディレクトリからでも使う場合は、ユーザー共通の設定を作成します。Linux／WSLの通常の保存先は `~/.config/simworkflow/config.yaml` です。
+
+```sh
+go run ./cmd/simworkflow config init
+go run ./cmd/simworkflow config path
+# 表示されたconfig.yamlを編集して接続先・認証情報を入力
+go run ./cmd/simworkflow config check
+```
+
+初期化は既存ファイルを上書きしません。保存先のOSごとの規則、YAMLの書式、別ファイルの指定は [接続設定](docs/configuration.md) を参照してください。
+開発用の `.env` を使う従来の方法も利用できます。
 
 ```sh
 cp .env.example .env
@@ -112,8 +124,8 @@ go run ./cmd/simworkflow config check --connect
 このコマンドはArgoのWorkflow一覧、S3の指定バケット、レジストリV2 APIを確認します。
 書き込みは行いません。権限不足や到達できない接続先の対処は [接続確認の手順](docs/connections.md) を参照してください。
 
-カレントディレクトリの `.env` があれば自動で読み込みます。存在しない場合は環境変数だけを使用します。本番では環境変数を直接渡せます。
-別のファイルは `-env-file .env.local` で指定でき、指定したファイルが存在しない場合はエラーになります。`-env-file=""` で自動読み込みを無効にできます。
+ユーザー共通の `config.yaml` と、カレントディレクトリの `.env` を自動で読み込みます。存在しないファイルは省略します。本番では環境変数を直接渡せます。
+別のファイルは `-env-file .env.local` で指定でき、指定したファイルが存在しない場合はエラーになります。`-env-file=""` で `.env` 読み込みだけを無効にできます。`--config FILE` で別のYAMLを指定し、`--config=""` でYAML読み込みを無効にできます。
 
 ```sh
 go build -o bin/simworkflow ./cmd/simworkflow
@@ -121,7 +133,7 @@ go build -o bin/simworkflow ./cmd/simworkflow
 ./bin/simworkflow config check
 ```
 
-優先順位は **環境変数 > 読み込んだ .env > デフォルト値** です。環境変数を明示的に空に設定した場合も `.env` より優先されます。
+優先順位は **環境変数 > 読み込んだ .env > config.yaml > デフォルト値** です。環境変数を明示的に空に設定した場合も `.env` より優先されます。
 `.env` は `KEY=value`、`export KEY=value`、単一引用符・二重引用符、コメントに対応します。値はリテラルとして扱い、変数展開・コマンド実行・エスケープ変換・複数行の値には対応しません。引用符を含む値はもう一方の引用符で囲んでください。
 `.env` と `.env.*` はGit管理対象から除外しています（`.env.example` を除く）。
 
@@ -157,7 +169,7 @@ go vet ./...
 ```
 
 - `cmd/simworkflow`: 設定・実験・ワーカーのCLI
-- `internal/config`: 接続設定の型、環境変数の読み込み・検証、`.env` の読み込み
+- `internal/config`: 接続設定の型、環境変数の読み込み・検証、共通YAML・`.env` の読み込み
 - `internal/connections`: 認証付きのサービス接続確認とS3クライアントの構築
 - `internal/experiment`: 実験YAMLの読み込み・検証と実行計画の展開
 - `internal/moduleconfig`: Java／Python版ADFモジュール設定の生成
