@@ -29,6 +29,9 @@ import (
 
 func TestSimScopeURLParameters(t *testing.T) {
 	run := experiment.Run{Configuration: experiment.Configuration{Agent: "日本語 & team"}, Map: experiment.Map{Name: "vc", Version: "test-v1"}}
+	if _, err := simScopeURL("", run, url.Values{}); err == nil || !strings.Contains(err.Error(), "simScope.url") || !strings.Contains(err.Error(), "SIMSCOPE_URL") {
+		t.Fatal("missing viewer URL must explain how to configure it")
+	}
 	log := "http://s3.example/bucket/rescue.log.7z?X-Amz-Signature=test&X-Amz-Security-Token=a%2Bb%2Fc"
 	raw, err := simScopeURL("http://viewer.example/prefix/", run, url.Values{"url": {log}})
 	if err != nil {

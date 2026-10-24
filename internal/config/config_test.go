@@ -25,7 +25,7 @@ func TestLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Argo.Namespace != "argo" || c.S3.Region != "us-east-1" || !c.S3.ForcePathStyle || c.HTTPTimeout != 30*time.Second {
+	if c.Argo.Namespace != "argo" || c.S3.Region != "us-east-1" || !c.S3.ForcePathStyle || c.HTTPTimeout != 30*time.Second || c.SimScopeURL != "" {
 		t.Fatal("unexpected defaults")
 	}
 	for _, tc := range []struct{ key, value string }{

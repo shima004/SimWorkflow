@@ -46,11 +46,11 @@ registry:
   password: ""
   token: ""
 simScope:
-  url: http://localhost:3000
+  url: ""
 httpTimeout: 30s
 ```
 
-`argoWorkflow`・`s3`・`registry` は既存の `ARGO_WORKFLOW_*`・`S3_*`・`REGISTRY_*` と同じ設定です。`simScope.url` は `SIMSCOPE_URL`、`httpTimeout` は `HTTP_TIMEOUT` に対応します。環境変数名と必須項目は [READMEの設定項目](../README.md#設定項目) を参照してください。
+`argoWorkflow`・`s3`・`registry` は既存の `ARGO_WORKFLOW_*`・`S3_*`・`REGISTRY_*` と同じ設定です。`simScope.url` は `SIMSCOPE_URL`、`httpTimeout` は `HTTP_TIMEOUT` に対応します。`simScope.url` は任意設定で、利用するSimScopeのURLを入力してください。未設定の場合は `w` によるブラウザ表示時に設定方法を案内します。環境変数名と必須項目は [READMEの設定項目](../README.md#設定項目) を参照してください。
 未知の項目・重複キー・型の不一致・複数のYAML文書はエラーになります。エラーに認証情報の値は含めません。設定ファイルは1MiBまでです。
 
 ## 優先順位と別ファイルの指定

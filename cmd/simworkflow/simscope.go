@@ -41,6 +41,9 @@ func simScopeCommand(ctx context.Context, c config.Config) func(string, experime
 }
 
 func simScopeURL(base string, run experiment.Run, params url.Values) (string, error) {
+	if base == "" {
+		return "", errors.New("SimScope URL is not configured; set simScope.url in config.yaml or SIMSCOPE_URL")
+	}
 	u, err := url.Parse(base)
 	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return "", errors.New("SIMSCOPE_URL must be an http(s) URL without credentials, query, or fragment")

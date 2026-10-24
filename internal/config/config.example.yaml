@@ -21,6 +21,6 @@ registry:
   token: ""
 
 simScope:
-  url: http://localhost:3000
+  url: ""
 
 httpTimeout: 30s

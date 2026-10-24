@@ -50,7 +50,7 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 		return fallback
 	}
 	c := Config{
-		SimScopeURL: get("SIMSCOPE_URL", "http://172.16.201.173"),
+		SimScopeURL: get("SIMSCOPE_URL", ""),
 		Argo:        Argo{Server: get("ARGO_WORKFLOW_SERVER", ""), Namespace: get("ARGO_WORKFLOW_NAMESPACE", "argo"), Token: get("ARGO_WORKFLOW_TOKEN", "")},
 		S3: S3{
 			Endpoint: get("S3_ENDPOINT", ""), Region: get("S3_REGION", "us-east-1"),
@@ -62,6 +62,9 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 	for _, entry := range []struct{ key, value string }{
 		{"ARGO_WORKFLOW_SERVER", c.Argo.Server}, {"S3_ENDPOINT", c.S3.Endpoint}, {"REGISTRY_URL", c.Registry.URL}, {"SIMSCOPE_URL", c.SimScopeURL},
 	} {
+		if entry.key == "SIMSCOPE_URL" && entry.value == "" {
+			continue
+		}
 		u, err := url.Parse(entry.value)
 		if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 			return Config{}, fmt.Errorf("%s must be an http(s) URL without credentials, query, or fragment", entry.key)

@@ -6,7 +6,14 @@ go run ./cmd/simworkflow experiment status --watch WORKFLOW_NAME
 
 上下キーで実行を選び、Enterで設定詳細を開き、`w` を押します。CLIを実行しているマシンの既定ブラウザでSimScopeを開きます。TUIはそのまま操作でき、Escで一覧へ戻れます。`w` を連打しても準備処理は重複しません。
 
-接続先は環境変数または `.env` の `SIMSCOPE_URL` で指定します。省略時は `http://172.16.201.173` です。
+接続先は共通設定ファイルの `simScope.url`、環境変数または `.env` の `SIMSCOPE_URL` で指定します。デフォルトの接続先はありません。未設定でも実験の実行や監視は利用でき、`w` を押した際に設定方法を表示します。
+
+```yaml
+simScope:
+  url: http://172.16.201.173
+```
+
+環境変数または `.env` で指定する場合：
 
 ```dotenv
 SIMSCOPE_URL=http://172.16.201.173
