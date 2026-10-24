@@ -13,6 +13,7 @@ Go 1.24以降が必要です。YAMLの処理には `go.yaml.in/yaml/v3` を使�
 エージェントは消防・警察・救急ごとにコンテナを分け、`resourcesByRole` で種類別に上書きできます。各センターは対応する種類と同じコンテナで動作します。
 
 - [事前計算から本実行までの実行手順](docs/execution.md)
+- [別環境への配布・helperイメージの公開](docs/distribution.md)
 - [必要な実験結果を選んでダウンロード](docs/download.md)
 - [マップの登録・版管理とステップ数の指定](docs/maps.md)
 - [最小の実験定義](examples/experiments/precompute-baseline.yaml)
