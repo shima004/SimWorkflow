@@ -31,6 +31,12 @@ func runDetails(plan *experiment.Plan, run experiment.Run) []string {
 		fmt.Fprintf(&b, "  %s: CPU %s cores / Memory %s\n", role, r.CPU, r.Memory)
 	}
 	fmt.Fprintln(&b, "\nModules (expanded configuration)")
+	if len(c.Groups) > 0 {
+		fmt.Fprintln(&b, "  Selected groups")
+		for _, group := range sortedModuleKeys(c.Groups) {
+			fmt.Fprintf(&b, "    %s = %s\n", group, c.Groups[group])
+		}
+	}
 	for _, key := range sortedModuleKeys(c.Modules) {
 		fmt.Fprintf(&b, "  %s\n    %s\n", key, c.Modules[key])
 	}

@@ -1,0 +1,44 @@
+apiVersion: simworkflow/v1alpha1
+kind: Experiment
+metadata:
+  name: grouped-module-comparison
+  description: 経路探索2モジュールのセットAとクラスタリング2モジュールのセットBを比較
+spec:
+  simulator:
+    image: ghcr.io/shima004/rcrs-server:v1.0.4
+    resources: {cpu: 2, memory: 8Gi}
+    parameters: {timesteps: 5}
+  agents:
+    - name: grouped-python
+      runtime: python
+      # Python uvテンプレートで、下の候補を含むイメージを用意する。
+      image: registry.example.com/my-team/rescue-python:v1
+      resources: {cpu: 2, memory: 4Gi}
+      matrix:
+        groups:
+          A:
+            - name: astar
+              modules:
+                ExtendActionClear.PathPlanning: adf_core_python.implement.module.algorithm.a_star_path_planning.AStarPathPlanning
+                DefaultExtendActionMove.PathPlanning: adf_core_python.implement.module.algorithm.a_star_path_planning.AStarPathPlanning
+            - name: dstar
+              modules:
+                ExtendActionClear.PathPlanning: src.path_planning.d_star_lite_path_planning.DStarLitePathPlanning
+                DefaultExtendActionMove.PathPlanning: src.path_planning.d_star_lite_path_planning.DStarLitePathPlanning
+          B:
+            - name: kmeans
+              modules:
+                FireSearch.Clustering: adf_core_python.implement.module.algorithm.k_means_clustering.KMeansClustering
+                AmbulanceSearch.Clustering: adf_core_python.implement.module.algorithm.k_means_clustering.KMeansClustering
+            - name: kmeanspp
+              modules:
+                FireSearch.Clustering: src.clustering.k_means_pp_clustering.KMeansPPClustering
+                AmbulanceSearch.Clustering: src.clustering.k_means_pp_clustering.KMeansPPClustering
+  conditions:
+    maps:
+      - name: my-map
+        version: v1
+    seeds: [1]
+  execution: {maxParallelRuns: 4, timeout: 30m}
+  outputs:
+    collect: [score, simulatorLogs, agentLogs]

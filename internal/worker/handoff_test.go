@@ -38,7 +38,7 @@ func TestSeparatePodsRestoreImmutablePrecompute(t *testing.T) {
 	defer server.Close()
 	transfer := func(path string) storage.Transfer { return storage.Transfer{URL: server.URL + path} }
 	put := transfer("/data")
-	pre := Config{Stage: Precompute, ExecutionID: "execution-test", Run: experiment.Run{ID: "run-test", Seed: 7}, TimeoutSeconds: 60, Map: transfer("/map"), PrecomputeUpload: &put, Bundle: transfer("/pre-bundle"), Summary: transfer("/pre-summary")}
+	pre := Config{Stage: Precompute, ExecutionID: "execution-test", Run: experiment.Run{ID: "run-test", Seed: 7, Configuration: experiment.Configuration{Groups: map[string]string{"A": "astar", "B": "kmeans"}}}, TimeoutSeconds: 60, Map: transfer("/map"), PrecomputeUpload: &put, Bundle: transfer("/pre-bundle"), Summary: transfer("/pre-summary")}
 	root := t.TempDir()
 	if err := Prepare(context.Background(), root, pre); err != nil {
 		t.Fatal(err)
@@ -63,6 +63,9 @@ func TestSeparatePodsRestoreImmutablePrecompute(t *testing.T) {
 	if summary.Phase != "Succeeded" || summary.Stage != Precompute || len(original) == 0 {
 		t.Fatal("precompute must publish data before succeeding")
 	}
+	if summary.Run.Configuration.Groups["A"] != "astar" || summary.Run.Configuration.Groups["B"] != "kmeans" {
+		t.Fatal("saved worker summaries must retain group selections")
+	}
 	get := transfer("/data")
 	sim := Config{Stage: Simulation, ExecutionID: pre.ExecutionID, Run: pre.Run, TimeoutSeconds: 60, Map: transfer("/map"), PrecomputeDownload: &get}
 	for i := 0; i < 2; i++ {
@@ -73,6 +76,9 @@ func TestSeparatePodsRestoreImmutablePrecompute(t *testing.T) {
 		loaded, err := Load(next)
 		if err != nil || !loaded.Deadline.Equal(pre.Deadline) || loaded.MapSHA256 != pre.MapSHA256 {
 			t.Fatal("both pods must share the original budget and map identity")
+		}
+		if loaded.Run.Configuration.Groups["A"] != "astar" {
+			t.Fatal("group selections must survive preparation of a separate simulation Pod")
 		}
 		data, err := os.ReadFile(filepath.Join(next, "precompute/ambulanceTeam/data.bin"))
 		if err != nil || string(data) != "original-data" {

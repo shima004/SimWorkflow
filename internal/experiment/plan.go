@@ -39,6 +39,7 @@ type Configuration struct {
 	Resources       Resources            `json:"resources"`
 	ResourcesByRole map[string]Resources `json:"resourcesByRole,omitempty"`
 	Modules         map[string]string    `json:"modules"`
+	Groups          map[string]string    `json:"groups,omitempty"`
 }
 
 type Run struct {
@@ -49,7 +50,7 @@ type Run struct {
 	Seed          int64         `json:"seed"`
 }
 
-// BuildPlan orders axes by key, candidates by input order, then maps and seeds
+// BuildPlan orders group axes, then module axes by key, candidates by input order, then maps and seeds
 // by input order. IDs describe resolved inputs and do not depend on map order.
 // They identify a planned configuration/run, not an execution attempt.
 func BuildPlan(e *Experiment, maxRuns int) (*Plan, error) {
@@ -77,7 +78,7 @@ func BuildPlan(e *Experiment, maxRuns int) (*Plan, error) {
 	}
 	for _, agent := range e.Spec.Agents {
 		count := 0
-		err := expand(agent, func(modules map[string]string) error {
+		err := expand(agent, func(modules, groups map[string]string) error {
 			if len(plan.Runs) > maxRuns-runsPerConfig {
 				return fmt.Errorf("experiment exceeds the limit of %d runs; raise --max-runs explicitly if intended", maxRuns)
 			}
@@ -85,7 +86,7 @@ func BuildPlan(e *Experiment, maxRuns int) (*Plan, error) {
 			if runtime == "" {
 				runtime = "java"
 			}
-			configuration := Configuration{Agent: agent.Name, Runtime: runtime, Image: agent.Image, Resources: agent.Resources, ResourcesByRole: maps.Clone(agent.ResourcesByRole), Modules: maps.Clone(modules)}
+			configuration := Configuration{Agent: agent.Name, Runtime: runtime, Image: agent.Image, Resources: agent.Resources, ResourcesByRole: maps.Clone(agent.ResourcesByRole), Modules: maps.Clone(modules), Groups: maps.Clone(groups)}
 			configuration.ID = "config-" + digest(configuration)
 			count++
 			for _, m := range e.Spec.Conditions.Maps {
@@ -119,15 +120,30 @@ func digest(value any) string {
 	return hex.EncodeToString(sum[:16])
 }
 
-func expand(agent Agent, emit func(map[string]string) error) error {
+func expand(agent Agent, emit func(map[string]string, map[string]string) error) error {
 	modules := maps.Clone(agent.Modules)
 	if modules == nil {
 		modules = map[string]string{}
 	}
 	if agent.Matrix == nil {
-		return emit(modules)
+		return emit(modules, nil)
 	}
-	keys := sortedKeys(agent.Matrix.Modules)
+	type axis struct {
+		group   string
+		options []ModuleSet
+	}
+	axes := []axis{}
+	for _, name := range sortedKeys(agent.Matrix.Groups) {
+		axes = append(axes, axis{group: name, options: agent.Matrix.Groups[name]})
+	}
+	for _, key := range sortedKeys(agent.Matrix.Modules) {
+		options := []ModuleSet{}
+		for _, value := range agent.Matrix.Modules[key] {
+			options = append(options, ModuleSet{Modules: map[string]string{key: value}})
+		}
+		axes = append(axes, axis{options: options})
+	}
+	groups := map[string]string{}
 	var visit func(int) error
 	visit = func(index int) error {
 		// Prune a branch as soon as an exclusion fully matches the assigned
@@ -140,21 +156,35 @@ func expand(agent Agent, emit func(map[string]string) error) error {
 					break
 				}
 			}
+			for key, value := range exclusion.Groups {
+				if groups[key] != value {
+					matched = false
+					break
+				}
+			}
 			if matched {
 				return nil
 			}
 		}
-		if index == len(keys) {
-			return emit(modules)
+		if index == len(axes) {
+			return emit(modules, groups)
 		}
-		key := keys[index]
-		for _, value := range agent.Matrix.Modules[key] {
-			modules[key] = value
+		current := axes[index]
+		for _, option := range current.options {
+			for key, value := range option.Modules {
+				modules[key] = value
+			}
+			if current.group != "" {
+				groups[current.group] = option.Name
+			}
 			if err := visit(index + 1); err != nil {
 				return err
 			}
+			for key := range option.Modules {
+				delete(modules, key)
+			}
+			delete(groups, current.group)
 		}
-		delete(modules, key)
 		return nil
 	}
 	return visit(0)

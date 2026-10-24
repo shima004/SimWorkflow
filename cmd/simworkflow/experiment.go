@@ -84,6 +84,9 @@ func printPlan(out io.Writer, plan *experiment.Plan) error {
 			fmt.Fprintf(w, "  %s (+ centre): %s CPU / %s\n", role, resources.CPU, resources.Memory)
 		}
 		keys := sortedModuleKeys(run.Configuration.Modules)
+		for _, group := range sortedModuleKeys(run.Configuration.Groups) {
+			fmt.Fprintf(w, "  group %s = %s\n", group, run.Configuration.Groups[group])
+		}
 		for _, key := range keys {
 			fmt.Fprintf(w, "  %s = %s\n", key, run.Configuration.Modules[key])
 		}

@@ -87,12 +87,19 @@ type Agent struct {
 }
 
 type Matrix struct {
-	Modules map[string][]string `yaml:"modules" json:"modules"`
-	Exclude []Exclusion         `yaml:"exclude,omitempty" json:"exclude,omitempty"`
+	Modules map[string][]string    `yaml:"modules,omitempty" json:"modules,omitempty"`
+	Groups  map[string][]ModuleSet `yaml:"groups,omitempty" json:"groups,omitempty"`
+	Exclude []Exclusion            `yaml:"exclude,omitempty" json:"exclude,omitempty"`
+}
+
+type ModuleSet struct {
+	Name    string            `yaml:"name" json:"name"`
+	Modules map[string]string `yaml:"modules" json:"modules"`
 }
 
 type Exclusion struct {
-	Modules map[string]string `yaml:"modules" json:"modules"`
+	Modules map[string]string `yaml:"modules,omitempty" json:"modules,omitempty"`
+	Groups  map[string]string `yaml:"groups,omitempty" json:"groups,omitempty"`
 }
 
 type Conditions struct {
@@ -227,8 +234,8 @@ func (e *Experiment) Validate() error {
 		if a.Matrix == nil {
 			continue
 		}
-		if len(a.Matrix.Modules) == 0 {
-			add(path+".matrix.modules", "at least one module axis is required")
+		if len(a.Matrix.Modules) == 0 && len(a.Matrix.Groups) == 0 {
+			add(path+".matrix.modules", "at least one module axis or group is required")
 		}
 		for _, key := range sortedKeys(a.Matrix.Modules) {
 			values := a.Matrix.Modules[key]
@@ -249,14 +256,27 @@ func (e *Experiment) Validate() error {
 				seen[value] = true
 			}
 		}
+		candidates := validateGroups(a, path, add)
 		for j, exclusion := range a.Matrix.Exclude {
 			excludePath := fmt.Sprintf("%s.matrix.exclude[%d].modules", path, j)
-			if len(exclusion.Modules) == 0 {
-				add(excludePath, "at least one module is required")
+			if len(exclusion.Modules) == 0 && len(exclusion.Groups) == 0 {
+				add(excludePath, "at least one module or group is required")
 			}
 			for _, key := range sortedKeys(exclusion.Modules) {
-				if !slices.Contains(a.Matrix.Modules[key], exclusion.Modules[key]) {
+				if !slices.Contains(candidates[key], exclusion.Modules[key]) {
 					add(excludePath+"."+key, "must reference an existing matrix axis and candidate")
+				}
+			}
+			for _, group := range sortedKeys(exclusion.Groups) {
+				found := false
+				for _, option := range a.Matrix.Groups[group] {
+					if option.Name == exclusion.Groups[group] {
+						found = true
+						break
+					}
+				}
+				if !found {
+					add(fmt.Sprintf("%s.matrix.exclude[%d].groups.%s", path, j, group), "must reference an existing group and candidate name")
 				}
 			}
 		}

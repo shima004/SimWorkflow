@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/signal"
 	"strings"
@@ -88,6 +89,15 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 						if err := store.GetJSON(ctx, prefix+"/"+run.ID+"/precompute/summary.json", &summary); err != nil {
 							return fmt.Errorf("result for %s is not available: %w", run.ID, err)
 						}
+					}
+					// Older helpers execute flattened modules correctly but do not
+					// retain newly added selection labels. The saved plan is the
+					// canonical source for those labels, independent of helper age.
+					if len(run.Configuration.Groups) > 0 {
+						if summary.Run.ID != run.ID || summary.Run.Configuration.ID != run.Configuration.ID {
+							return fmt.Errorf("result for %s does not match the saved plan", run.ID)
+						}
+						summary.Run.Configuration.Groups = maps.Clone(run.Configuration.Groups)
 					}
 					summary.WorkflowPhase = snapshot.Status.Phase
 					summaries = append(summaries, summary)
