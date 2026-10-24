@@ -75,6 +75,12 @@ func TestBuildTwoPhaseWorkflow(t *testing.T) {
 		seen := map[string]bool{}
 		for _, container := range containers {
 			container := container.(map[string]any)
+			if container["name"] == "main" {
+				env := container["env"].([]any)[0].(map[string]any)
+				if env["name"] != "SIMWORKFLOW_POD_IP" || env["valueFrom"].(map[string]any)["fieldRef"].(map[string]any)["fieldPath"] != "status.podIP" {
+					t.Fatal("collector must receive the current Pod IP from the Downward API")
+				}
+			}
 			for _, role := range experiment.Roles() {
 				if container["name"] != worker.AgentActor(role) {
 					continue

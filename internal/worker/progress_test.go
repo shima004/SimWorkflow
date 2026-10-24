@@ -61,6 +61,7 @@ func TestProgressTailAppendPartialAndReplacement(t *testing.T) {
 }
 
 func TestProgressReporterPublishesFinalSnapshot(t *testing.T) {
+	t.Setenv("SIMWORKFLOW_POD_IP", "10.42.1.7")
 	var mu sync.Mutex
 	var records []Progress
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +90,7 @@ func TestProgressReporterPublishesFinalSnapshot(t *testing.T) {
 		t.Fatal("no progress published")
 	}
 	last := records[len(records)-1]
-	if last.Phase != "Succeeded" || last.ExecutionID != "execution" || last.RunID != "run-one" || last.CompletedSteps != 5 || last.Score == nil || *last.Score != 7 || last.UpdatedAt.IsZero() {
+	if last.PodIP != "10.42.1.7" || last.Phase != "Succeeded" || last.ExecutionID != "execution" || last.RunID != "run-one" || last.CompletedSteps != 5 || last.Score == nil || *last.Score != 7 || last.UpdatedAt.IsZero() {
 		t.Fatal(last)
 	}
 }

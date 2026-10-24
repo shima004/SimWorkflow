@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 // Progress contains observations only, never the worker's signed capabilities.
 // CompletedSteps counts completed kernel timesteps, not elapsed wall time.
 type Progress struct {
+	PodIP          string    `json:"podIP,omitempty"`
 	ExecutionID    string    `json:"executionId"`
 	RunID          string    `json:"runId"`
 	Stage          string    `json:"stage"`
@@ -95,6 +97,11 @@ type progressReporter struct {
 func startProgress(ctx context.Context, root string, c Config) *progressReporter {
 	p := &progressReporter{root: root, c: c}
 	p.tail.value = Progress{ExecutionID: c.ExecutionID, RunID: c.Run.ID, Stage: c.Stage, Phase: "Running", StartedAt: time.Now().UTC()}
+	if c.Stage == Simulation {
+		if ip := net.ParseIP(os.Getenv("SIMWORKFLOW_POD_IP")); ip != nil {
+			p.tail.value.PodIP = ip.String()
+		}
+	}
 	if c.Stage == Simulation && c.Run.Simulator.Parameters != nil && c.Run.Simulator.Parameters.Timesteps != nil {
 		p.tail.value.TotalSteps = *c.Run.Simulator.Parameters.Timesteps
 	}
