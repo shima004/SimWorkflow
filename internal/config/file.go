@@ -34,6 +34,9 @@ func DefaultPath() (string, error) {
 
 // Pointer fields preserve omitted values and explicit empty/false values.
 type fileConfig struct {
+	Credentials struct {
+		Store *string `yaml:"store"`
+	} `yaml:"credentials"`
 	Argo struct {
 		Server    *string `yaml:"server"`
 		Namespace *string `yaml:"namespace"`
@@ -97,6 +100,7 @@ func parseYAML(data []byte) (map[string]string, error) {
 		key   string
 		value *string
 	}{
+		{"CREDENTIALS_STORE", c.Credentials.Store},
 		{"ARGO_WORKFLOW_SERVER", c.Argo.Server}, {"ARGO_WORKFLOW_NAMESPACE", c.Argo.Namespace}, {"ARGO_WORKFLOW_TOKEN", c.Argo.Token},
 		{"S3_ENDPOINT", c.S3.Endpoint}, {"S3_REGION", c.S3.Region}, {"S3_BUCKET", c.S3.Bucket}, {"S3_ACCESS_KEY_ID", c.S3.AccessKeyID}, {"S3_SECRET_ACCESS_KEY", c.S3.SecretAccessKey}, {"S3_SESSION_TOKEN", c.S3.SessionToken},
 		{"REGISTRY_URL", c.Registry.URL}, {"REGISTRY_USERNAME", c.Registry.Username}, {"REGISTRY_PASSWORD", c.Registry.Password}, {"REGISTRY_TOKEN", c.Registry.Token},

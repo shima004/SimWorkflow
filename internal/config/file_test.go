@@ -10,7 +10,9 @@ import (
 )
 
 func TestYAMLSettingsAndEnvironmentOverrides(t *testing.T) {
-	values, err := parseYAML([]byte(`argoWorkflow:
+	values, err := parseYAML([]byte(`credentials:
+  store: environment
+argoWorkflow:
   server: https://argo.example.com
   namespace: my-namespace
   token: file-token
@@ -33,6 +35,9 @@ httpTimeout: 12s
 `))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if values["CREDENTIALS_STORE"] != "environment" {
+		t.Fatal("credential store mode must be mapped from YAML")
 	}
 	c, err := Load(lookup(values))
 	if err != nil {
@@ -97,9 +102,12 @@ func TestDefaultConfigPathAndPrivateInitialization(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, key := range []string{"ARGO_WORKFLOW_TOKEN", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_SESSION_TOKEN", "REGISTRY_PASSWORD", "REGISTRY_TOKEN"} {
-		if value, ok := values[key]; !ok || value != "" {
-			t.Fatal("template credentials must be empty")
+		if _, ok := values[key]; ok {
+			t.Fatal("template must not contain credential fields")
 		}
+	}
+	if values["CREDENTIALS_STORE"] != "keyring" {
+		t.Fatal("new configurations must use the OS keyring")
 	}
 	before, err := os.ReadFile(path)
 	if err != nil {

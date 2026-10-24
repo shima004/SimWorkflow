@@ -10,6 +10,7 @@ import (
 
 	"simworkflow/internal/config"
 	"simworkflow/internal/connections"
+	"simworkflow/internal/credentials"
 )
 
 var (
@@ -25,6 +26,10 @@ func main() {
 }
 
 func run(args []string, lookup func(string) (string, bool), out, errOut io.Writer) error {
+	return runWithCredentials(args, lookup, out, errOut, credentials.New(), func(label string) (string, error) { return readCredential(label, errOut) })
+}
+
+func runWithCredentials(args []string, lookup func(string) (string, bool), out, errOut io.Writer, store *credentials.Store, prompt func(string) (string, error)) error {
 	if len(args) > 0 && args[0] == "worker" {
 		return runWorker(args[1:], errOut)
 	}
@@ -36,6 +41,7 @@ func run(args []string, lookup func(string) (string, bool), out, errOut io.Write
 	flags.Usage = func() {
 		fmt.Fprintln(errOut, "Usage: simworkflow [--config FILE] [-env-file .env] config <init|path|check> [options]\n       simworkflow [--config FILE] [-env-file .env] experiment <validate|plan|modules|render|submit|status|results|download> [options]\n       simworkflow [--config FILE] [-env-file .env] map <register|list|inspect> [options]")
 		flags.PrintDefaults()
+		fmt.Fprintln(errOut, "       simworkflow credentials <set|status|delete> [argo|s3|registry] [options]")
 	}
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -87,18 +93,18 @@ func run(args []string, lookup func(string) (string, bool), out, errOut io.Write
 			if err := config.Init(path); err != nil {
 				return err
 			}
-			_, err = fmt.Fprintf(out, "Created %s; edit connection settings and credentials, then run config check.\n", path)
+			_, err = fmt.Fprintf(out, "Created %s; edit connection settings, register credentials with credentials set, then run config check.\n", path)
 		} else {
 			_, err = fmt.Fprintln(out, path)
 		}
 		return err
 	}
-	loadConfig := func() (config.Config, error) {
+	loadSettings := func() (func(string) (string, bool), error) {
 		get := lookup
 		if *envFile != "" {
 			values, err := config.ReadEnvFile(*envFile)
 			if err != nil && !(errors.Is(err, os.ErrNotExist) && !explicitEnvFile) {
-				return config.Config{}, err
+				return nil, err
 			}
 			get = config.WithFallback(get, values)
 		}
@@ -107,9 +113,25 @@ func run(args []string, lookup func(string) (string, bool), out, errOut io.Write
 		if pathErr == nil && path != "" {
 			values, err := config.ReadYAML(path)
 			if err != nil && !(errors.Is(err, os.ErrNotExist) && !explicitConfigFile) {
-				return config.Config{}, err
+				return nil, err
 			}
 			get = config.WithFallback(get, values)
+		}
+		return get, nil
+	}
+	if flags.NArg() >= 1 && flags.Arg(0) == "credentials" {
+		return runCredentials(flags.Args()[1:], loadSettings, store, prompt, out, errOut)
+	}
+	loadConfig := func() (config.Config, error) {
+		get, err := loadSettings()
+		if err != nil {
+			return config.Config{}, err
+		}
+		if mode, _ := get("CREDENTIALS_STORE"); mode == "keyring" {
+			get, err = store.Resolve(get, lookup)
+			if err != nil {
+				return config.Config{}, err
+			}
 		}
 		return config.Load(get)
 	}

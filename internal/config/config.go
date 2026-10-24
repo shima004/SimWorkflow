@@ -33,11 +33,12 @@ type Registry struct {
 }
 
 type Config struct {
-	SimScopeURL string
-	Argo        Argo
-	S3          S3
-	Registry    Registry
-	HTTPTimeout time.Duration
+	CredentialStore string
+	SimScopeURL     string
+	Argo            Argo
+	S3              S3
+	Registry        Registry
+	HTTPTimeout     time.Duration
 }
 
 // Load takes an environment lookup so callers can layer .env values underneath
@@ -50,14 +51,18 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 		return fallback
 	}
 	c := Config{
-		SimScopeURL: get("SIMSCOPE_URL", ""),
-		Argo:        Argo{Server: get("ARGO_WORKFLOW_SERVER", ""), Namespace: get("ARGO_WORKFLOW_NAMESPACE", "argo"), Token: get("ARGO_WORKFLOW_TOKEN", "")},
+		CredentialStore: get("CREDENTIALS_STORE", "environment"),
+		SimScopeURL:     get("SIMSCOPE_URL", ""),
+		Argo:            Argo{Server: get("ARGO_WORKFLOW_SERVER", ""), Namespace: get("ARGO_WORKFLOW_NAMESPACE", "argo"), Token: get("ARGO_WORKFLOW_TOKEN", "")},
 		S3: S3{
 			Endpoint: get("S3_ENDPOINT", ""), Region: get("S3_REGION", "us-east-1"),
 			Bucket: get("S3_BUCKET", ""), AccessKeyID: get("S3_ACCESS_KEY_ID", ""),
 			SecretAccessKey: get("S3_SECRET_ACCESS_KEY", ""), SessionToken: get("S3_SESSION_TOKEN", ""),
 		},
 		Registry: Registry{URL: get("REGISTRY_URL", ""), Username: get("REGISTRY_USERNAME", ""), Password: get("REGISTRY_PASSWORD", ""), Token: get("REGISTRY_TOKEN", "")},
+	}
+	if c.CredentialStore != "keyring" && c.CredentialStore != "environment" {
+		return Config{}, fmt.Errorf("CREDENTIALS_STORE must be keyring or environment")
 	}
 	for _, entry := range []struct{ key, value string }{
 		{"ARGO_WORKFLOW_SERVER", c.Argo.Server}, {"S3_ENDPOINT", c.S3.Endpoint}, {"REGISTRY_URL", c.Registry.URL}, {"SIMSCOPE_URL", c.SimScopeURL},

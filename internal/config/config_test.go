@@ -29,6 +29,7 @@ func TestLoad(t *testing.T) {
 		t.Fatal("unexpected defaults")
 	}
 	for _, tc := range []struct{ key, value string }{
+		{"CREDENTIALS_STORE", "invalid"},
 		{"ARGO_WORKFLOW_SERVER", "https://user:secret-value@argo.example.com"},
 		{"S3_ENDPOINT", "https://s3.example.com?token=secret-value"},
 		{"REGISTRY_URL", "ftp://registry.example.com"},
