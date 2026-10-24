@@ -2,12 +2,12 @@
 [project]
 name = "rescue-agent-python"
 version = "0.1.0"
-requires-python = ">=3.13,<3.14"
+requires-python = ">=3.14,<3.15"
 dependencies = ["adf-core-python", "rcrscore"]
 
 [tool.uv]
 package = false
 
 [tool.uv.sources]
-adf-core-python = { git = "https://github.com/adf-python/adf-core-python", rev = "c5eaf8d2dae07c0bb1a3227efca9effd4fca110b" }
-rcrscore = { git = "https://github.com/adf-python/rcrs-core-python", tag = "v0.2.3" }
+adf-core-python = { git = "https://github.com/adf-python/adf-core-python", rev = "9b08b347ab42a282822edd3322454b46e552cadf" }
+rcrscore = { git = "https://github.com/adf-python/rcrs-core-python", rev = "582b22f2d0e6667f813d494a3b6110343e780c2c" }

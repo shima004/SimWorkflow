@@ -1,7 +1,7 @@
 # Pythonエージェントのコンテナテンプレート
 
-[adf-sample-agent-python](https://github.com/adf-python/adf-sample-agent-python) をベースにしたエージェント用です。
-現在の [ADF Coreの依存設定](https://github.com/adf-python/adf-core-python/blob/main/pyproject.toml) に合わせ、Python 3.13を使用します。
+ADF互換のPythonエージェント用です。uv版は [rescue-python](https://github.com/shima004/rescue-python) の実行確認済み構成を基準にしています。pip版は従来の [adf-sample-agent-python](https://github.com/adf-python/adf-sample-agent-python) 向けです。
+uv版は、実行確認済みのPython 3.14・ADF Core v0.2.14に統一しています。pip版は従来のPython 3.13向けです。
 このテンプレート自体はエージェントのソースコードを含みません。Java連携を使わないPythonエージェントを対象とします。
 
 ## pipを使う場合
@@ -33,28 +33,28 @@ docker build --build-arg RCRS_CORE_REF=v0.2.3 \
 ## uvを使う場合
 
 `pyproject.toml` と `uv.lock` で依存関係を管理する例です。
-Python 3.13とuvが入った公式イメージ `ghcr.io/astral-sh/uv:0.13.5-python3.13-trixie-slim` をベースに使い、`uv sync --locked` で依存をインストールします。
+共通の `Dockerfile.uv` を使用します。Python 3.14とuv 0.13.5が入った公式イメージ `ghcr.io/astral-sh/uv:0.13.5-python3.14-trixie-slim` で `uv sync --locked` を実行し、作成した仮想環境を `python:3.14-slim-trixie` の実行用イメージへ配置します。ビルド側と実行側でPython・Debianの版をそろえています。
 使用できるイメージとタグは [公式のDocker連携手順](https://docs.astral.sh/uv/guides/integration/docker/) を参照してください。
 
 1. `Dockerfile.uv` と `.dockerignore` をエージェントリポジトリのルートへコピーします。
-2. `pyproject.uv.toml` を同じ場所に `pyproject.toml` という名前でコピーします。既に `pyproject.toml` がある場合は、必要な依存とGitソース設定を既存ファイルに統合します。
+2. 新規プロジェクトでは `pyproject.uv.toml` を `pyproject.toml` という名前でコピーします。既存の `pyproject.toml`・`uv.lock` がある場合はそれらを使用し、上書きしません。Python 3.14に対応していることを確認し、独自依存も保持してください。
 3. 比較したいモジュールを `src` 以下に追加します。
 4. 以下のコマンドでロックファイルを生成し、イメージをビルド・登録します。
 
 ```sh
-uv lock --python 3.13
-docker build -f Dockerfile.uv \
+uv lock --python 3.14
+docker build --platform linux/amd64 -f Dockerfile.uv \
   -t registry.example.com/my-team/agent-python:v1 .
 docker login registry.example.com
 docker push registry.example.com/my-team/agent-python:v1
 ```
 
-`uv lock` は依存関係とPython 3.13の取得にネットワークを使う場合があります。
-生成した `uv.lock` と `pyproject.toml` はエージェントリポジトリで管理してください。
+`uv lock` は依存関係とPython 3.14の取得にネットワークを使う場合があります。
+生成した `uv.lock` と `pyproject.toml` はエージェントリポジトリで管理してください。既存のロックをそのまま使う場合は `uv lock --check --python 3.14` で整合性だけを確認できます。
 テンプレートにはユーザーの依存構成に応じて作成する `uv.lock` を同梱していません。
 ロックファイルが存在しない場合や `pyproject.toml` と整合しない場合はDockerビルドが失敗します。
 
-テンプレートの `pyproject.uv.toml` は、確認済みのADF Coreコミットと `rcrscore` のGitソースを指定しています。
+テンプレートの `pyproject.uv.toml` は、確認済みのADF Core v0.2.14と `rcrscore` v0.2.3をコミットで固定しています。
 Gitソースはエージェント側の `[tool.uv.sources]` に明示します。依存パッケージ自身のGitソース設定に頼らない形です。
 独自の追加依存も `pyproject.toml` で管理します。このDockerfileでは `requirements.txt` はインストールに使いません。
 
@@ -79,6 +79,24 @@ Docker内ではビルド時に `/app/.venv` へインストールし、起動時
 
 詳細は [uvの依存管理](https://docs.astral.sh/uv/concepts/projects/dependencies/) を参照してください。
 
+uv版の標準レイアウトは次のとおりです。追加のデータディレクトリが必要な場合は `Dockerfile.uv` の実行ステージに `COPY` を追加してください。起動時に使う `python` は `/app/.venv/bin/python` です。
+
+```text
+agent/
+├── Dockerfile.uv
+├── .dockerignore
+├── pyproject.toml
+├── uv.lock
+├── main.py
+├── config/
+│   ├── launcher.yaml
+│   └── module.yaml
+└── src/
+```
+
+出典ラベルを設定したい場合はビルド時に `--build-arg AGENT_SOURCE=https://github.com/OWNER/AGENT --build-arg AGENT_REVISION=COMMIT` を追加します。
+[rescue-pythonの検証例](../../../examples/validation/rescue-python-vc/README.md) もこの `Dockerfile.uv` を使用します。
+
 ## コンテナの取り決め
 
 | 項目 | パス・内容 |
@@ -87,11 +105,10 @@ Docker内ではビルド時に `/app/.venv` へインストールし、起動時
 | 元のモジュール設定 | `/app/config/module.yaml` |
 | 起動設定 | `/app/config/launcher.yaml` |
 | 起動処理 | `python main.py` |
-| 実験用設定の配置先 | `/app/config/module.yaml` |
+| ワーカーが生成する実験用設定 | `/work/modules/<role>/module.yaml` |
 | シミュレータ接続先の引数 | `--host simulator --port 27931` |
 
-サンプルの `launcher.yaml` の `adf.agent.moduleconfig.filename` が `config/module.yaml` であることを前提にします。
-その参照先をカスタマイズした場合は、実験用設定の配置先も合わせて変更します。
+ワーカーは `/app/config/module.yaml` を元に種類別の設定を生成し、`launcher.yaml` の `adf.agent.moduleconfig.filename` を生成ファイルへ変更します。元設定はこの固定パスに配置してください。
 モジュール設定の実装パスは、コンテナ内でインポートできる必要があります。
 `matrix` の候補をすべてイメージに含めれば、組み合わせごとの再ビルドは不要です。コードを変更した際は新しいイメージを作ります。
 
@@ -115,5 +132,5 @@ docker run --rm \
 Javaモジュールの利用にはJVMやゲートウェイなどの追加設定が必要で、このテンプレートには含めていません。
 
 プラットフォームは元設定へ選択したモジュールを反映し、`launcher.yaml` の参照先を実験専用の生成ファイルへ変更します。事前計算データも実験専用領域に保持し、本実行へ引き継ぎます。[実行手順](../../../docs/execution.md) を参照してください。
-uv版は公開サンプルで依存解決・Dockerビルド・ヘルプ起動に成功し、生成した設定をADFの `ModuleConfig` で読み込んで基準実装をインポートできることを確認しています。
-uv版ではArgo上の事前計算、データを読み込む本実行、結果のS3保存も確認しています。pip版のDockerビルドは未確認です。[検証記録](../../../docs/validation.md)を参照してください。
+現行uv版は `rescue-python` の既存ロックと、新規プロジェクト用ひな形から生成したロックの両方でDockerビルド・ヘルプ起動・A*／D* Lite／クラスタリングのインポートを確認しています。ロックが古い場合のビルド拒否も確認済みです。
+Argo上の事前計算・本実行・S3保存の検証は従来の実験イメージの記録で、今回の統一後にArgo実験は再実行していません。pip版のDockerビルドも未確認です。[検証記録](../../../docs/validation.md)を参照してください。

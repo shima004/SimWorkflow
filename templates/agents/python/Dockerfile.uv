@@ -1,11 +1,10 @@
-# Copy alongside main.py, pyproject.toml, uv.lock, and .dockerignore.
-FROM ghcr.io/astral-sh/uv:0.13.5-python3.13-trixie-slim
+# Shared template for uv agents. Copy beside main.py, pyproject.toml and uv.lock.
+FROM ghcr.io/astral-sh/uv:0.13.5-python3.14-trixie-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never \
-    UV_LINK_MODE=copy \
-    PATH="/app/.venv/bin:$PATH"
+    UV_LINK_MODE=copy
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates \
@@ -17,7 +16,23 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project --no-cache
 
-COPY . .
+FROM python:3.14-slim-trixie
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/app/.venv/bin:$PATH"
+
+ARG AGENT_SOURCE
+ARG AGENT_REVISION
+LABEL org.opencontainers.image.source="$AGENT_SOURCE" \
+      org.opencontainers.image.revision="$AGENT_REVISION"
+
+WORKDIR /app
+
+COPY --from=builder /app/.venv ./.venv
+COPY main.py ./
+COPY config/ ./config/
+COPY src/ ./src/
 
 # Run the installed environment directly: no resolution or sync at startup.
 ENTRYPOINT ["/app/.venv/bin/python", "main.py"]
