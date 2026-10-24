@@ -117,25 +117,6 @@ docker build --build-arg RCRS_CORE_REF=v0.2.3 \
 モジュール設定の実装パスは、コンテナ内でインポートできる必要があります。
 `matrix` の候補をすべてイメージに含めれば、組み合わせごとの再ビルドは不要です。コードを変更した際は新しいイメージを作ります。
 
-## 手動で設定ファイルを渡す例
-
-シミュレータが、Dockerネットワーク `rescue-network` 内の `simulator:27931` で起動している想定です。
-手元の `module.yaml` を元設定からコピーし、比較したいモジュールの値を変更してから実行します。
-
-```sh
-cp config/module.yaml module.yaml
-# module.yaml を編集
-docker run --rm \
-  --network rescue-network \
-  --mount "type=bind,src=$PWD/module.yaml,dst=/app/config/module.yaml,readonly" \
-  registry.example.com/my-team/agent-python:v1 \
-  --host simulator --port 27931
-```
-
-設定ファイル1個をマウントすることで、`launcher.yaml` など他の設定ファイルを引き続き利用できます。
-エージェント数などは元の `launcher.yaml`、または `-a`・`-f`・`-p` などの起動引数で指定します。
-Javaモジュールの利用にはJVMやゲートウェイなどの追加設定が必要で、このテンプレートには含めていません。
-
 プラットフォームは元設定へ選択したモジュールを反映し、`launcher.yaml` の参照先を実験専用の生成ファイルへ変更します。事前計算データも実験専用領域に保持し、本実行へ引き継ぎます。[実行手順](../../../docs/execution.md) を参照してください。
 現行のuvテンプレートは `rescue-python` の既存ロックと、新規プロジェクト用ひな形から生成したロックの両方でDockerビルド・ヘルプ起動・A*／D* Lite／クラスタリングのインポートを確認しています。ロックが古い場合のビルド拒否も確認済みです。
 Argo上の事前計算・本実行・S3保存の検証は従来の実験イメージの記録で、今回の統一後にArgo実験は再実行していません。pipテンプレートのDockerビルドも未確認です。[検証記録](../../../docs/validation.md)を参照してください。

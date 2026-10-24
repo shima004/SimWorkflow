@@ -36,21 +36,6 @@ docker push registry.example.com/my-team/agent-java:v1
 モジュール設定には、ロードできるクラス名を指定します。
 `matrix` の候補をすべてイメージに含めれば、組み合わせごとの再ビルドは不要です。コードを変更した際は新しいイメージを作ります。
 
-## 手動で設定ファイルを渡す例
-
-シミュレータが、Dockerネットワーク `rescue-network` 内の `simulator:27931` で起動している想定です。
-手元の `module.cfg` を元設定からコピーし、比較したいモジュールの値を変更してから実行します。
-
-```sh
-cp config/module.cfg module.cfg
-# module.cfg を編集
-docker run --rm \
-  --network rescue-network \
-  --mount "type=bind,src=$PWD/module.cfg,dst=/experiment/module.cfg,readonly" \
-  registry.example.com/my-team/agent-java:v1 \
-  -s simulator:27931 -mc /experiment/module.cfg
-```
-
 プラットフォームは元設定へ選択されたモジュールを反映し、`-mc` で指定して起動します。事前計算データは実験専用領域に保持し、本実行へ引き継ぎます。[実行手順](../../../docs/execution.md) を参照してください。
 CPU・メモリの制限とJVMのヒープ設定は別です。元の `build.gradle` の `launch` タスクは `maxHeapSize = '2048m'` を指定しているため、変更が必要ならエージェント側のビルド設定も調整します。
 
