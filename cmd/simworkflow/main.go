@@ -43,6 +43,7 @@ func runWithCredentials(args []string, lookup func(string) (string, bool), out, 
 		flags.PrintDefaults()
 		fmt.Fprintln(errOut, "       simworkflow credentials <set|status|delete> [argo|s3|registry] [options]")
 		fmt.Fprintln(errOut, "       simworkflow [--config FILE] [--env-file FILE] agent build [options] [CONTEXT]")
+		fmt.Fprintln(errOut, "       simworkflow self-update [--check] [--prerelease] [--version TAG]")
 	}
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -53,6 +54,9 @@ func runWithCredentials(args []string, lookup func(string) (string, bool), out, 
 	if *showVersion {
 		_, err := fmt.Fprintf(out, "simworkflow %s (commit %s)\n", version, commit)
 		return err
+	}
+	if flags.NArg() >= 1 && flags.Arg(0) == "self-update" {
+		return runSelfUpdate(flags.Args()[1:], out, errOut)
 	}
 	explicitEnvFile := false
 	explicitConfigFile := false
