@@ -109,7 +109,7 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 				phase = "Pending"
 			}
 			elapsed := workflowElapsed(snapshot.Status.StartedAt, snapshot.Status.FinishedAt, time.Now(), phase)
-			if _, err := fmt.Fprintf(out, "%s: %s  Elapsed: %s\n", snapshot.Metadata.Name, phase, elapsed); err != nil {
+			if _, err := fmt.Fprintf(out, "%s: %s  Workflow Elapsed: %s\n", snapshot.Metadata.Name, phase, elapsed); err != nil {
 				return err
 			}
 			retryProgress, err := writeRunProgress(ctx, storage.New(c), snapshot, out)

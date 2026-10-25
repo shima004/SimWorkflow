@@ -216,3 +216,29 @@ func TestWorkflowElapsed(t *testing.T) {
 		})
 	}
 }
+
+func TestIndividualRunElapsedTicksWithoutFetching(t *testing.T) {
+	start := time.Date(2026, 10, 25, 1, 0, 0, 0, time.UTC)
+	m := testProgressModel()
+	m.width = 180
+	m.fetch = func() tea.Msg { t.Fatal("clock must not fetch remote progress"); return nil }
+	m.frame.progressRows = []runProgressRow{
+		{runID: "run-a", stage: "simulation", phase: "Running", startedAt: start},
+		{runID: "run-b", stage: "simulation", phase: "Succeeded", startedAt: start, finishedAt: start.Add(20 * time.Second)},
+	}
+	m.frame.updateRows(start.Add(time.Minute))
+	m.selected = 1
+	for _, seconds := range []int{61, 62} {
+		var cmd tea.Cmd
+		m, cmd = updateProgress(m, progressClockTick(start.Add(time.Duration(seconds)*time.Second)))
+		if cmd == nil {
+			t.Fatal("running workflow must keep updating the clock")
+		}
+		if _, ok := cmd().(progressClockTick); !ok {
+			t.Fatal("must schedule a clock tick, not a remote fetch")
+		}
+		if m.selected != 1 || !strings.Contains(m.frame.rows[0], fmt.Sprintf("1m%ds", seconds-60)) || !strings.Contains(m.frame.rows[1], "20s") || !strings.Contains(m.View(), "ELAPSED") {
+			t.Fatalf("individual elapsed times must tick independently and preserve selection: %s", m.View())
+		}
+	}
+}

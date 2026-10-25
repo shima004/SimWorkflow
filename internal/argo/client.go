@@ -40,6 +40,7 @@ type Node struct {
 	TemplateName string    `json:"templateName"`
 	Type         string    `json:"type"`
 	StartedAt    time.Time `json:"startedAt"`
+	FinishedAt   time.Time `json:"finishedAt"`
 	DisplayName  string    `json:"displayName"`
 	Phase        string    `json:"phase"`
 	Message      string    `json:"message"`

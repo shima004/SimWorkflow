@@ -41,6 +41,57 @@ func TestStatusElapsedFromArgoTimestamps(t *testing.T) {
 	}
 }
 
+func TestIndividualRunElapsedUsesCurrentStageAndAttempt(t *testing.T) {
+	plan := detailsPlan(t)
+	run := plan.Runs[0]
+	start := time.Date(2026, 10, 25, 1, 0, 0, 0, time.UTC)
+	store := progressTestStore(func(r *http.Request) (*http.Response, error) {
+		return progressResponse(r, nil, 404), nil
+	})
+	for _, tc := range []struct {
+		name, wantStage, wantElapsed string
+		nodes                        map[string]argo.Node
+	}{
+		{"not scheduled", "-", "-", nil},
+		{"precompute", "precompute", "5m0s", map[string]argo.Node{
+			"pre": {Type: "Pod", TemplateName: run.ID + "-precompute", Phase: "Running", StartedAt: start},
+		}},
+		{"simulation excludes precompute", "simulation", "1m0s", map[string]argo.Node{
+			"pre": {Type: "Pod", TemplateName: run.ID + "-precompute", Phase: "Succeeded", StartedAt: start, FinishedAt: start.Add(3 * time.Minute)},
+			"sim": {Type: "Pod", TemplateName: run.ID + "-simulation", Phase: "Running", StartedAt: start.Add(4 * time.Minute)},
+		}},
+		{"completed", "simulation", "30s", map[string]argo.Node{
+			"sim": {Type: "Pod", TemplateName: run.ID + "-simulation", Phase: "Succeeded", StartedAt: start.Add(time.Minute), FinishedAt: start.Add(90 * time.Second)},
+		}},
+		{"failed", "simulation", "20s", map[string]argo.Node{
+			"sim": {Type: "Pod", TemplateName: run.ID + "-simulation", Phase: "Failed", StartedAt: start.Add(time.Minute), FinishedAt: start.Add(80 * time.Second)},
+		}},
+		{"retry starts fresh", "simulation", "10s", map[string]argo.Node{
+			"sim0": {Type: "Pod", TemplateName: run.ID + "-simulation", DisplayName: "simulation(0)", Phase: "Failed", StartedAt: start, FinishedAt: start.Add(time.Minute)},
+			"sim1": {Type: "Pod", TemplateName: run.ID + "-simulation", DisplayName: "simulation(1)", Phase: "Running", StartedAt: start.Add(290 * time.Second)},
+		}},
+		{"pending retry", "simulation", "-", map[string]argo.Node{
+			"sim0": {Type: "Pod", TemplateName: run.ID + "-simulation", DisplayName: "simulation(0)", Phase: "Failed", StartedAt: start, FinishedAt: start.Add(time.Minute)},
+			"sim1": {Type: "Pod", TemplateName: run.ID + "-simulation", DisplayName: "simulation(1)", Phase: "Pending"},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshot := progressSnapshot(plan)
+			snapshot.Status.Phase, snapshot.Status.Nodes = "Running", tc.nodes
+			row := readRunProgress(context.Background(), store, snapshot, run)
+			var out bytes.Buffer
+			if _, err := writeProgressRows(&out, []runProgressRow{row}, start.Add(5*time.Minute)); err != nil {
+				t.Fatal(err)
+			}
+			lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+			cells := strings.Fields(lines[1])
+			if !strings.Contains(lines[0], "ELAPSED") || cells[3] != tc.wantStage || cells[5] != tc.wantElapsed {
+				t.Fatalf("wrong per-stage elapsed time: %s", out.String())
+			}
+		})
+	}
+}
+
 func TestRunProgressUsesCurrentAttemptAndHandlesOlderWorkers(t *testing.T) {
 	e, err := experiment.ReadFile("../../examples/experiments/precompute-baseline.yaml")
 	if err != nil {

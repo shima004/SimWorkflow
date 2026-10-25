@@ -29,6 +29,7 @@ type progressFrame struct {
 	name, phase, columns  string
 	startedAt, finishedAt time.Time
 	rows                  []string
+	progressRows          []runProgressRow
 	err                   error
 	retryProgress         bool
 	plan                  *experiment.Plan
@@ -65,9 +66,9 @@ func loadProgress(ctx context.Context, c config.Config, name string) tea.Cmd {
 		if err != nil {
 			return progressFrame{err: err}
 		}
-		var body strings.Builder
 		prefix := snapshot.Metadata.Annotations["simworkflow.io/result-prefix"]
 		var plan *experiment.Plan
+		var rows []runProgressRow
 		retryProgress := false
 		if strings.HasPrefix(prefix, "experiments/") && !strings.Contains(prefix, "..") {
 			readCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
@@ -77,9 +78,9 @@ func loadProgress(ctx context.Context, c config.Config, name string) tea.Cmd {
 			if err != nil {
 				return progressFrame{err: err}
 			}
-			retryProgress, err = writePlannedRunProgress(ctx, store, snapshot, plan, &body)
-			if err != nil {
-				return progressFrame{err: err}
+			rows = readPlannedRunProgress(ctx, store, snapshot, plan)
+			for _, row := range rows {
+				retryProgress = retryProgress || row.retry
 			}
 		}
 		phase := snapshot.Status.Phase
@@ -87,6 +88,7 @@ func loadProgress(ctx context.Context, c config.Config, name string) tea.Cmd {
 			phase = "Pending"
 		}
 		frame := progressFrame{name: screenText(snapshot.Metadata.Name), phase: screenText(phase), plan: plan, retryProgress: retryProgress, startedAt: snapshot.Status.StartedAt, finishedAt: snapshot.Status.FinishedAt}
+		frame.progressRows = rows
 		if plan != nil {
 			for _, run := range plan.Runs {
 				if statusRunID.MatchString(run.ID) {
@@ -94,14 +96,20 @@ func loadProgress(ctx context.Context, c config.Config, name string) tea.Cmd {
 				}
 			}
 		}
-		lines := strings.Split(strings.TrimSuffix(screenText(body.String()), "\n"), "\n")
-		if strings.HasPrefix(lines[0], "RUN ") {
-			frame.columns, frame.rows = lines[0], lines[1:]
-		} else {
-			frame.rows = lines
-		}
+		frame.updateRows(time.Now())
 		return frame
 	}
+}
+
+// Reformat cached rows when the local clock ticks; no extra Argo/S3 requests.
+func (f *progressFrame) updateRows(now time.Time) {
+	if f.progressRows == nil {
+		return
+	}
+	var body strings.Builder
+	writeProgressRows(&body, f.progressRows, now)
+	lines := strings.Split(strings.TrimSuffix(screenText(body.String()), "\n"), "\n")
+	f.columns, f.rows = lines[0], lines[1:]
 }
 
 // Keep remote values from injecting terminal controls. Tabwriter has already
@@ -180,6 +188,7 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case progressClockTick:
 		m.now = time.Time(msg)
+		m.frame.updateRows(m.now)
 		if !m.done {
 			next = progressClock()
 		}
@@ -318,7 +327,7 @@ func (m progressModel) View() string {
 		columns = "Settings: " + m.detailRunID
 	}
 	rows := m.bodyRows()
-	lines := []string{fmt.Sprintf("Workflow: %s  %s", m.frame.name, m.frame.phase), "Elapsed: " + elapsed + " | " + status, columns}
+	lines := []string{fmt.Sprintf("Workflow: %s  %s", m.frame.name, m.frame.phase), "Workflow Elapsed: " + elapsed + " | " + status, columns}
 	for i := 0; i < m.bodyHeight(); i++ {
 		line := ""
 		if m.y+i < len(rows) {

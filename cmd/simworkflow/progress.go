@@ -48,6 +48,10 @@ func writeRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.
 }
 
 func writePlannedRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.Snapshot, plan *experiment.Plan, out io.Writer) (bool, error) {
+	return writeProgressRows(out, readPlannedRunProgress(ctx, store, snapshot, plan), time.Now())
+}
+
+func readPlannedRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.Snapshot, plan *experiment.Plan) []runProgressRow {
 	// Each row has independent request deadlines. A slow object must not
 	// consume the budget of later runs; bound S3 concurrency and retain plan order.
 	rows := make([]runProgressRow, len(plan.Runs))
@@ -69,12 +73,17 @@ func writePlannedRunProgress(ctx context.Context, store *storage.Store, snapshot
 	}
 	close(jobs)
 	wg.Wait()
+	return rows
+}
+
+func writeProgressRows(out io.Writer, rows []runProgressRow, now time.Time) (bool, error) {
 	writer := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(writer, "RUN\tMAP\tSEED\tSTAGE\tSTATE\tSTEP\tSCORE\tUPDATED")
+	fmt.Fprintln(writer, "RUN\tMAP\tSEED\tSTAGE\tSTATE\tELAPSED\tSTEP\tSCORE\tUPDATED")
 	retry := false
 	for _, row := range rows {
-		if row.line != "" {
-			fmt.Fprint(writer, row.line)
+		if row.runID != "" {
+			elapsed := workflowElapsed(row.startedAt, row.finishedAt, now, row.phase)
+			fmt.Fprintf(writer, "%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n", row.runID, row.mapName, row.seed, row.stage, row.phase, elapsed, row.steps, row.score, row.updated)
 		}
 		retry = retry || row.retry
 	}
@@ -82,8 +91,10 @@ func writePlannedRunProgress(ctx context.Context, store *storage.Store, snapshot
 }
 
 type runProgressRow struct {
-	line  string
-	retry bool
+	runID, mapName, stage, phase, steps, score, updated string
+	seed                                                int64
+	startedAt, finishedAt                               time.Time
+	retry                                               bool
 }
 
 func readProgressJSON(ctx context.Context, store *storage.Store, key string, value any) error {
@@ -96,12 +107,12 @@ func readRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.S
 	prefix := snapshot.Metadata.Annotations["simworkflow.io/result-prefix"]
 	retry := false
 	stage, phase := "-", "Pending"
-	var started time.Time
+	var started, finished time.Time
 	// Prefer simulation once scheduled. Within a stage, choose the newest
 	// Pod so a failed first attempt does not hide the retry's state.
 	for _, candidate := range []string{worker.Precompute, worker.Simulation} {
 		if node, found := latestStageNode(snapshot, run.ID, candidate); found {
-			stage, phase, started = candidate, node.Phase, node.StartedAt
+			stage, phase, started, finished = candidate, node.Phase, node.StartedAt, node.FinishedAt
 		}
 	}
 	steps, score, updated := "-", "-", "-"
@@ -147,7 +158,7 @@ func readRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.S
 	if (snapshot.Status.Phase == "Failed" || snapshot.Status.Phase == "Error") && phase == "Pending" {
 		phase = "Not run"
 	}
-	return runProgressRow{line: fmt.Sprintf("%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\n", run.ID, run.Map.Name, run.Seed, stage, phase, steps, score, updated), retry: retry}
+	return runProgressRow{runID: run.ID, mapName: run.Map.Name, seed: run.Seed, stage: stage, phase: phase, steps: steps, score: score, updated: updated, startedAt: started, finishedAt: finished, retry: retry}
 }
 
 // Prefer the highest retry attempt, including Pending retries with no start time.
