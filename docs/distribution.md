@@ -30,7 +30,6 @@ CLIからArgo・S3・レジストリへ、実行PodからS3と各イメージへ
 
 S3バケットを作成し、[マップ](maps.md) を登録します。同じマップバージョンへの並行登録にはS3の条件付きPUTが正しく動作することが必要です。検証環境で確認した制約はマップのガイドに記載しています。
 
-`examples/validation/` にある内部レジストリの参照や実験名は検証時の記録です。別環境へそのまま送信せず、利用できるイメージ・マップへ置き換えてください。
 
 ## 公開helperを利用する
 
@@ -104,6 +103,5 @@ GHCRでは新しいパッケージの初期公開範囲はprivateです。初回
 
 参考：[GitHub公式のGHCR公開手順](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images)、[Container registryの公開範囲](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。
 
-公開済みイメージの初回確認結果は [検証記録](validation.md#公開helperの初回確認) を参照してください。
 
 [ドキュメント一覧へ](README.md)

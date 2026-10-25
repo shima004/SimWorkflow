@@ -3,6 +3,8 @@
 !.env.example
 /bin/
 /artifacts/
+/examples/validation/
+/docs/validation.md
 
 __pycache__/
 

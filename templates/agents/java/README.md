@@ -38,6 +38,4 @@ simworkflow agent build --repository my-team/agent-java --tag v1 --push .
 CPU・メモリの制限とJVMのヒープ設定は別です。元の `build.gradle` の `launch` タスクは `maxHeapSize = '2048m'` を指定しているため、変更が必要ならエージェント側のビルド設定も調整します。
 
 公開サンプルでDockerビルドに成功し、生成した設定をADFの `ModuleConfig` で読み込んで基準実装のクラスをロードできることを確認しています。
-Argo上で事前計算、データを読み込む本実行、結果のS3保存も確認しています。[検証記録](../../../docs/validation.md)を参照してください。
-
-DijkstraとA*の2実装を追加し、事前計算の引き継ぎまで照合する例は [モジュール比較の検証サンプル](../../../examples/validation/module-comparison/README.md) を参照してください。
+Argo上で事前計算、データを読み込む本実行、結果のS3保存も確認しています。

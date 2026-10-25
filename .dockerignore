@@ -7,5 +7,7 @@
 .agents
 bin
 artifacts
+examples/validation
+docs/validation.md
 *.tar
 *.tar.gz

@@ -60,10 +60,9 @@ SIMWORKFLOW_TEST_OS_KEYRING=1 go test ./internal/credentials -run TestSystemStor
 | `internal/storage/`・`internal/artifacts/` | S3保存・転送、結果の選択・取得 |
 | `templates/agents/` | Java・Pythonエージェントのコンテナテンプレート |
 | `examples/experiments/` | 実験定義のサンプル |
-| `examples/validation/` | 特定環境での検証記録 |
 
 ## ドキュメントを更新する
 
-導入の入口は [README](../README.md)、目的別の案内は [ドキュメント一覧](README.md) にまとめます。設定項目は [接続設定](configuration.md)、実験項目は [実験YAML](experiment-yaml.md) を更新し、重複する仕様説明を増やさないようにします。実環境での確認結果と未確認範囲は [検証記録](validation.md) へ記載します。
+導入の入口は [README](../README.md)、目的別の案内は [ドキュメント一覧](README.md) にまとめます。設定項目は [接続設定](configuration.md)、実験項目は [実験YAML](experiment-yaml.md) を更新し、重複する仕様説明を増やさないようにします。個人的な実環境の検証記録は `examples/validation/`・`docs/validation.md` にローカルで保存します。これらはGit・Dockerの対象から除外し、公開ドキュメントや自動テストから参照しません。CIでもこれらが追跡されていないことを確認し、含まれている場合はイメージ・Releaseの公開を停止します。公開用のサンプルやテストデータには架空の接続先を使います。
 
 [ドキュメント一覧へ](README.md)

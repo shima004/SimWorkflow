@@ -34,8 +34,7 @@
 | ガイド | 内容 |
 | --- | --- |
 | [開発ガイド](development.md) | ソースからのビルド、検証コマンド、実装の構成、Release公開 |
-| [検証記録](validation.md) | 確認した環境・実験・制限と、その時点の記録 |
 
-[`examples/experiments/`](../examples/experiments/) は定義を作るためのサンプルです。イメージ・マップ参照は自分の環境へ合わせて変更します。[`examples/validation/`](../examples/validation/) は特定の検証環境での記録であり、内部アドレスや実験名を含みます。
+[`examples/experiments/`](../examples/experiments/) は定義を作るためのサンプルです。イメージ・マップ参照は自分の環境へ合わせて変更します。
 
 [プロジェクトのREADMEへ戻る](../README.md)

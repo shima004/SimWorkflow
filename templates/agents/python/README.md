@@ -74,7 +74,6 @@ agent/
 ```
 
 出典ラベルを設定したい場合は `docker build` を直接使い、 `--build-arg AGENT_SOURCE=https://github.com/OWNER/AGENT --build-arg AGENT_REVISION=COMMIT` を追加します。
-[rescue-pythonの検証例](../../../examples/validation/rescue-python-vc/README.md) もこの `Dockerfile.uv` を使用します。
 
 ## pipを使う場合
 
@@ -117,4 +116,4 @@ docker build --build-arg RCRS_CORE_REF=v0.2.3 \
 
 プラットフォームは元設定へ選択したモジュールを反映し、`launcher.yaml` の参照先を実験専用の生成ファイルへ変更します。事前計算データも実験専用領域に保持し、本実行へ引き継ぎます。[実行手順](../../../docs/execution.md) を参照してください。
 現行のuvテンプレートは `rescue-python` の既存ロックと、新規プロジェクト用ひな形から生成したロックの両方でDockerビルド・ヘルプ起動・A*／D* Lite／クラスタリングのインポートを確認しています。ロックが古い場合のビルド拒否も確認済みです。
-Argo上の事前計算・本実行・S3保存の検証は従来の実験イメージの記録で、今回の統一後にArgo実験は再実行していません。pipテンプレートのDockerビルドも未確認です。[検証記録](../../../docs/validation.md)を参照してください。
+Argo上の事前計算・本実行・S3保存の検証は従来の実験イメージの記録で、今回の統一後にArgo実験は再実行していません。pipテンプレートのDockerビルドも未確認です。
