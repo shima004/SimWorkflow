@@ -60,6 +60,9 @@ type fileConfig struct {
 	SimScope struct {
 		URL *string `yaml:"url"`
 	} `yaml:"simScope"`
+	Workflow struct {
+		HelperImage *string `yaml:"helperImage"`
+	} `yaml:"workflow"`
 	HTTPTimeout *string `yaml:"httpTimeout"`
 }
 
@@ -105,6 +108,7 @@ func parseYAML(data []byte) (map[string]string, error) {
 		{"S3_ENDPOINT", c.S3.Endpoint}, {"S3_REGION", c.S3.Region}, {"S3_BUCKET", c.S3.Bucket}, {"S3_ACCESS_KEY_ID", c.S3.AccessKeyID}, {"S3_SECRET_ACCESS_KEY", c.S3.SecretAccessKey}, {"S3_SESSION_TOKEN", c.S3.SessionToken},
 		{"REGISTRY_URL", c.Registry.URL}, {"REGISTRY_USERNAME", c.Registry.Username}, {"REGISTRY_PASSWORD", c.Registry.Password}, {"REGISTRY_TOKEN", c.Registry.Token},
 		{"SIMSCOPE_URL", c.SimScope.URL}, {"HTTP_TIMEOUT", c.HTTPTimeout},
+		{"SIMWORKFLOW_HELPER_IMAGE", c.Workflow.HelperImage},
 	} {
 		if field.value != nil {
 			values[field.key] = *field.value

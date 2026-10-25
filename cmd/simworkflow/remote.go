@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/go-containerregistry/pkg/name"
 	"go.yaml.in/yaml/v3"
 	"simworkflow/internal/argo"
 	"simworkflow/internal/config"
@@ -25,7 +26,13 @@ import (
 	"simworkflow/internal/workflow"
 )
 
-const defaultHelperImage = "ghcr.io/shima004/simworkflow-worker@sha256:2e204474aa5c348c0d2196cc83adde038170fd9885bb09c2e83b4a4fd31cc027"
+// Release builds replace this with the tested helper digest from the same source.
+var defaultHelperImage = "ghcr.io/shima004/simworkflow-worker@sha256:2e204474aa5c348c0d2196cc83adde038170fd9885bb09c2e83b4a4fd31cc027"
+
+func validHelperImage(image string) bool {
+	_, err := name.ParseReference(image)
+	return err == nil && strings.LastIndex(image, ":") > strings.LastIndex(image, "/")
+}
 
 func remoteCommand(command string) bool {
 	return command == "render" || command == "submit" || command == "status" || command == "results" || command == "download" || command == "list" || command == "stop"
@@ -133,7 +140,15 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 		}
 	}
 	file := flags.String("f", "", "experiment YAML (required)")
-	helper := flags.String("helper-image", defaultHelperImage, "override the published SimWorkflow helper image")
+	helperDefault := c.HelperImage
+	if helperDefault == "" {
+		helperDefault = defaultHelperImage
+	}
+	helper := flags.String("helper-image", helperDefault, "helper image (SIMWORKFLOW_HELPER_IMAGE / workflow.helperImage / bundled default)")
+	if !validHelperImage(helperDefault) {
+		// Help must not echo credentials accidentally entered as an image URL.
+		flags.Lookup("helper-image").DefValue = "<invalid configured image>"
+	}
 	account := flags.String("service-account", "simworkflow", "workflow executor ServiceAccount")
 	maxRuns := flags.Int("max-runs", experiment.DefaultMaxRuns, "maximum expanded runs")
 	output := flags.String("output", "", "new private YAML file for render; contains temporary signed URLs")
@@ -149,6 +164,9 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	}
 	if strings.TrimSpace(*helper) == "" {
 		return errors.New("helper-image must not be empty")
+	}
+	if !validHelperImage(*helper) {
+		return errors.New("helper-image must be a container image reference with a tag or digest, without a URL scheme or credentials")
 	}
 	if *configStorage != "inline" && *configStorage != "s3" {
 		return errors.New("config-storage must be inline or s3")

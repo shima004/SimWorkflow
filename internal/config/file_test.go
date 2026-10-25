@@ -31,6 +31,8 @@ registry:
   token: file-registry-token
 simScope:
   url: https://viewer.example.com
+workflow:
+  helperImage: registry.example.com/helper:yaml
 httpTimeout: 12s
 `))
 	if err != nil {
@@ -39,9 +41,15 @@ httpTimeout: 12s
 	if values["CREDENTIALS_STORE"] != "environment" {
 		t.Fatal("credential store mode must be mapped from YAML")
 	}
+	if values["SIMWORKFLOW_HELPER_IMAGE"] != "registry.example.com/helper:yaml" {
+		t.Fatal("workflow.helperImage must map to the helper environment setting")
+	}
 	c, err := Load(lookup(values))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if c.HelperImage != "registry.example.com/helper:yaml" {
+		t.Fatal("helper image must be retained in full configuration")
 	}
 	if c.Argo.Namespace != "my-namespace" || c.Argo.Token != "file-token" || c.S3.Region != "ap-northeast-1" || c.S3.Bucket != "results" || c.S3.AccessKeyID != "file-key" || c.S3.SecretAccessKey != "file-secret" || c.S3.SessionToken != "file-session" || c.S3.ForcePathStyle || c.Registry.Token != "file-registry-token" || c.SimScopeURL != "https://viewer.example.com" || c.HTTPTimeout != 12*time.Second {
 		t.Fatal("YAML fields were not mapped to the existing configuration schema")

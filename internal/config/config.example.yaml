@@ -19,4 +19,8 @@ registry:
 simScope:
   url: ""
 
+# Empty uses the verified helper bundled with this CLI release.
+workflow:
+  helperImage: ""
+
 httpTimeout: 30s

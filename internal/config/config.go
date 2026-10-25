@@ -35,6 +35,7 @@ type Registry struct {
 type Config struct {
 	CredentialStore string
 	SimScopeURL     string
+	HelperImage     string
 	Argo            Argo
 	S3              S3
 	Registry        Registry
@@ -53,6 +54,7 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 	c := Config{
 		CredentialStore: get("CREDENTIALS_STORE", "environment"),
 		SimScopeURL:     get("SIMSCOPE_URL", ""),
+		HelperImage:     get("SIMWORKFLOW_HELPER_IMAGE", ""),
 		Argo:            Argo{Server: get("ARGO_WORKFLOW_SERVER", ""), Namespace: get("ARGO_WORKFLOW_NAMESPACE", "argo"), Token: get("ARGO_WORKFLOW_TOKEN", "")},
 		S3: S3{
 			Endpoint: get("S3_ENDPOINT", ""), Region: get("S3_REGION", "us-east-1"),
