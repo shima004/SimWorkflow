@@ -16,6 +16,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", required=True, help="release tag, e.g. v0.1.0")
     parser.add_argument(
+        "--helper-image", help="tested repository@sha256:digest to embed as the default helper"
+    )
+    parser.add_argument(
         "--output", required=True, type=Path, help="empty output directory"
     )
     args = parser.parse_args()
@@ -24,6 +27,17 @@ def main():
         args.version,
     ):
         parser.error("version must be a v-prefixed semantic version")
+    if args.helper_image is not None and not re.fullmatch(
+        r"[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]+)?/"
+        r"(?:[a-z0-9]+(?:(?:[._]|__|[-]+)[a-z0-9]+)*/)*"
+        r"[a-z0-9]+(?:(?:[._]|__|[-]+)[a-z0-9]+)*@sha256:[a-f0-9]{64}",
+        args.helper_image,
+    ):
+        parser.error("helper-image must be a registry repository pinned by sha256 digest")
+    # Restrict the characters above before inserting a value into Go's ldflags.
+    helper_flags = (
+        f" -X main.defaultHelperImage={args.helper_image}" if args.helper_image else ""
+    )
     root = Path(__file__).resolve().parents[1]
     commit = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=root, text=True
@@ -56,7 +70,7 @@ def main():
                         "-trimpath",
                         "-buildvcs=false",
                         "-ldflags",
-                        f"-s -w -X main.version={args.version} -X main.commit={commit}",
+                        f"-s -w -X main.version={args.version} -X main.commit={commit}{helper_flags}",
                         "-o",
                         str(binary),
                         "./cmd/simworkflow",

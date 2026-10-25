@@ -23,6 +23,7 @@ Windowsでは出力名を `bin/simworkflow.exe` にします。通常のビル�
 go test -race ./...
 go vet ./...
 go mod verify
+python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
 テストにはローカルHTTPサーバーを使用するものがあります。実サービスの認証情報は不要です。ワーカーはLinuxコンテナ向けで、macOS・Windows向け配布物はクライアント機能を対象にしています。
@@ -30,10 +31,12 @@ go mod verify
 Release用の全アーカイブをローカルで作る場合は、GoとPython 3を用意します。出力先は空のディレクトリを指定してください。
 
 ```sh
-python3 scripts/build-release.py --version v0.1.0 --output /tmp/simworkflow-release-v0.1.0
+python3 scripts/build-release.py --version v0.1.0 \
+  --helper-image "registry.example.com/simworkflow/worker@sha256:実際の64桁のdigest" \
+  --output /tmp/simworkflow-release-v0.1.0
 ```
 
-`release.yml` は全体テストと6環境向けビルドに加え、macOS・Windowsランナーでクライアントコマンドの起動を確認します。`helper-image.yml` はLinuxワーカーイメージを検証・公開します。
+`--helper-image` は検証済みの実際のdigest参照に置き換えます。ローカル検証で省略した場合はソース内の既定値を使います。正式なReleaseは `helper-image.yml` で同じコミットのLinuxワーカーを公開・確認し、そのdigestを指定してビルドします。macOS・Windowsランナーでクライアントコマンドの起動も確認します。
 
 OSストアへの実際の保存・取得・削除は明示的に選んだときだけ検証できます。仮の一時エントリを作成し、テスト後に削除します。OSストアが利用できる対話環境で実行してください。
 

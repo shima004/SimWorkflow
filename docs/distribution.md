@@ -35,11 +35,7 @@ S3バケットを作成し、[マップ](maps.md) を登録します。同じマ
 
 helperはシミュレーター・エージェントの起動管理、S3からの設定取得、事前計算データの受け渡し、進捗・結果の保存を担当するイメージです。利用者がローカルにビルドする必要はありません。
 
-CLIは次の検証済み公開イメージをデフォルトにしています。
-
-```text
-ghcr.io/shima004/simworkflow-worker@sha256:2e204474aa5c348c0d2196cc83adde038170fd9885bb09c2e83b4a4fd31cc027
-```
+Release配布のCLIは、同じソースからビルド・公開・動作確認した `ghcr.io/shima004/simworkflow-worker` のdigestをデフォルトにします。Releaseに添付する `helper-image.txt` に対応するイメージ参照を記録します。
 
 通常は追加オプションなしで送信できます。ワーカー設定の保存先はS3がデフォルトです。
 
@@ -47,7 +43,7 @@ ghcr.io/shima004/simworkflow-worker@sha256:2e204474aa5c348c0d2196cc83adde038170f
 simworkflow experiment submit -f experiment.yaml
 ```
 
-別のhelperを利用するときだけ `--helper-image IMAGE` を指定します。`latest` は更新されるため、再現性が必要な実験ではdigestやコミット固定タグを使います。新しいhelperの公開で、CLIのデフォルトdigestや送信済み実験の参照先が自動更新されることはありません。
+別のhelperは `--helper-image IMAGE`、環境変数 `SIMWORKFLOW_HELPER_IMAGE`、共通設定の `workflow.helperImage` の順に優先して指定できます。詳しくは [helperの設定](configuration.md#helperイメージを選ぶ) を参照してください。`latest` は更新されるため、再現性が必要な実験ではdigestで固定します。公開済みCLIの既定値や送信済み実験の参照先は、自動更新しません。
 
 ## 独自helperをビルドする
 
@@ -72,7 +68,7 @@ S3から設定を取得できない旧ワーカーを使う場合だけ `--confi
 
 ## CLIをリリースする
 
-[release.yml](../.github/workflows/release.yml) は `v*` タグのpushでテスト・vet・依存検査を行い、Linux／macOS／Windowsのamd64・arm64向けバイナリを作成します。Linux／macOSはtar.gz、Windowsはzipで配布し、各アーカイブには実行ファイルと利用手順を含めます。LICENSEが存在する場合は同梱します。SHA256の `checksums.txt` も添付します。
+[release.yml](../.github/workflows/release.yml) は `v*` タグのpushでテスト・vet・依存検査を行い、同じコミットのhelperを公開して認証なしの取得・起動を確認します。成功したhelperのdigestを埋め込み、Linux／macOS／Windowsのamd64・arm64向けバイナリを作成します。helperの公開や確認に失敗した場合はCLIのReleaseを公開しません。Linux／macOSはtar.gz、Windowsはzipで配布し、各アーカイブには実行ファイルと利用手順を含めます。LICENSEが存在する場合は同梱します。SHA256の `checksums.txt` も添付します。
 
 バイナリの `simworkflow --version` はタグとソースコミットを表示します。ビルドではCGOを無効にし、`.env` などの利用環境の設定は取り込みません。macOS・Windows向けバイナリの署名は行いません。
 
@@ -84,7 +80,7 @@ git tag -a v0.1.0 -m "SimWorkflow v0.1.0"
 git push origin v0.1.0
 ```
 
-`v0.*` と `-rc.1` などの接尾辞があるタグはプレリリース、それ以外は正式リリースになります。全ファイルをアップロードしてから公開し、途中で失敗した場合はドラフトが残ります。同じタグのActionsを再実行するとドラフトへのアップロードを再試行できます。公開済みReleaseは上書きせず、新しいタグを作成してください。既存のhelper公開ワークフローも同じタグで実行されます。CLIが使用するデフォルトhelperは検証済みdigestのままです。
+`v0.*` と `-rc.1` などの接尾辞があるタグはプレリリース、それ以外は正式リリースになります。全ファイルをアップロードしてから公開し、途中で失敗した場合はドラフトが残ります。同じタグのActionsを再実行するとドラフトへのアップロードを再試行できます。公開済みReleaseは上書きせず、新しいタグを作成してください。helperの公開ワークフローはReleaseから再利用します。同じタグで独立した二重公開は行いません。
 
 ローカルで配布物を作る手順は [開発ガイド](development.md) を参照してください。
 

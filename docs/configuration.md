@@ -49,6 +49,9 @@ registry:
 simScope:
   url: ""
 
+workflow:
+  helperImage: ""
+
 httpTimeout: 30s
 ```
 
@@ -79,6 +82,7 @@ httpTimeout: 30s
 | `registry.password` | `REGISTRY_PASSWORD` | 任意 | ユーザー名と組み合わせて指定 |
 | `registry.token` | `REGISTRY_TOKEN` | 任意 | Bearerトークン。ユーザー名・パスワードと併用不可 |
 | `simScope.url` | `SIMSCOPE_URL` | 任意 | デフォルトなし。SimScopeを利用する場合だけ指定 |
+| `workflow.helperImage` | `SIMWORKFLOW_HELPER_IMAGE` | 任意 | 空文字。CLIに同梱された検証済みhelperのdigestを使用 |
 | `httpTimeout` | `HTTP_TIMEOUT` | 任意 | `30s`。各HTTPリクエストの制限時間。正の期間 |
 
 YAMLの認証情報項目は互換モード用です。`keyring` 方式では無視されるため、ファイルへ記入せず `credentials set` で登録してください。
@@ -86,6 +90,32 @@ YAMLの認証情報項目は互換モード用です。`keyring` 方式では無
 URLは `http://` または `https://` が必須です。URL内のユーザー情報、クエリ、フラグメントは受け付けません。
 レジストリの認証は匿名・ユーザー名とパスワード・トークンのいずれかを選択できます。
 `ARGO_WORKFLOW_NAMESPACE` と `S3_REGION` は省略するとデフォルト値を使い、明示的な空文字はエラーになります。
+
+## helperイメージを選ぶ
+
+通常は指定不要です。優先順位は次の順です。
+
+1. `experiment render`／`submit` の `--helper-image`
+2. 環境変数 `SIMWORKFLOW_HELPER_IMAGE`（未指定なら作業ディレクトリの `.env`）
+3. 共通YAMLの `workflow.helperImage`
+4. CLIに埋め込まれた、そのリリースで検証済みのdigest
+
+環境ごとに独自helperを使う場合は、共通設定へ指定します。
+
+```yaml
+workflow:
+  helperImage: registry.example.com/simworkflow/worker:v1
+```
+
+```sh
+# この送信だけ変更する
+simworkflow experiment submit -f experiment.yaml \
+  --helper-image registry.example.com/simworkflow/worker:v2
+```
+
+タグまたはdigestを指定します。再現性が必要な場合は `@sha256:...` で固定してください。YAMLや環境変数の空文字はCLIの既定値へ戻す指定です。明示的な `--helper-image=''` はエラーです。選ばれたイメージ参照の形式は `render`／`submit` で検証し、認証情報を含むURLは受け付けません。設定の変更は次に生成・送信するWorkflowへ適用し、送信済みの実験には影響しません。
+
+ReleaseのhelperはCLIと同じソースから公開・動作確認し、そのdigestを配布バイナリへ埋め込みます。ソースから通常の `go run`／`go build` で実行した場合は、ソース内の既定digestを使います。[リリース手順](distribution.md#cliをリリースする) を参照してください。
 
 ## 読み込み方式と優先順位
 

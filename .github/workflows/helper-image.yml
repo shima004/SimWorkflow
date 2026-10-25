@@ -3,9 +3,16 @@ name: Test and publish helper image
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    outputs:
+      image:
+        description: Published helper repository
+        value: ${{ jobs.publish.outputs.image }}
+      digest:
+        description: Tested public helper digest
+        value: ${{ jobs.publish.outputs.digest }}
 
 permissions:
   contents: read
@@ -27,11 +34,15 @@ jobs:
       - run: go test -race ./...
       - run: go vet ./...
       - run: go mod verify
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py'
 
   publish:
     needs: check
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.image.outputs.name }}
+      digest: ${{ steps.build.outputs.digest }}
     permissions:
       contents: read
       packages: write
@@ -71,10 +82,12 @@ jobs:
           IMAGE: ${{ steps.image.outputs.name }}
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
+          mkdir -m 700 "$RUNNER_TEMP/simworkflow-anonymous-docker"
+          docker --config "$RUNNER_TEMP/simworkflow-anonymous-docker" pull "$IMAGE@$DIGEST"
           docker run --rm \
             -v "$PWD/examples:/examples:ro" \
-            "$IMAGE@$DIGEST" --env-file '' experiment validate \
-            -f /examples/experiments/precompute-baseline.yaml
+            "$IMAGE@$DIGEST" --config '' --env-file '' experiment validate \
+            -f /examples/experiments/grouped-modules.yaml
       - name: Record image digest
         env:
           IMAGE: ${{ steps.image.outputs.name }}
