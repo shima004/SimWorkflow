@@ -19,6 +19,18 @@ import (
 
 var statusRunID = regexp.MustCompile(`^run-[a-f0-9]{32}$`)
 
+func workflowElapsed(started, finished, now time.Time, phase string) string {
+	if started.IsZero() {
+		return "-"
+	}
+	if !finished.IsZero() {
+		now = finished
+	} else if phase == "Succeeded" || phase == "Failed" || phase == "Error" {
+		return "-"
+	}
+	return max(time.Duration(0), now.Sub(started)).Truncate(time.Second).String()
+}
+
 func writeRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.Snapshot, out io.Writer) (bool, error) {
 	prefix := snapshot.Metadata.Annotations["simworkflow.io/result-prefix"]
 	if !strings.HasPrefix(prefix, "experiments/") || strings.Contains(prefix, "..") {

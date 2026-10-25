@@ -26,15 +26,21 @@ func interactiveOutput(in *os.File, out io.Writer) bool {
 }
 
 type progressFrame struct {
-	name, phase, columns string
-	rows                 []string
-	err                  error
-	retryProgress        bool
-	plan                 *experiment.Plan
-	runs                 []experiment.Run
+	name, phase, columns  string
+	startedAt, finishedAt time.Time
+	rows                  []string
+	err                   error
+	retryProgress         bool
+	plan                  *experiment.Plan
+	runs                  []experiment.Run
 }
 
 type progressTick struct{}
+type progressClockTick time.Time
+
+func progressClock() tea.Cmd {
+	return tea.Tick(time.Second, func(now time.Time) tea.Msg { return progressClockTick(now) })
+}
 
 type progressModel struct {
 	fetch               tea.Cmd
@@ -49,6 +55,7 @@ type progressModel struct {
 	openViewer          func(string, experiment.Run) tea.Cmd
 	viewerBusy          bool
 	viewerNotice        string
+	now                 time.Time
 }
 
 func loadProgress(ctx context.Context, c config.Config, name string) tea.Cmd {
@@ -79,7 +86,7 @@ func loadProgress(ctx context.Context, c config.Config, name string) tea.Cmd {
 		if phase == "" {
 			phase = "Pending"
 		}
-		frame := progressFrame{name: screenText(snapshot.Metadata.Name), phase: screenText(phase), plan: plan, retryProgress: retryProgress}
+		frame := progressFrame{name: screenText(snapshot.Metadata.Name), phase: screenText(phase), plan: plan, retryProgress: retryProgress, startedAt: snapshot.Status.StartedAt, finishedAt: snapshot.Status.FinishedAt}
 		if plan != nil {
 			for _, run := range plan.Runs {
 				if statusRunID.MatchString(run.ID) {
@@ -123,7 +130,7 @@ func watchProgress(ctx context.Context, c config.Config, name string, in io.Read
 	return result.refreshErr
 }
 
-func (m progressModel) Init() tea.Cmd { return m.fetch }
+func (m progressModel) Init() tea.Cmd { return tea.Batch(m.fetch, progressClock()) }
 
 func (m progressModel) bodyHeight() int { return max(0, m.height-4) }
 
@@ -171,6 +178,11 @@ func (m *progressModel) closeDetails() {
 func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var next tea.Cmd
 	switch msg := msg.(type) {
+	case progressClockTick:
+		m.now = time.Time(msg)
+		if !m.done {
+			next = progressClock()
+		}
 	case tea.WindowSizeMsg:
 		m.width, m.height = max(1, msg.Width), max(1, msg.Height)
 	case progressFrame:
@@ -284,6 +296,11 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m progressModel) View() string {
+	now := m.now
+	if now.IsZero() {
+		now = time.Now()
+	}
+	elapsed := workflowElapsed(m.frame.startedAt, m.frame.finishedAt, now, m.frame.phase)
 	status := "Refreshing every 5s"
 	if m.done {
 		status = "Finished; press q to close"
@@ -301,7 +318,7 @@ func (m progressModel) View() string {
 		columns = "Settings: " + m.detailRunID
 	}
 	rows := m.bodyRows()
-	lines := []string{fmt.Sprintf("Workflow: %s  %s", m.frame.name, m.frame.phase), status, columns}
+	lines := []string{fmt.Sprintf("Workflow: %s  %s", m.frame.name, m.frame.phase), "Elapsed: " + elapsed + " | " + status, columns}
 	for i := 0; i < m.bodyHeight(); i++ {
 		line := ""
 		if m.y+i < len(rows) {

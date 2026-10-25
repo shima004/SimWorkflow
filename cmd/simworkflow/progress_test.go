@@ -20,6 +20,27 @@ import (
 	"simworkflow/internal/worker"
 )
 
+func TestStatusElapsedFromArgoTimestamps(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"metadata":{"name":"elapsed-test"},"status":{"phase":"Succeeded","startedAt":"2026-10-25T01:00:00Z","finishedAt":"2026-10-25T01:02:03Z"}}`)
+	}))
+	defer server.Close()
+	c := config.Config{Argo: config.Argo{Server: server.URL, Namespace: "argo"}, HTTPTimeout: time.Second}
+	frame := loadProgress(context.Background(), c, "elapsed-test")().(progressFrame)
+	if frame.err != nil || frame.startedAt.IsZero() || frame.finishedAt.IsZero() {
+		t.Fatal("TUI must retain Workflow timestamps from Argo")
+	}
+	for _, args := range [][]string{{"status", "elapsed-test"}, {"status", "--watch", "--plain", "elapsed-test"}} {
+		var out, errOut bytes.Buffer
+		if err := runRemote(args, c, &out, &errOut); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out.String(), "Elapsed: 2m3s") {
+			t.Fatalf("missing Workflow duration: %s", out.String())
+		}
+	}
+}
+
 func TestRunProgressUsesCurrentAttemptAndHandlesOlderWorkers(t *testing.T) {
 	e, err := experiment.ReadFile("../../examples/experiments/precompute-baseline.yaml")
 	if err != nil {

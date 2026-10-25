@@ -28,9 +28,11 @@ type Snapshot struct {
 		Annotations map[string]string `json:"annotations"`
 	} `json:"metadata"`
 	Status struct {
-		Phase   string          `json:"phase"`
-		Message string          `json:"message"`
-		Nodes   map[string]Node `json:"nodes"`
+		Phase      string          `json:"phase"`
+		Message    string          `json:"message"`
+		StartedAt  time.Time       `json:"startedAt"`
+		FinishedAt time.Time       `json:"finishedAt"`
+		Nodes      map[string]Node `json:"nodes"`
 	} `json:"status"`
 }
 

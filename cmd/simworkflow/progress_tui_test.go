@@ -171,3 +171,48 @@ func TestScreenTextRemovesTerminalControls(t *testing.T) {
 		t.Fatalf("unexpected sanitized text: %q", got)
 	}
 }
+
+func TestProgressElapsedClock(t *testing.T) {
+	start := time.Date(2026, 10, 25, 1, 0, 0, 0, time.UTC)
+	m := testProgressModel()
+	m.width = 120
+	m.frame.startedAt = start
+	m, cmd := updateProgress(m, progressClockTick(start.Add(65*time.Second)))
+	if cmd == nil || !strings.Contains(m.View(), "Elapsed: 1m5s") {
+		t.Fatal("elapsed time must count from workflow start and schedule the next clock tick")
+	}
+	m, _ = updateProgress(m, tea.KeyMsg{Type: tea.KeyPgDown})
+	m, _ = updateProgress(m, progressClockTick(start.Add(66*time.Second)))
+	if m.y != 6 || !strings.Contains(m.View(), "Elapsed: 1m6s") {
+		t.Fatal("clock updates must preserve scrolling")
+	}
+	frame := m.frame
+	frame.phase, frame.finishedAt = "Succeeded", start.Add(70*time.Second)
+	m, _ = updateProgress(m, frame)
+	m, cmd = updateProgress(m, progressClockTick(start.Add(time.Hour)))
+	if cmd != nil || !strings.Contains(m.View(), "Elapsed: 1m10s") {
+		t.Fatal("completed elapsed time must stay fixed without more clock ticks")
+	}
+}
+
+func TestWorkflowElapsed(t *testing.T) {
+	start := time.Date(2026, 10, 25, 1, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name, phase, want      string
+		started, finished, now time.Time
+	}{
+		{"unstarted", "Pending", "-", time.Time{}, time.Time{}, start},
+		{"running", "Running", "1h2m3s", start, time.Time{}, start.Add(time.Hour + 2*time.Minute + 3*time.Second + 900*time.Millisecond)},
+		{"clock skew", "Running", "0s", start, time.Time{}, start.Add(-time.Second)},
+		{"succeeded", "Succeeded", "1m0s", start, start.Add(time.Minute), start.Add(time.Hour)},
+		{"failed", "Failed", "1m0s", start, start.Add(time.Minute), start.Add(time.Hour)},
+		{"error", "Error", "1m0s", start, start.Add(time.Minute), start.Add(time.Hour)},
+		{"missing end", "Succeeded", "-", start, time.Time{}, start.Add(time.Hour)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := workflowElapsed(tc.started, tc.finished, tc.now, tc.phase); got != tc.want {
+				t.Fatalf("elapsed = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
