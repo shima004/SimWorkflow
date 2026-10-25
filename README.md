@@ -51,6 +51,7 @@ simworkflow experiment download --include summary --stage simulation WORKFLOW_NA
 
 | 目的 | ガイド |
 | --- | --- |
+| CLIをインストール・更新する | [インストール・自己更新](docs/installation.md) |
 | 最初の実験を動かす | [クイックスタート](docs/quickstart.md) |
 | モジュール単位・セット単位の比較やリソースを定義する | [実験YAMLの仕様](docs/experiment-yaml.md) |
 | エージェントイメージを作る | [ビルド・登録](docs/agent-build.md)・[Python（uv／pip）](templates/agents/python/README.md)・[Java](templates/agents/java/README.md) |

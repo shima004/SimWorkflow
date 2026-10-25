@@ -6,7 +6,7 @@
 
 | ガイド | 内容 |
 | --- | --- |
-| [インストール](installation.md) | OS・CPUに合う配布物の選択、チェックサム、PATH、更新 |
+| [インストール](installation.md) | OS・CPUに合う配布物の選択、チェックサム、PATH、self-update |
 | [接続設定](configuration.md) | 共通YAML、環境変数、.env、優先順位、設定項目一覧 |
 | [認証情報](credentials.md) | OSストアへの登録・削除、CI、既存ファイルからの移行 |
 | [クイックスタート](quickstart.md) | マップの登録から実験の送信・監視・結果取得まで |

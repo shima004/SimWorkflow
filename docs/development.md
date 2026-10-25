@@ -44,13 +44,14 @@ OSストアへの実際の保存・取得・削除は明示的に選んだとき
 SIMWORKFLOW_TEST_OS_KEYRING=1 go test ./internal/credentials -run TestSystemStoreRoundTrip -v
 ```
 
-通常のテストはOSストアへアクセスしません。
+通常のテストはOSストアへアクセスしません。自己更新のテストも実際のインストールを変更せず、一時ディレクトリにコピーしたテスト用実行ファイルだけを更新します。自己更新には [go-selfupdate](https://github.com/creativeprojects/go-selfupdate) を使用し、macOS・WindowsのCIでも実行中の使い捨てバイナリを置き換えるテストを実行します。
 
 ## 実装の構成
 
 | パス | 担当 |
 | --- | --- |
 | `cmd/simworkflow/` | 設定・実験・マップのCLI、TUI、ダウンロード、ワーカーの入口 |
+| `internal/cliupdate/` | 公開Releaseの選択・SHA-256検証・自己更新・起動確認 |
 | `internal/agentbuild/` | Dockerビルド・単一イメージの登録、レジストリ認証・digest検証 |
 | `internal/credentials/` | エンドポイント別のOS資格情報ストア、認証情報の解決 |
 | `internal/config/` | 環境変数・共通YAML・.envの重ね合わせと検証 |
