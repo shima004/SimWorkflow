@@ -10,6 +10,7 @@ RoboCup Rescue Simulationの比較実験を、YAMLで定義してArgo Workflows�
 - 事前計算データをS3へ保存し、別ステップの本実行へ引き継ぐ
 - TUIで実行を選択し、進捗・スコア・設定詳細を確認する
 - ログ・要約・事前計算データなど、必要な結果だけを取得する
+- イメージ・マップ・実行計画をZIPで保存し、別環境で実験を再実行する
 
 SimScopeでのリアルタイム表示・保存ログ再生も利用できます。SimScopeは任意機能で、接続先を設定した場合に使います。
 
@@ -58,6 +59,7 @@ simworkflow experiment download --include summary --stage simulation WORKFLOW_NA
 | 認証情報を安全に保存する | [OSの資格情報ストア](docs/credentials.md) |
 | マップを登録・管理する | [マップ](docs/maps.md) |
 | 実験を一覧表示・停止・監視し、結果を取得する | [進捗・スコア](docs/progress.md)・[ダウンロード](docs/download.md) |
+| 実験をまとめて保存・再実行する | [再現用ZIP](docs/reproduction.md) |
 | 開発・リリースする | [開発ガイド](docs/development.md) |
 
 [ドキュメント一覧](docs/README.md) に、接続トラブル、実行の仕組み、SimScope連携、検証記録もまとめています。

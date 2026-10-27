@@ -99,4 +99,6 @@ simworkflow experiment download \
 
 展開時はパスの逸脱・リンク・重複パスを拒否し、1バンドルの展開量を16GiB、エントリ数を100,000件までとします。
 
+イメージ・マップ・実行計画も含めて別環境で再実行する場合は、[再現用ZIP](reproduction.md) の `experiment export` を使います。
+
 [ドキュメント一覧へ](README.md)

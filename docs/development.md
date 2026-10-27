@@ -46,6 +46,8 @@ SIMWORKFLOW_TEST_OS_KEYRING=1 go test ./internal/credentials -run TestSystemStor
 
 通常のテストはOSストアへアクセスしません。自己更新のテストも実際のインストールを変更せず、一時ディレクトリにコピーしたテスト用実行ファイルだけを更新します。自己更新には [go-selfupdate](https://github.com/creativeprojects/go-selfupdate) を使用し、macOS・WindowsのCIでも実行中の使い捨てバイナリを置き換えるテストを実行します。
 
+再現用ZIPのテストはローカルのS3・OCIレジストリを使い、元のサービスを停止してから別の接続先へ復元します。破損・不正パス・欠落したイメージ・既存マップの内容不一致も検査します。公開イメージの実際の取得は `SIMWORKFLOW_TEST_PUBLIC_IMAGE` にdigest参照を設定した場合だけ検証できます。
+
 ## 実装の構成
 
 | パス | 担当 |
@@ -53,6 +55,8 @@ SIMWORKFLOW_TEST_OS_KEYRING=1 go test ./internal/credentials -run TestSystemStor
 | `cmd/simworkflow/` | 設定・実験・マップのCLI、TUI、ダウンロード、ワーカーの入口 |
 | `internal/cliupdate/` | 公開Releaseの選択・SHA-256検証・自己更新・起動確認 |
 | `internal/agentbuild/` | Dockerビルド・単一イメージの登録、レジストリ認証・digest検証 |
+| `internal/imageio/` | Dockerを使わないlinux/amd64イメージの解決・転送、接続先別の認証 |
+| `internal/reproduction/` | 入力の固定、再現用ZIPの保存・検査・復元 |
 | `internal/credentials/` | エンドポイント別のOS資格情報ストア、認証情報の解決 |
 | `internal/config/` | 環境変数・共通YAML・.envの重ね合わせと検証 |
 | `internal/connections/` | 認証付きのサービス接続確認 |

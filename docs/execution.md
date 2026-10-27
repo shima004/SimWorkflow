@@ -76,6 +76,7 @@ S3では実行ごとに一意のプレフィックスを生成します。
 
 ```text
 experiments/<execution-id>/plan.json
+experiments/<execution-id>/reproduction.json
 experiments/<execution-id>/<run-id>/precompute/progress.json
 experiments/<execution-id>/<run-id>/progress.json
 experiments/<execution-id>/<run-id>/precompute/data.zip
@@ -83,6 +84,7 @@ experiments/<execution-id>/<run-id>/precompute/summary.json
 experiments/<execution-id>/<run-id>/precompute/bundle.tar.gz
 experiments/<execution-id>/<run-id>/summary.json
 experiments/<execution-id>/<run-id>/bundle.tar.gz
+reproduction/maps/<sha256>.zip
 ```
 
 各段階のバンドルにはその段階の要約、事前計算データ、解決後のモジュール設定、シード反映後のサーバー設定、状態ファイルを保存します。
@@ -98,7 +100,7 @@ simworkflow experiment render \
   --output artifacts/workflow.yaml
 ```
 
-`render` はS3オブジェクトの存在確認、期限付きURLの発行、実行計画のS3保存を行います。Argoには送信しません。
+`render`／`submit` はイメージをlinux/amd64のdigestへ解決し、マップを検査してS3の内容別保存先へコピーします。再現用情報と実行計画の保存後、期限付きURLを発行します。CLIからレジストリの読み取りとS3の読み書きが必要です。`render` はArgoには送信しません。詳細は [再現用ZIP](reproduction.md) を参照してください。
 出力ファイルは0600で新規作成し、既存ファイルは上書きしません。
 このファイルはそのままArgoへ送信でき、有効期限内は対象オブジェクトへのアクセス権を持ちます。Gitへの登録・共有は避けてください。`artifacts/` はGitとDockerの対象から除外しています。
 

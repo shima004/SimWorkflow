@@ -68,7 +68,7 @@ jobs:
           ./simworkflow-smoke.exe experiment validate -f examples/experiments/precompute-baseline.yaml
           ./simworkflow-smoke.exe config init
           ./simworkflow-smoke.exe config path
-          go test ./internal/credentials ./internal/cliupdate
+          go test ./internal/credentials ./internal/cliupdate ./internal/imageio ./internal/reproduction
 
   helper:
     needs: [check, native-smoke]
