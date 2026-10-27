@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"simworkflow/internal/experiment"
+	"simworkflow/internal/storage"
 )
 
 func CloneExperiment(e *experiment.Experiment) (*experiment.Experiment, error) {
@@ -43,7 +44,7 @@ func ValidatePlan(p *experiment.Plan) error {
 		return errors.New("reproduction timeout must be at most 20h")
 	}
 	waves := (len(p.Runs)-1)/p.MaxParallelRuns + 1
-	if int64(waves) > int64((23*time.Hour)/(duration+360*time.Second)) {
+	if int64(waves) > int64(storage.SignedTransferBudget/(duration+360*time.Second)) {
 		return errors.New("reproduction duration exceeds signed transfer validity")
 	}
 	return nil

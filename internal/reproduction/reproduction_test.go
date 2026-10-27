@@ -22,6 +22,46 @@ import (
 
 const prefix = "experiments/0123456789abcdef0123456789abcdef"
 
+func TestSignedTransferDurationBudget(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		runs      int
+		wantError bool
+	}{
+		{"beyond previous one-day budget", 24, false},
+		{"one hour before seven-day expiry", 167, false},
+		{"no safety margin", 168, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, err := experiment.ReadFile("../../examples/experiments/python-module-comparison.yaml")
+			if err != nil {
+				t.Fatal(err)
+			}
+			e.Spec.Agents = e.Spec.Agents[:1]
+			e.Spec.Agents[0].Matrix = nil
+			e.Spec.Conditions.Maps = e.Spec.Conditions.Maps[:1]
+			e.Spec.Conditions.Seeds = make([]int64, tc.runs)
+			for i := range e.Spec.Conditions.Seeds {
+				e.Spec.Conditions.Seeds[i] = int64(i + 1)
+			}
+			e.Spec.Execution.MaxParallelRuns = 1
+			// With the six-minute allowance, each wave consumes exactly one hour.
+			e.Spec.Execution.Timeout = "54m"
+			plan, err := experiment.BuildPlan(e)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = reproduction.ValidatePlan(plan)
+			if (err != nil) != tc.wantError {
+				t.Fatalf("duration validation error = %v, want error %v", err, tc.wantError)
+			}
+			if err != nil && !strings.Contains(err.Error(), "signed transfer validity") {
+				t.Fatalf("unexpected validation error: %v", err)
+			}
+		})
+	}
+}
+
 func TestPlansAboveTenThousandHaveNoFixedCountLimit(t *testing.T) {
 	e, err := experiment.ReadFile("../../examples/experiments/python-module-comparison.yaml")
 	if err != nil {

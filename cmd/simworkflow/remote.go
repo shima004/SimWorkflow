@@ -230,7 +230,7 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 		return errors.New("execution timeout must be at most 20h for signed transfers")
 	}
 	waves := (plan.TotalRuns-1)/plan.MaxParallelRuns + 1
-	if int64(waves) > int64((23*time.Hour)/(timeout+360*time.Second)) {
+	if int64(waves) > int64(storage.SignedTransferBudget/(timeout+360*time.Second)) {
 		return errors.New("estimated experiment duration exceeds signed URL validity; split the experiment")
 	}
 	var random [16]byte
@@ -387,7 +387,7 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 		if closeErr != nil {
 			return closeErr
 		}
-		_, err = fmt.Fprintf(out, "Rendered %d runs to %s (private file; signed URLs expire after 24h).\n", plan.TotalRuns, output)
+		_, err = fmt.Fprintf(out, "Rendered %d runs to %s (private file; signed URLs expire after 168h).\n", plan.TotalRuns, output)
 		return err
 	}
 	snapshot, err := argo.New(c).Submit(ctx, wf)

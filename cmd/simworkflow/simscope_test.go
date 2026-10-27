@@ -205,7 +205,7 @@ func TestSimScopePublishesOnlyRescueLogAndReusesCache(t *testing.T) {
 		}
 		u, _ := url.Parse(raw)
 		logURL, _ := url.Parse(u.Query().Get("url"))
-		if !strings.HasPrefix(logURL.Path, "/results/"+key) || !strings.HasSuffix(logURL.Path, "/rescue.log.7z") || logURL.Query().Get("X-Amz-Signature") == "" || logURL.Query().Get("X-Amz-Expires") != "86400" || strings.Contains(raw, "test-secret") {
+		if !strings.HasPrefix(logURL.Path, "/results/"+key) || !strings.HasSuffix(logURL.Path, "/rescue.log.7z") || logURL.Query().Get("X-Amz-Signature") == "" || logURL.Query().Get("X-Amz-Expires") != "604800" || strings.Contains(raw, "test-secret") {
 			t.Fatal("replay must use a single-object signed URL without a raw credential")
 		}
 	}

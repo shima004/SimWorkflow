@@ -21,6 +21,12 @@ import (
 	"simworkflow/internal/connections"
 )
 
+// SignedURLValidity is the maximum S3 SigV4 presigned URL lifetime.
+const SignedURLValidity = 7 * 24 * time.Hour
+
+// SignedTransferBudget reserves one hour for submission, queue delays and transfers.
+const SignedTransferBudget = SignedURLValidity - time.Hour
+
 type Store struct {
 	Client *s3.Client
 	Bucket string
@@ -95,7 +101,7 @@ func (s *Store) Download(ctx context.Context, source string) (Transfer, error) {
 // SignDownload also supports objects produced by an earlier workflow step.
 // It deliberately does not require the object to exist at submission time.
 func (s *Store) SignDownload(ctx context.Context, bucket, key string) (Transfer, error) {
-	request, err := s3.NewPresignClient(s.Client).PresignGetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)}, s3.WithPresignExpires(24*time.Hour))
+	request, err := s3.NewPresignClient(s.Client).PresignGetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)}, s3.WithPresignExpires(SignedURLValidity))
 	if err != nil {
 		return Transfer{}, errors.New("could not sign map download")
 	}
@@ -103,7 +109,7 @@ func (s *Store) SignDownload(ctx context.Context, bucket, key string) (Transfer,
 }
 
 func (s *Store) Upload(ctx context.Context, key string) (Transfer, error) {
-	request, err := s3.NewPresignClient(s.Client).PresignPutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(s.Bucket), Key: aws.String(key)}, s3.WithPresignExpires(24*time.Hour))
+	request, err := s3.NewPresignClient(s.Client).PresignPutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(s.Bucket), Key: aws.String(key)}, s3.WithPresignExpires(SignedURLValidity))
 	if err != nil {
 		return Transfer{}, errors.New("could not sign result upload")
 	}

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,6 +30,22 @@ func TestSignedTransfersAndJSON(t *testing.T) {
 	}))
 	defer server.Close()
 	store := New(config.Config{S3: config.S3{Endpoint: server.URL, Region: "us-east-1", Bucket: "results", AccessKeyID: "test-access-key", SecretAccessKey: "secret-signing-key", ForcePathStyle: true}, HTTPTimeout: time.Second})
+	for _, method := range []string{http.MethodGet, http.MethodPut} {
+		var transfer Transfer
+		var err error
+		if method == http.MethodGet {
+			transfer, err = store.SignDownload(context.Background(), "results", "future/data.zip")
+		} else {
+			transfer, err = store.Upload(context.Background(), "future/data.zip")
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		u, err := url.Parse(transfer.URL)
+		if err != nil || u.Query().Get("X-Amz-Expires") != "604800" {
+			t.Fatalf("%s transfer must expire after seven days", method)
+		}
+	}
 	if err := store.PutJSON(context.Background(), "plan.json", map[string]string{"name": "test"}); err != nil {
 		t.Fatal(err)
 	}
