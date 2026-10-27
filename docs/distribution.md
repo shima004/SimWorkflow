@@ -39,6 +39,8 @@ Release配布のCLIは、同じソースからビルド・公開・動作確認�
 
 通常は追加オプションなしで送信できます。ワーカー設定の保存先はS3がデフォルトです。
 
+CLIはhelperの能力ラベルに応じ、対応する場合は段階別の設定バンドル、未対応なら実行ごとの設定JSONを自動選択します。バンドル対応helperは `io.simworkflow.config-bundle=v1` を持ちます。このリポジトリのDockerfileとRelease用ワークフローは、そのラベルを含むhelperを作成します。詳細は [設定保存方式](execution.md#ワーカー設定とworkflowサイズ) を参照してください。
+
 ```sh
 simworkflow experiment submit -f experiment.yaml
 ```

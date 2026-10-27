@@ -69,6 +69,7 @@ jobs:
           ./simworkflow-smoke.exe config init
           ./simworkflow-smoke.exe config path
           go test ./internal/credentials ./internal/cliupdate ./internal/imageio ./internal/reproduction
+          go test ./internal/worker -run '^Test(ConfigurationBundles|ConfigBundle)'
 
   helper:
     needs: [check, native-smoke]

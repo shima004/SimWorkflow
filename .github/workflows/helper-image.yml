@@ -84,6 +84,7 @@ jobs:
         run: |
           mkdir -m 700 "$RUNNER_TEMP/simworkflow-anonymous-docker"
           docker --config "$RUNNER_TEMP/simworkflow-anonymous-docker" pull "$IMAGE@$DIGEST"
+          test "$(docker image inspect "$IMAGE@$DIGEST" --format '{{ index .Config.Labels "io.simworkflow.config-bundle" }}')" = v1
           docker run --rm \
             -v "$PWD/examples:/examples:ro" \
             "$IMAGE@$DIGEST" --config '' --env-file '' experiment validate \
