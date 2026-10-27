@@ -71,7 +71,7 @@ func printPlan(out io.Writer, plan *experiment.Plan) error {
 	}
 	fmt.Fprintln(w, "\nRUN\tAGENT\tMAP\tSEED\tSIMULATOR CPU / MEMORY\tDEFAULT PER-ROLE CPU / MEMORY")
 	for _, run := range plan.Runs {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s / %s\t%s / %s\n", run.ID, run.Configuration.Agent, run.Map.Name, run.Seed, run.Simulator.Resources.CPU, run.Simulator.Resources.Memory, run.Configuration.Resources.CPU, run.Configuration.Resources.Memory)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s / %s\t%s / %s\n", run.ID, run.Configuration.Agent, run.Map.DisplayName(), run.Seed, run.Simulator.Resources.CPU, run.Simulator.Resources.Memory, run.Configuration.Resources.CPU, run.Configuration.Resources.Memory)
 		if run.Map.Version != "" {
 			fmt.Fprintf(w, "  map: %s@%s (resolved during render/submit)\n", run.Map.RegistryName(), run.Map.Version)
 		}

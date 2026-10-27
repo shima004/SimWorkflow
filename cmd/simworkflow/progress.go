@@ -159,7 +159,7 @@ func readRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.S
 	if (snapshot.Status.Phase == "Failed" || snapshot.Status.Phase == "Error") && phase == "Pending" {
 		phase = "Not run"
 	}
-	return runProgressRow{runID: run.ID, mapName: run.Map.Name, seed: run.Seed, stage: stage, phase: phase, steps: steps, score: score, updated: updated, startedAt: started, finishedAt: finished, retry: retry}
+	return runProgressRow{runID: run.ID, mapName: run.Map.DisplayName(), seed: run.Seed, stage: stage, phase: phase, steps: steps, score: score, updated: updated, startedAt: started, finishedAt: finished, retry: retry}
 }
 
 // Prefer the highest retry attempt, including Pending retries with no start time.

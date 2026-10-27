@@ -157,6 +157,59 @@ func TestRegisterInspectListAndResolveLatest(t *testing.T) {
 	}
 }
 
+func TestResolveMultipleVersionsOfTheSameMap(t *testing.T) {
+	c, _ := catalogFixture(t)
+	ctx := context.Background()
+	input := inputDirectory(t)
+	first, err := c.Register(ctx, input, RegisterOptions{Name: "test", Version: "v1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(input, "config/common.cfg"), []byte("random.seed: 2\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	second, err := c.Register(ctx, input, RegisterOptions{Name: "test", Version: "v2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := experiment.ReadFile("../../examples/experiments/precompute-baseline.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Spec.Agents = e.Spec.Agents[:1]
+	e.Spec.Agents[0].Matrix = nil
+	e.Spec.Conditions.Maps = []experiment.Map{{Name: "test", Versions: []string{"v2", "v1"}}}
+	e.Spec.Conditions.Seeds = []int64{42, 7}
+	resolved, err := c.Resolve(ctx, e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e.Spec.Conditions.Maps) != 1 || len(e.Spec.Conditions.Maps[0].Versions) != 2 || e.Spec.Conditions.Maps[0].Resolved != nil {
+		t.Fatal("resolve modified input versions")
+	}
+	plan, err := experiment.BuildPlan(resolved)
+	if err != nil || plan.TotalRuns != 4 || plan.UnresolvedMaps {
+		t.Fatal("resolved versions did not expand", err)
+	}
+	for i, metadata := range []Metadata{second, first} {
+		m := plan.Runs[i*2].Map
+		if m.Name != "test" || m.Version != metadata.Version || m.Resolved.Version != metadata.Version || m.Location() != metadata.Source || m.ExpectedSHA256() != metadata.SHA256 {
+			t.Fatal("wrong resolved version", m)
+		}
+	}
+	if first.SHA256 == second.SHA256 || plan.Runs[0].ID == plan.Runs[2].ID {
+		t.Fatal("versions lost their own contents or identities")
+	}
+	e.Spec.Conditions.Maps[0].Versions = []string{"v2", "latest"}
+	if _, err := c.Resolve(ctx, e); err == nil {
+		t.Fatal("overlapping resolved versions must be rejected")
+	}
+	e.Spec.Conditions.Maps[0].Versions = []string{"v1", "missing"}
+	if _, err := c.Resolve(ctx, e); err == nil {
+		t.Fatal("a missing requested version must fail resolution")
+	}
+}
+
 func TestConcurrentRegistrationAndOrphanRecovery(t *testing.T) {
 	c, objects := catalogFixture(t)
 	input := inputDirectory(t)

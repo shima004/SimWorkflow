@@ -56,7 +56,7 @@ spec:
   conditions:
     maps:
       - name: my-map
-        version: v1
+        versions: [v1]
     seeds: [1]
   execution:
     maxParallelRuns: 1

@@ -14,11 +14,14 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"go.yaml.in/yaml/v3"
 	"simworkflow/internal/argo"
 	"simworkflow/internal/config"
 	"simworkflow/internal/experiment"
+	"simworkflow/internal/maparchive"
+	"simworkflow/internal/mapcatalog"
 	"simworkflow/internal/reproduction"
 	"simworkflow/internal/reproduction/testfixture"
 	"simworkflow/internal/worker"
@@ -61,7 +64,23 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 	defer argoServer.Close()
 	source.Config.Argo.Server = argoServer.URL
 	source.Config.Argo.Namespace = "argo"
-	definition, err := yaml.Marshal(source.Experiment())
+	mapFile := filepath.Join(t.TempDir(), "map.zip")
+	if err := os.WriteFile(mapFile, source.Map, 0600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := maparchive.Inspect(mapFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, version := range []string{"v1", "v2"} {
+		key := "maps/fixture-map/" + version + "/"
+		metadata := mapcatalog.Metadata{Schema: mapcatalog.Schema, Name: "fixture-map", Version: version, Source: "s3://fixture/" + key + "map.zip", Info: info, RegisteredAt: time.Unix(int64(100+i), 0).UTC()}
+		source.Objects.Set("/fixture/"+key+"metadata.json", testfixture.JSON(t, metadata))
+		source.Objects.Set("/fixture/"+key+"map.zip", source.Map)
+	}
+	input := source.Experiment()
+	input.Spec.Conditions.Maps = []experiment.Map{{Name: "fixture-map", Versions: []string{"v1", "v2"}}}
+	definition, err := yaml.Marshal(input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +92,7 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 	if err := runRemote([]string{"submit", "-f", file, "--helper-image", source.Helper}, source.Config, &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "8 runs") {
+	if !strings.Contains(out.String(), "16 runs") {
 		t.Fatal("wrong number of grouped runs submitted")
 	}
 	sourceArgo.mu.Lock()
@@ -83,6 +102,16 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 	var original experiment.Plan
 	if err := json.Unmarshal(source.Objects.Get("/fixture/"+prefix+"/plan.json"), &original); err != nil {
 		t.Fatal(err)
+	}
+	versions := map[string]bool{}
+	for _, run := range original.Runs {
+		versions[run.Map.Version] = true
+		if run.Map.Name != "fixture-map" {
+			t.Fatal("version expansion changed the map name")
+		}
+	}
+	if !versions["v1"] || !versions["v2"] || len(versions) != 2 {
+		t.Fatal("submission lost requested map versions")
 	}
 	var capture reproduction.Metadata
 	if err := json.Unmarshal(source.Objects.Get("/fixture/"+prefix+"/reproduction.json"), &capture); err != nil || capture.PlanSHA256 != reproduction.PlanSHA256(&original) {
@@ -109,6 +138,19 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 	bundle := filepath.Join(t.TempDir(), "experiment.zip")
 	if err := runRemote([]string{"export", "--output", bundle, "fixture-workflow"}, source.Config, &out, &errOut); err != nil {
 		t.Fatal(err)
+	}
+	archive, err := reproduction.Open(bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	normalized, err := experiment.ReadFile(filepath.Join(archive.Directory, "experiment.yaml"))
+	archive.Close()
+	if err != nil {
+		t.Fatal("exported versions YAML is invalid", err)
+	}
+	preview, err := experiment.BuildPlan(normalized)
+	if err != nil || preview.TotalRuns != 16 {
+		t.Fatal("exported YAML lost map versions", err)
 	}
 	// Reproduction has no dependency on any original service.
 	source.Registry.Close()

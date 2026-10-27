@@ -53,19 +53,20 @@ func BuildPlan(e *Experiment) (*Plan, error) {
 	if err := e.Validate(); err != nil {
 		return nil, err
 	}
+	conditionMaps := ExpandMaps(e.Spec.Conditions.Maps)
 	// Only guard native integer overflow; there is no configurable run-count cap.
 	maxInt := int(^uint(0) >> 1)
-	if len(e.Spec.Conditions.Maps) > maxInt/len(e.Spec.Conditions.Seeds) {
+	if len(conditionMaps) > maxInt/len(e.Spec.Conditions.Seeds) {
 		return nil, errors.New("map/seed combinations exceed the addressable plan size")
 	}
-	runsPerConfig := len(e.Spec.Conditions.Maps) * len(e.Spec.Conditions.Seeds)
+	runsPerConfig := len(conditionMaps) * len(e.Spec.Conditions.Seeds)
 	plan := &Plan{
 		APIVersion: APIVersion, Experiment: e.Metadata,
 		MaxParallelRuns: e.Spec.Execution.MaxParallelRuns, Timeout: e.Spec.Execution.Timeout,
 		Collect: append([]string(nil), e.Spec.Outputs.Collect...),
 		Agents:  []AgentSummary{}, Runs: []Run{},
 	}
-	for _, m := range e.Spec.Conditions.Maps {
+	for _, m := range conditionMaps {
 		if m.Version != "" && m.Resolved == nil {
 			plan.UnresolvedMaps = true
 		}
@@ -83,7 +84,7 @@ func BuildPlan(e *Experiment) (*Plan, error) {
 			configuration := Configuration{Agent: agent.Name, Runtime: runtime, Image: agent.Image, Resources: agent.Resources, ResourcesByRole: maps.Clone(agent.ResourcesByRole), Modules: maps.Clone(modules), Groups: maps.Clone(groups)}
 			configuration.ID = "config-" + digest(configuration)
 			count++
-			for _, m := range e.Spec.Conditions.Maps {
+			for _, m := range conditionMaps {
 				for _, seed := range e.Spec.Conditions.Seeds {
 					run := Run{Configuration: configuration, Simulator: e.Spec.Simulator, Map: m, Seed: seed}
 					run.ID = "run-" + digest(run)

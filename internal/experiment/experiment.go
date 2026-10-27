@@ -126,7 +126,8 @@ type ResolvedMap struct {
 }
 
 type Map struct {
-	Version  string       `yaml:"version,omitempty" json:"version,omitempty"`
+	Version  string       `yaml:"-" json:"version,omitempty"`
+	Versions []string     `yaml:"versions,omitempty" json:"versions,omitempty"`
 	Ref      string       `yaml:"ref,omitempty" json:"ref,omitempty"`
 	SHA256   string       `yaml:"sha256,omitempty" json:"sha256,omitempty"`
 	Resolved *ResolvedMap `yaml:"-" json:"resolved,omitempty"`
@@ -298,23 +299,48 @@ func (e *Experiment) Validate() error {
 	seenMaps := map[string]bool{}
 	for i, m := range e.Spec.Conditions.Maps {
 		path := fmt.Sprintf("spec.conditions.maps[%d]", i)
-		if !validName(m.Name) || seenMaps[m.Name] {
-			add(path+".name", "must be a unique name of 1–63 lowercase letters, digits or hyphens, beginning and ending with a letter or digit")
+		if !validName(m.Name) {
+			add(path+".name", "must be a name of 1–63 lowercase letters, digits or hyphens, beginning and ending with a letter or digit")
 		}
-		seenMaps[m.Name] = true
-		if m.Version != "" {
-			if !ValidMapVersion(m.Version) {
-				add(path+".version", "must be a version identifier or latest")
+		if m.Version != "" || m.Versions != nil {
+			versions := m.Versions
+			if m.Versions != nil && len(m.Versions) == 0 {
+				add(path+".versions", "must contain at least one version")
+			}
+			if m.Version != "" {
+				if m.Versions != nil {
+					add(path, "cannot combine expanded version and versions")
+				}
+				versions = []string{m.Version}
+			}
+			for _, version := range versions {
+				if !ValidMapVersion(version) {
+					add(path+".versions", "must contain version identifiers or latest")
+				}
+				identityVersion := version
+				if m.Resolved != nil {
+					identityVersion = m.Resolved.Version
+				}
+				key := m.Name + "\x00" + identityVersion
+				if seenMaps[key] {
+					add(path+".versions", "map name and version must be unique")
+				}
+				seenMaps[key] = true
 			}
 			if m.Source != "" || m.SHA256 != "" {
-				add(path, "specify version or source, not both")
+				add(path, "specify versions or source, not both")
 			}
 			if m.Ref != "" && !validName(m.Ref) {
 				add(path+".ref", "must be a registered map name")
 			}
 		} else {
+			key := m.Name + "\x00"
+			if seenMaps[key] {
+				add(path+".name", "direct map names must be unique")
+			}
+			seenMaps[key] = true
 			if m.Ref != "" {
-				add(path+".ref", "requires version")
+				add(path+".ref", "requires versions")
 			}
 			u, err := url.Parse(m.Source)
 			if err != nil || u.Scheme != "s3" || u.Host == "" || u.User != nil || strings.TrimPrefix(u.Path, "/") == "" || u.RawQuery != "" || u.Fragment != "" {

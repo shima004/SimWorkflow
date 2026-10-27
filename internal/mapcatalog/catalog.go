@@ -233,7 +233,7 @@ func (c *Catalog) Resolve(ctx context.Context, input *experiment.Experiment) (*e
 		return nil, err
 	}
 	resolved := *input
-	resolved.Spec.Conditions.Maps = append([]experiment.Map(nil), input.Spec.Conditions.Maps...)
+	resolved.Spec.Conditions.Maps = experiment.ExpandMaps(input.Spec.Conditions.Maps)
 	cache := map[string]Metadata{}
 	for i, m := range resolved.Spec.Conditions.Maps {
 		if m.Version == "" {
@@ -252,6 +252,9 @@ func (c *Catalog) Resolve(ctx context.Context, input *experiment.Experiment) (*e
 		}
 		m.Resolved = &experiment.ResolvedMap{Name: metadata.Name, Version: metadata.Version, Source: metadata.Source, SHA256: metadata.SHA256}
 		resolved.Spec.Conditions.Maps[i] = m
+	}
+	if err := resolved.Validate(); err != nil {
+		return nil, err
 	}
 	return &resolved, nil
 }
