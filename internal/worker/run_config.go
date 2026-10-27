@@ -22,8 +22,7 @@ func ReadRunConfig(ctx context.Context, inline, remote string) (Config, error) {
 	}
 	var body io.Reader = strings.NewReader(inline)
 	if remote != "" {
-		u, err := url.Parse(remote)
-		if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.Fragment != "" {
+		if !validRunConfigURL(remote) {
 			return c, errors.New("invalid run configuration URL")
 		}
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -41,4 +40,9 @@ func ReadRunConfig(ctx context.Context, inline, remote string) (Config, error) {
 		return Config{}, errors.New("invalid or oversized run configuration JSON")
 	}
 	return c, nil
+}
+
+func validRunConfigURL(value string) bool {
+	u, err := url.Parse(value)
+	return err == nil && u.Hostname() != "" && (u.Scheme == "http" || u.Scheme == "https") && u.User == nil && u.Fragment == ""
 }

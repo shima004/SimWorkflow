@@ -269,4 +269,59 @@ func TestFourHundredRunsShareTemplatesAndKeepEachConfigurationScoped(t *testing.
 		}
 		plan.Runs[399] = original
 	}
+	bundledConfigs := append([]RunConfig(nil), configs...)
+	for i := range bundledConfigs {
+		bundledConfigs[i].PrecomputeURL, bundledConfigs[i].SimulationURL = "", ""
+	}
+	bundleOptions := options
+	bundleOptions.ExecutionID = "execution"
+	bundleOptions.PrecomputeBundle = &worker.ConfigBundleReference{URL: "https://s3.example/precompute.zip?signature=precompute-only", SHA256: strings.Repeat("a", 64)}
+	bundleOptions.SimulationBundle = &worker.ConfigBundleReference{URL: "https://s3.example/simulation.zip?signature=simulation-only", SHA256: strings.Repeat("b", 64)}
+	wf, err = Build(plan, bundledConfigs, bundleOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ = json.Marshal(wf)
+	t.Logf("400-run bundled definition: %d bytes", len(data))
+	if len(data) > 100*1024 || strings.Count(string(data), "signature=precompute-only") != 1 || strings.Count(string(data), "signature=simulation-only") != 1 {
+		t.Fatal("stage capabilities must occur once each, independently of run count")
+	}
+	spec = wf["spec"].(map[string]any)
+	if len(spec["templates"].([]any)) != 4 || spec["parallelism"] != 12 {
+		t.Fatal("bundling must preserve templates and concurrency")
+	}
+	for _, raw := range spec["templates"].([]any) {
+		template := raw.(map[string]any)
+		if dag, ok := template["dag"].(map[string]any); ok {
+			for i, raw := range dag["tasks"].([]any) {
+				task := raw.(map[string]any)
+				parameters := task["arguments"].(map[string]any)["parameters"].([]any)
+				if len(parameters) != 1 || parameters[0].(map[string]any)["name"] != "run-id" || parameters[0].(map[string]any)["value"] != plan.Runs[i].ID {
+					t.Fatal("bundled tasks must carry only their own run ID")
+				}
+			}
+		}
+		if init, ok := template["initContainers"].([]any); ok {
+			stage := worker.Precompute
+			if strings.HasPrefix(template["name"].(string), "shared-simulation-") {
+				stage = worker.Simulation
+			}
+			envs := map[string]any{}
+			for _, raw := range init[0].(map[string]any)["env"].([]any) {
+				e := raw.(map[string]any)
+				envs[e["name"].(string)] = e["value"]
+			}
+			if len(envs) != 5 || envs["SIMWORKFLOW_CONFIG_BUNDLE_URL"] != "{{workflow.parameters."+stage+"-bundle-url}}" || envs["SIMWORKFLOW_CONFIG_BUNDLE_SHA256"] != "{{workflow.parameters."+stage+"-bundle-sha256}}" || envs["SIMWORKFLOW_STAGE"] != stage || envs["SIMWORKFLOW_EXECUTION_ID"] != "execution" {
+				t.Fatal("stage must receive only its own verified bundle")
+			}
+		}
+	}
+	bad := bundleOptions
+	bad.SimulationBundle = nil
+	if _, err := Build(plan, bundledConfigs, bad); err == nil {
+		t.Fatal("missing simulation bundle accepted")
+	}
+	if _, err := Build(plan, configs, bundleOptions); err == nil {
+		t.Fatal("mixed configuration sources accepted")
+	}
 }

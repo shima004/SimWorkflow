@@ -13,6 +13,7 @@ import (
 	"simworkflow/internal/experiment"
 	"simworkflow/internal/imageio"
 	"simworkflow/internal/storage"
+	"simworkflow/internal/worker"
 )
 
 // Import uploads verified inputs into the current environment. It never submits
@@ -38,6 +39,18 @@ func (a *Archive) ImportTo(ctx context.Context, c config.Config, name, repositor
 	}
 	meta := Metadata{Schema: Schema, Platform: imageio.Platform, CLIVersion: a.Manifest.Metadata.CLIVersion, CLICommit: a.Manifest.Metadata.CLICommit, Images: map[string]string{}}
 	meta.ConfigStorage = a.Manifest.Metadata.ConfigStorage
+	helperImage, err := a.Image(a.Manifest.Metadata.HelperImage)
+	if err != nil {
+		return nil, meta, nil, err
+	}
+	helperConfig, err := helperImage.ConfigFile()
+	if err != nil {
+		return nil, meta, nil, errors.New("could not inspect bundled helper capabilities")
+	}
+	meta.HelperConfigBundle = helperConfig.Config.Labels[worker.ConfigBundleCapabilityLabel] == "v1"
+	if meta.ConfigStorage == "s3-bundle" && !meta.HelperConfigBundle {
+		return nil, meta, nil, errors.New("bundled helper does not support configuration bundles")
+	}
 	if meta.ConfigStorage == "" {
 		meta.ConfigStorage = "inline"
 	}

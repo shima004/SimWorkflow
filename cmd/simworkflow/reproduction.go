@@ -60,6 +60,9 @@ func runReproduction(ctx context.Context, args []string, c config.Config, out, e
 						if env.Name == "SIMWORKFLOW_RUN_URL" {
 							configStorage = "s3"
 						}
+						if env.Name == "SIMWORKFLOW_CONFIG_BUNDLE_URL" {
+							configStorage = "s3-bundle"
+						}
 					}
 					if helper != "" && helper != container.Image {
 						return errors.New("workflow uses inconsistent helper images")

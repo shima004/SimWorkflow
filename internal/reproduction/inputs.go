@@ -13,6 +13,7 @@ import (
 	"simworkflow/internal/imageio"
 	"simworkflow/internal/maparchive"
 	"simworkflow/internal/storage"
+	"simworkflow/internal/worker"
 )
 
 const Schema = "simworkflow/reproduction/v1alpha1"
@@ -23,16 +24,17 @@ type Origin struct {
 	Runs           map[string]string `json:"runs"`
 }
 type Metadata struct {
-	Origin        *Origin                `json:"origin,omitempty"`
-	Schema        string                 `json:"schema"`
-	PlanSHA256    string                 `json:"planSHA256,omitempty"`
-	CLIVersion    string                 `json:"cliVersion"`
-	CLICommit     string                 `json:"cliCommit"`
-	Platform      string                 `json:"platform"`
-	HelperImage   string                 `json:"helperImage"`
-	ConfigStorage string                 `json:"configStorage,omitempty"`
-	Images        map[string]string      `json:"images"`
-	Definition    *experiment.Experiment `json:"definition,omitempty"`
+	Origin             *Origin                `json:"origin,omitempty"`
+	Schema             string                 `json:"schema"`
+	PlanSHA256         string                 `json:"planSHA256,omitempty"`
+	CLIVersion         string                 `json:"cliVersion"`
+	CLICommit          string                 `json:"cliCommit"`
+	Platform           string                 `json:"platform"`
+	HelperImage        string                 `json:"helperImage"`
+	ConfigStorage      string                 `json:"configStorage,omitempty"`
+	HelperConfigBundle bool                   `json:"helperConfigBundle,omitempty"`
+	Images             map[string]string      `json:"images"`
+	Definition         *experiment.Experiment `json:"definition,omitempty"`
 }
 
 // Capture pins image contents and stores immutable map snapshots before submission.
@@ -54,10 +56,17 @@ func Capture(ctx context.Context, c config.Config, input *experiment.Experiment,
 		}
 		return value, err
 	}
-	meta.HelperImage, err = pin(helper)
+	helperImage, pinnedHelper, err := images.Fetch(ctx, helper)
 	if err != nil {
 		return nil, meta, fmt.Errorf("pin helper: %w", err)
 	}
+	meta.HelperImage = pinnedHelper
+	meta.Images[helper] = pinnedHelper
+	helperConfig, err := helperImage.ConfigFile()
+	if err != nil {
+		return nil, meta, errors.New("could not inspect helper capabilities")
+	}
+	meta.HelperConfigBundle = helperConfig.Config.Labels[worker.ConfigBundleCapabilityLabel] == "v1"
 	e.Spec.Simulator.Image, err = pin(e.Spec.Simulator.Image)
 	if err != nil {
 		return nil, meta, fmt.Errorf("pin simulator: %w", err)

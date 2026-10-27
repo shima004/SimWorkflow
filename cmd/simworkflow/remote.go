@@ -158,7 +158,7 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	account := flags.String("service-account", "simworkflow", "workflow executor ServiceAccount")
 	maxRuns := flags.Int("max-runs", experiment.DefaultMaxRuns, "maximum expanded runs")
 	output := flags.String("output", "", "new private YAML file for render; contains temporary signed URLs")
-	configStorage := flags.String("config-storage", "s3", "worker configuration: s3 or inline (inline supports older helper images)")
+	configStorage := flags.String("config-storage", "auto", "worker configuration: auto, s3-bundle, s3 or inline (auto uses stage bundles with a compatible helper)")
 	if err := flags.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -174,8 +174,8 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	if !validHelperImage(*helper) {
 		return errors.New("helper-image must be a container image reference with a tag or digest, without a URL scheme or credentials")
 	}
-	if *configStorage != "inline" && *configStorage != "s3" {
-		return errors.New("config-storage must be inline or s3")
+	if *configStorage != "inline" && *configStorage != "s3" && *configStorage != "s3-bundle" && *configStorage != "auto" {
+		return errors.New("config-storage must be auto, s3-bundle, s3 or inline")
 	}
 	if command == "render" && *output == "" {
 		return errors.New("render requires --output FILE; temporary signed URLs are never printed")
@@ -194,6 +194,9 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 		return err
 	}
 	*helper = meta.HelperImage
+	if *configStorage == "auto" && !meta.HelperConfigBundle {
+		fmt.Fprintln(errOut, "Helper has no configuration-bundle capability; using individual S3 configurations. An updated helper enables stage bundles.")
+	}
 	plan, err := experiment.BuildPlan(e, *maxRuns)
 	if err != nil {
 		return err
@@ -202,6 +205,15 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 }
 
 func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, helper, account, configStorage, command, output string, meta reproduction.Metadata, out io.Writer) error {
+	if configStorage == "auto" {
+		configStorage = "s3"
+		if meta.HelperConfigBundle {
+			configStorage = "s3-bundle"
+		}
+	}
+	if configStorage == "s3-bundle" && !meta.HelperConfigBundle {
+		return errors.New("helper does not advertise configuration bundle v1 support; use an updated helper image or --config-storage s3")
+	}
 	meta.ConfigStorage = configStorage
 	if err := reproduction.ValidatePlan(plan); err != nil {
 		return err
@@ -287,7 +299,45 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 		}
 		configs = append(configs, pair)
 	}
-	wf, err := workflow.Build(plan, configs, workflow.Options{Namespace: c.Argo.Namespace, HelperImage: helper, ServiceAccount: account, ExecutionID: executionID, ResultPrefix: prefix})
+	options := workflow.Options{Namespace: c.Argo.Namespace, HelperImage: helper, ServiceAccount: account, ExecutionID: executionID, ResultPrefix: prefix}
+	if configStorage == "s3-bundle" {
+		for _, stage := range []string{worker.Precompute, worker.Simulation} {
+			stageConfigs := make([]worker.Config, len(configs))
+			for i, pair := range configs {
+				stageConfigs[i] = pair.Precompute
+				if stage == worker.Simulation {
+					stageConfigs[i] = pair.Simulation
+				}
+			}
+			path, sha, err := worker.CreateConfigBundle(ctx, executionID, stage, stageConfigs)
+			if err != nil {
+				return err
+			}
+			f, err := os.Open(path)
+			if err != nil {
+				os.Remove(path)
+				return err
+			}
+			key := prefix + "/configs/" + stage + ".zip"
+			err = store.PutImmutable(ctx, key, f, "application/zip", map[string]string{"sha256": sha})
+			f.Close()
+			os.Remove(path)
+			if err != nil {
+				return err
+			}
+			transfer, err := store.SignDownload(ctx, store.Bucket, key)
+			if err != nil {
+				return err
+			}
+			ref := &worker.ConfigBundleReference{URL: transfer.URL, SHA256: sha}
+			if stage == worker.Precompute {
+				options.PrecomputeBundle = ref
+			} else {
+				options.SimulationBundle = ref
+			}
+		}
+	}
+	wf, err := workflow.Build(plan, configs, options)
 	if err != nil {
 		return err
 	}
@@ -298,7 +348,7 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 		return err
 	}
 	if len(encodedWorkflow) > 900*1024 {
-		if configStorage == "s3" {
+		if configStorage == "s3" || configStorage == "s3-bundle" {
 			return fmt.Errorf("workflow definition is too large even with S3 configuration (%d bytes, limit %d bytes, %d runs); reduce runs or distinct image/resource configurations; node-status offloading does not shrink the definition", len(encodedWorkflow), 900*1024, plan.TotalRuns)
 		}
 		return errors.New("workflow definition is too large; use --config-storage s3 with a compatible helper image or split the experiment")

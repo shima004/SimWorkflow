@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -14,9 +17,11 @@ import (
 
 	"go.yaml.in/yaml/v3"
 	"simworkflow/internal/argo"
+	"simworkflow/internal/config"
 	"simworkflow/internal/experiment"
 	"simworkflow/internal/reproduction"
 	"simworkflow/internal/reproduction/testfixture"
+	"simworkflow/internal/worker"
 )
 
 type reproductionArgo struct {
@@ -83,6 +88,24 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 	if err := json.Unmarshal(source.Objects.Get("/fixture/"+prefix+"/reproduction.json"), &capture); err != nil || capture.PlanSHA256 != reproduction.PlanSHA256(&original) {
 		t.Fatal("submission did not save reproduction provenance")
 	}
+	if capture.ConfigStorage != "s3-bundle" || !capture.HelperConfigBundle {
+		t.Fatal("compatible helper must automatically use stage bundles")
+	}
+	for _, stage := range []string{worker.Precompute, worker.Simulation} {
+		key := "/fixture/" + prefix + "/configs/" + stage + ".zip"
+		data := source.Objects.Get(key)
+		if len(data) == 0 {
+			t.Fatal("stage bundle not saved")
+		}
+		sha := sha256.Sum256(data)
+		c, err := worker.ReadRunConfigSource(context.Background(), worker.RunConfigSource{BundleURL: source.S3.URL + key, BundleSHA256: hex.EncodeToString(sha[:]), RunID: original.Runs[0].ID, Stage: stage, ExecutionID: snapshot.Metadata.Annotations["simworkflow.io/execution-id"]})
+		if err != nil || c.Run.ID != original.Runs[0].ID || len(c.Run.Configuration.Groups) != 2 {
+			t.Fatal("saved bundle was not usable by a worker", err)
+		}
+		if len(source.Objects.Get("/fixture/"+prefix+"/configs/"+original.Runs[0].ID+"/"+stage+".json")) != 0 {
+			t.Fatal("bundled mode must not create per-run configuration objects")
+		}
+	}
 	bundle := filepath.Join(t.TempDir(), "experiment.zip")
 	if err := runRemote([]string{"export", "--output", bundle, "fixture-workflow"}, source.Config, &out, &errOut); err != nil {
 		t.Fatal(err)
@@ -115,6 +138,9 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 	if metadata.Origin == nil || metadata.Origin.Workflow != "fixture-workflow" || len(metadata.Origin.Runs) != len(original.Runs) {
 		t.Fatal("original/new run mapping was not recorded")
 	}
+	if metadata.ConfigStorage != "s3-bundle" {
+		t.Fatal("reproduction lost configuration mode")
+	}
 	for _, template := range after.Spec.Templates {
 		for _, container := range template.InitContainers {
 			if !strings.Contains(container.Image, "/simworkflow/reproduced@sha256:") {
@@ -133,5 +159,12 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 	target.Objects.Mu.Unlock()
 	if err == nil || requestsAfter != requestsBefore {
 		t.Fatal("invalid bundle must fail before service writes")
+	}
+}
+
+func TestBundleModeRejectsLegacyHelperBeforeWriting(t *testing.T) {
+	err := submitPlan(context.Background(), config.Config{}, nil, "old-helper:v1", "simworkflow", "s3-bundle", "submit", "", reproduction.Metadata{}, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "helper does not advertise") {
+		t.Fatal("legacy helper must fail before configuration uploads", err)
 	}
 }

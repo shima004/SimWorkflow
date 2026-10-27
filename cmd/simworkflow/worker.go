@@ -36,7 +36,7 @@ func runWorker(args []string, errOut io.Writer) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer cancel()
 	if args[0] == "prepare" {
-		c, err := worker.ReadRunConfig(ctx, os.Getenv("SIMWORKFLOW_RUN"), os.Getenv("SIMWORKFLOW_RUN_URL"))
+		c, err := worker.ReadRunConfigSource(ctx, worker.RunConfigSource{Inline: os.Getenv("SIMWORKFLOW_RUN"), Remote: os.Getenv("SIMWORKFLOW_RUN_URL"), BundleURL: os.Getenv("SIMWORKFLOW_CONFIG_BUNDLE_URL"), BundleSHA256: os.Getenv("SIMWORKFLOW_CONFIG_BUNDLE_SHA256"), RunID: os.Getenv("SIMWORKFLOW_RUN_ID"), Stage: os.Getenv("SIMWORKFLOW_STAGE"), ExecutionID: os.Getenv("SIMWORKFLOW_EXECUTION_ID")})
 		if err != nil {
 			return err
 		}

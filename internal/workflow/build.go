@@ -13,11 +13,13 @@ import (
 )
 
 type Options struct {
-	Namespace      string
-	HelperImage    string
-	ServiceAccount string
-	ExecutionID    string
-	ResultPrefix   string
+	Namespace        string
+	HelperImage      string
+	ServiceAccount   string
+	ExecutionID      string
+	ResultPrefix     string
+	PrecomputeBundle *worker.ConfigBundleReference
+	SimulationBundle *worker.ConfigBundleReference
 }
 
 type RunConfig struct {
@@ -33,6 +35,10 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 	}
 	if options.HelperImage == "" || options.Namespace == "" || options.ServiceAccount == "" || len(configs) != len(plan.Runs) {
 		return nil, errors.New("workflow requires helper image, namespace, service account and one configuration per run")
+	}
+	bundled := options.PrecomputeBundle != nil || options.SimulationBundle != nil
+	if bundled && (options.PrecomputeBundle == nil || options.SimulationBundle == nil || options.PrecomputeBundle.URL == "" || options.SimulationBundle.URL == "" || !experiment.ValidSHA256(options.PrecomputeBundle.SHA256) || !experiment.ValidSHA256(options.SimulationBundle.SHA256) || options.ExecutionID == "") {
+		return nil, errors.New("workflow requires both stage bundle URLs, SHA-256 hashes and execution identity")
 	}
 	tasks := []any{}
 	templates := []any{}
@@ -65,7 +71,10 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 		if pair.Precompute.TimeoutSeconds <= 0 || pair.Precompute.TimeoutSeconds != pair.Simulation.TimeoutSeconds {
 			return nil, errors.New("stage timeouts must be equal and positive")
 		}
-		shared := pair.PrecomputeURL != "" && pair.SimulationURL != ""
+		if bundled && (pair.PrecomputeURL != "" || pair.SimulationURL != "") {
+			return nil, errors.New("bundle and individual configuration URLs cannot be mixed")
+		}
+		shared := bundled || pair.PrecomputeURL != "" && pair.SimulationURL != ""
 		steps := []any{}
 		for _, c := range []worker.Config{pair.Precompute, pair.Simulation} {
 			if c.Run.ID != run.ID {
@@ -86,6 +95,16 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 			if shared {
 				env["value"] = "{{inputs.parameters.config-url}}"
 			}
+			envs := []any{env}
+			if bundled {
+				envs = []any{
+					map[string]any{"name": "SIMWORKFLOW_CONFIG_BUNDLE_URL", "value": "{{workflow.parameters." + c.Stage + "-bundle-url}}"},
+					map[string]any{"name": "SIMWORKFLOW_CONFIG_BUNDLE_SHA256", "value": "{{workflow.parameters." + c.Stage + "-bundle-sha256}}"},
+					map[string]any{"name": "SIMWORKFLOW_RUN_ID", "value": "{{inputs.parameters.run-id}}"},
+					map[string]any{"name": "SIMWORKFLOW_STAGE", "value": c.Stage},
+					map[string]any{"name": "SIMWORKFLOW_EXECUTION_ID", "value": options.ExecutionID},
+				}
+			}
 			containers := []any{
 				map[string]any{"name": "simulator", "image": run.Simulator.Image, "command": []string{"/tools/simworkflow", "worker", "server"}, "resources": resource(run.Simulator.Resources)},
 				map[string]any{"name": "main", "image": options.HelperImage, "command": []string{"/tools/simworkflow", "worker", "collect"}, "env": []any{map[string]any{"name": "SIMWORKFLOW_POD_IP", "valueFrom": map[string]any{"fieldRef": map[string]any{"fieldPath": "status.podIP"}}}}, "resources": resource(experiment.Resources{CPU: "0.1", Memory: "256Mi"})},
@@ -95,7 +114,7 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 			}
 			template := map[string]any{
 				"name": run.ID + "-" + c.Stage, "activeDeadlineSeconds": c.TimeoutSeconds + 180,
-				"initContainers": []any{map[string]any{"name": "prepare-experiment", "image": options.HelperImage, "command": []string{"/usr/local/bin/simworkflow", "worker", "prepare"}, "env": []any{env}, "volumeMounts": mounts, "resources": resource(experiment.Resources{CPU: "0.1", Memory: "256Mi"})}},
+				"initContainers": []any{map[string]any{"name": "prepare-experiment", "image": options.HelperImage, "command": []string{"/usr/local/bin/simworkflow", "worker", "prepare"}, "env": envs, "volumeMounts": mounts, "resources": resource(experiment.Resources{CPU: "0.1", Memory: "256Mi"})}},
 				"containerSet":   map[string]any{"volumeMounts": mounts, "containers": containers},
 			}
 			// Retry simulation once without recomputing or modifying its input data.
@@ -104,13 +123,17 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 			}
 			step := map[string]any{"name": c.Stage, "template": template["name"]}
 			if shared {
-				template["inputs"] = map[string]any{"parameters": []any{map[string]any{"name": "config-url"}}}
+				parameter, value := "config-url", "{{inputs.parameters."+c.Stage+"-url}}"
+				if bundled {
+					parameter, value = "run-id", "{{inputs.parameters.run-id}}"
+				}
+				template["inputs"] = map[string]any{"parameters": []any{map[string]any{"name": parameter}}}
 				name, err := addShared(template, c.Stage)
 				if err != nil {
 					return nil, err
 				}
 				step["template"] = name
-				step["arguments"] = map[string]any{"parameters": []any{map[string]any{"name": "config-url", "value": "{{inputs.parameters." + c.Stage + "-url}}"}}}
+				step["arguments"] = map[string]any{"parameters": []any{map[string]any{"name": parameter, "value": value}}}
 			} else {
 				templates = append(templates, template)
 			}
@@ -120,6 +143,9 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 		task := map[string]any{"name": run.ID, "template": run.ID}
 		if shared {
 			wrapper["inputs"] = map[string]any{"parameters": []any{map[string]any{"name": "precompute-url"}, map[string]any{"name": "simulation-url"}}}
+			if bundled {
+				wrapper["inputs"] = map[string]any{"parameters": []any{map[string]any{"name": "run-id"}}}
+			}
 			name, err := addShared(wrapper, "run")
 			if err != nil {
 				return nil, err
@@ -129,6 +155,9 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 				map[string]any{"name": "precompute-url", "value": pair.PrecomputeURL},
 				map[string]any{"name": "simulation-url", "value": pair.SimulationURL},
 			}}
+			if bundled {
+				task["arguments"] = map[string]any{"parameters": []any{map[string]any{"name": "run-id", "value": run.ID}}}
+			}
 		} else {
 			templates = append(templates, wrapper)
 		}
@@ -141,9 +170,18 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 	}
 	waves := (len(configs)-1)/plan.MaxParallelRuns + 1
 	deadline := int64(waves) * (configs[0].Precompute.TimeoutSeconds + 360)
+	spec := map[string]any{"entrypoint": "experiment", "activeDeadlineSeconds": deadline, "serviceAccountName": options.ServiceAccount, "parallelism": plan.MaxParallelRuns, "nodeSelector": map[string]string{"kubernetes.io/arch": "amd64"}, "volumes": []any{map[string]any{"name": "work", "emptyDir": map[string]any{}}, map[string]any{"name": "tools", "emptyDir": map[string]any{}}}, "templates": templates}
+	if bundled {
+		spec["arguments"] = map[string]any{"parameters": []any{
+			map[string]any{"name": "precompute-bundle-url", "value": options.PrecomputeBundle.URL},
+			map[string]any{"name": "precompute-bundle-sha256", "value": options.PrecomputeBundle.SHA256},
+			map[string]any{"name": "simulation-bundle-url", "value": options.SimulationBundle.URL},
+			map[string]any{"name": "simulation-bundle-sha256", "value": options.SimulationBundle.SHA256},
+		}}
+	}
 	return map[string]any{
 		"apiVersion": "argoproj.io/v1alpha1", "kind": "Workflow",
 		"metadata": map[string]any{"generateName": name + "-", "namespace": options.Namespace, "labels": map[string]string{"app.kubernetes.io/managed-by": "simworkflow"}, "annotations": map[string]string{"simworkflow.io/execution-id": options.ExecutionID, "simworkflow.io/result-prefix": options.ResultPrefix}},
-		"spec":     map[string]any{"entrypoint": "experiment", "activeDeadlineSeconds": deadline, "serviceAccountName": options.ServiceAccount, "parallelism": plan.MaxParallelRuns, "nodeSelector": map[string]string{"kubernetes.io/arch": "amd64"}, "volumes": []any{map[string]any{"name": "work", "emptyDir": map[string]any{}}, map[string]any{"name": "tools", "emptyDir": map[string]any{}}}, "templates": templates},
+		"spec":     spec,
 	}, nil
 }
