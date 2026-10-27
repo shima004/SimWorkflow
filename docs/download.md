@@ -29,6 +29,16 @@ simworkflow experiment download \
   WORKFLOW_NAME
 ```
 
+## 再送信分を含める
+
+```sh
+simworkflow experiment download --with-retries --include summary --stage simulation WORKFLOW_NAME
+```
+
+元の実験と再送信の各run IDについて、最新の成功試行を採用し、成功がなければ最新の試行を採用します。要約・ログ・事前計算データなどは同じ試行から取得し、`--include`・`--file`・`--run`・`--stage` を引き続き使えます。取得元のWorkflow・実行IDは `download.json` に記録します。
+
+既定の出力先は `artifacts/<Workflow名>-with-retries/` です。採用試行が変わった場合は新しい `--output` を指定します。詳細と保持が必要な情報は [再送信と結果の統合](retry.md) を参照してください。
+
 ## 選択できる要素
 
 `--include` はカンマ区切りで複数指定できます。省略時は `all` です。

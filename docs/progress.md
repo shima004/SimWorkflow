@@ -48,6 +48,16 @@ Argoの終了ハンドラーは実行可能ですが、SimWorkflowの結果収�
 
 一覧と停止にはArgoの接続設定だけが必要です。S3・レジストリの設定や認証情報、SimScopeは不要です。キーストア方式でもArgoの登録だけを参照します。停止には `workflows` の `patch` 権限が必要です。[接続トラブル](connections.md#argoの403) を参照してください。
 
+## 失敗分の再送信と結果の統合
+
+```sh
+simworkflow experiment retry --dry-run WORKFLOW_NAME
+simworkflow experiment retry WORKFLOW_NAME
+simworkflow experiment results --with-retries WORKFLOW_NAME
+```
+
+`retry` は終了済みWorkflowの失敗した組み合わせを、事前計算から新しいWorkflowで実行します。`results --with-retries` は元の実験と再送信を調べ、各組み合わせの最新の成功結果を採用します。成功がなければ最新の試行を採用します。通常の `status`・`results` は指定Workflow単体の表示です。選択条件・保存情報・ダウンロードとの関係は [再送信と結果の統合](retry.md) を参照してください。
+
 ## TUIの操作
 
 | 操作 | キー・入力 |

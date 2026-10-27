@@ -9,6 +9,7 @@ RoboCup Rescue Simulationの比較実験を、YAMLで定義してArgo Workflows�
 - シミュレーターと消防・警察・救急ごとのCPU・メモリを指定する
 - 事前計算データをS3へ保存し、別ステップの本実行へ引き継ぐ
 - TUIで実行を選択し、進捗・スコア・設定詳細を確認する
+- 失敗した実行だけを再送信し、再送信分を含めて結果を取得する
 - ログ・要約・事前計算データなど、必要な結果だけを取得する
 - イメージ・マップ・実行計画をZIPで保存し、別環境で実験を再実行する
 
@@ -59,6 +60,7 @@ simworkflow experiment download --include summary --stage simulation WORKFLOW_NA
 | 認証情報を安全に保存する | [OSの資格情報ストア](docs/credentials.md) |
 | マップを登録・管理する | [マップ](docs/maps.md) |
 | 実験を一覧表示・停止・監視し、結果を取得する | [進捗・スコア](docs/progress.md)・[ダウンロード](docs/download.md) |
+| 失敗した実行を再送信し、結果をまとめる | [再送信と結果の統合](docs/retry.md) |
 | 実験をまとめて保存・再実行する | [再現用ZIP](docs/reproduction.md) |
 | 開発・リリースする | [開発ガイド](docs/development.md) |
 
