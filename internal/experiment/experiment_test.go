@@ -18,7 +18,7 @@ func sample(t *testing.T) *Experiment {
 
 func TestSamplePlan(t *testing.T) {
 	e := sample(t)
-	plan, err := BuildPlan(e, 9)
+	plan, err := BuildPlan(e)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,12 +44,6 @@ func TestSamplePlan(t *testing.T) {
 			}
 		}
 	}
-	if _, err := BuildPlan(e, 8); err == nil {
-		t.Fatal("run limit must be enforced")
-	}
-	if _, err := BuildPlan(e, 0); err == nil {
-		t.Fatal("nonpositive run limit must fail")
-	}
 	first, _ := json.Marshal(plan)
 	// Reinsert the matrix keys in reverse order; Go map iteration cannot
 	// affect either expansion order or identifiers.
@@ -60,7 +54,7 @@ func TestSamplePlan(t *testing.T) {
 	for i := len(keys) - 1; i >= 0; i-- {
 		matrix.Modules[keys[i]] = old[keys[i]]
 	}
-	again, err := BuildPlan(e, 9)
+	again, err := BuildPlan(e)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +72,7 @@ func TestFixedAndMultipleAgents(t *testing.T) {
 	other.Name = "second"
 	e.Spec.Agents = append(e.Spec.Agents, other)
 	e.Spec.Conditions.Maps = append(e.Spec.Conditions.Maps, Map{Name: "second-map", Source: "s3://maps/second.zip"})
-	plan, err := BuildPlan(e, 12)
+	plan, err := BuildPlan(e)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +91,7 @@ func TestExclusions(t *testing.T) {
 	key := sortedKeys(a.Matrix.Modules)[0]
 	values := a.Matrix.Modules[key]
 	a.Matrix.Exclude = []Exclusion{{Modules: map[string]string{key: values[0]}}}
-	plan, err := BuildPlan(e, 10)
+	plan, err := BuildPlan(e)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +99,7 @@ func TestExclusions(t *testing.T) {
 		t.Fatal("partial exclusion must remove all configurations with the matching axis value")
 	}
 	a.Matrix.Exclude = append(a.Matrix.Exclude, Exclusion{Modules: map[string]string{key: values[1]}})
-	if _, err := BuildPlan(e, 10); err == nil || !strings.Contains(err.Error(), "remove all") {
+	if _, err := BuildPlan(e); err == nil || !strings.Contains(err.Error(), "remove all") {
 		t.Fatalf("all-excluded agent must fail, got %v", err)
 	}
 }
@@ -193,7 +187,7 @@ func TestResourceQuantities(t *testing.T) {
 
 func TestRoleResourcesValidationFallbackAndIdentity(t *testing.T) {
 	e := sample(t)
-	baseline, err := BuildPlan(e, 100)
+	baseline, err := BuildPlan(e)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +197,7 @@ func TestRoleResourcesValidationFallbackAndIdentity(t *testing.T) {
 		}
 	}
 	e.Spec.Agents[0].ResourcesByRole = map[string]Resources{"fireBrigade": {CPU: "0.5", Memory: "1Gi"}}
-	plan, err := BuildPlan(e, 100)
+	plan, err := BuildPlan(e)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,14 +238,14 @@ func TestRegisteredMapsParametersAndValidation(t *testing.T) {
 	e.Spec.Conditions.Maps = []Map{{Name: "test-old", Ref: "test", Version: "v1"}, {Name: "test-current", Ref: "test", Version: "latest"}}
 	steps := 10
 	e.Spec.Simulator.Parameters = &SimulatorParameters{Timesteps: &steps}
-	plan, err := BuildPlan(e, 100)
+	plan, err := BuildPlan(e)
 	if err != nil || !plan.UnresolvedMaps {
 		t.Fatal(plan, err)
 	}
 	originalID := plan.Runs[0].ID
 	changed := 300
 	e.Spec.Simulator.Parameters = &SimulatorParameters{Timesteps: &changed}
-	plan, err = BuildPlan(e, 100)
+	plan, err = BuildPlan(e)
 	if err != nil || plan.Runs[0].ID == originalID {
 		t.Fatal("timestep changes must change run identity", err)
 	}

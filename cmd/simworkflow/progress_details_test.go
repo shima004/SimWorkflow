@@ -22,7 +22,7 @@ func detailsPlan(t *testing.T) *experiment.Plan {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := experiment.BuildPlan(e, 100)
+	p, err := experiment.BuildPlan(e)
 	if err != nil {
 		t.Fatal(err)
 	}

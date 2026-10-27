@@ -20,8 +20,8 @@ func CloneExperiment(e *experiment.Experiment) (*experiment.Experiment, error) {
 	return &copy, err
 }
 func ValidatePlan(p *experiment.Plan) error {
-	if p == nil || p.APIVersion != experiment.APIVersion || len(p.Runs) == 0 || len(p.Runs) > experiment.DefaultMaxRuns || p.TotalRuns != len(p.Runs) {
-		return errors.New("invalid or oversized reproduction plan")
+	if p == nil || p.APIVersion != experiment.APIVersion || len(p.Runs) == 0 || p.TotalRuns != len(p.Runs) {
+		return errors.New("invalid reproduction plan")
 	}
 	seen := map[string]bool{}
 	for _, r := range p.Runs {

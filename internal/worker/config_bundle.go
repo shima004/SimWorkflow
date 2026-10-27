@@ -52,7 +52,7 @@ func CreateSequenceConfigBundle(ctx context.Context, executionID, stage string, 
 }
 
 func createConfigBundle(ctx context.Context, executionID, stage string, configs []Config, indexed bool) (path, digest string, err error) {
-	if executionID == "" || (stage != Precompute && stage != Simulation) || len(configs) == 0 || len(configs) > experiment.DefaultMaxRuns {
+	if executionID == "" || (stage != Precompute && stage != Simulation) || len(configs) == 0 {
 		return "", "", errors.New("invalid configuration bundle inputs")
 	}
 	f, err := os.CreateTemp("", "simworkflow-config-*.zip")
@@ -151,7 +151,7 @@ func ReadRunConfigSource(ctx context.Context, source RunConfigSource) (Config, e
 	index, indexErr := strconv.Atoi(source.Index)
 	validSelector := bundleRunID.MatchString(source.RunID)
 	if indexed {
-		validSelector = source.RunID == "" && bundleSequenceName.MatchString(source.Sequence) && indexErr == nil && index >= 0 && index < experiment.DefaultMaxRuns && strconv.Itoa(index) == source.Index
+		validSelector = source.RunID == "" && bundleSequenceName.MatchString(source.Sequence) && indexErr == nil && index >= 0 && strconv.Itoa(index) == source.Index
 	}
 	if source.Inline != "" || source.Remote != "" || !validRunConfigURL(source.BundleURL) || !experiment.ValidSHA256(source.BundleSHA256) || !validSelector || source.ExecutionID == "" || (source.Stage != Precompute && source.Stage != Simulation) {
 		return Config{}, errors.New("invalid or conflicting configuration bundle source")
@@ -175,7 +175,7 @@ func ReadRunConfigSource(ctx context.Context, source RunConfigSource) (Config, e
 		return Config{}, errors.New("configuration bundle failed size or SHA-256 verification")
 	}
 	z, err := zip.NewReader(f, n)
-	if err != nil || len(z.File) < 2 || len(z.File) > experiment.DefaultMaxRuns+1 {
+	if err != nil || len(z.File) < 2 {
 		return Config{}, errors.New("invalid configuration bundle ZIP")
 	}
 	entries := map[string]*zip.File{}

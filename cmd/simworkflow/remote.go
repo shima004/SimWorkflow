@@ -156,7 +156,6 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 		flags.Lookup("helper-image").DefValue = "<invalid configured image>"
 	}
 	account := flags.String("service-account", "simworkflow", "workflow executor ServiceAccount")
-	maxRuns := flags.Int("max-runs", experiment.DefaultMaxRuns, "maximum expanded runs")
 	output := flags.String("output", "", "new private YAML file for render; contains temporary signed URLs")
 	configStorage := flags.String("config-storage", "auto", "worker configuration: auto, s3-sequence, s3-bundle, s3 or inline (auto selects a compatible format)")
 	if err := flags.Parse(args[1:]); err != nil {
@@ -197,7 +196,7 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	if *configStorage == "auto" && !meta.HelperConfigBundle {
 		fmt.Fprintln(errOut, "Helper has no configuration-bundle capability; using individual S3 configurations. An updated helper enables stage bundles.")
 	}
-	plan, err := experiment.BuildPlan(e, *maxRuns)
+	plan, err := experiment.BuildPlan(e)
 	if err != nil {
 		return err
 	}

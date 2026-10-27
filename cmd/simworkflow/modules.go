@@ -33,7 +33,6 @@ func runModules(args []string, out, errOut io.Writer) error {
 	base := flags.String("base", "", "base module configuration file (required)")
 	format := flags.String("format", "", "module format: java or python (required)")
 	destination := flags.String("output-dir", "", "new output directory; must not already exist (required)")
-	maxRuns := flags.Int("max-runs", experiment.DefaultMaxRuns, "maximum number of expanded runs")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -50,7 +49,7 @@ func runModules(args []string, out, errOut io.Writer) error {
 	if err != nil {
 		return err
 	}
-	plan, err := experiment.BuildPlan(e, *maxRuns)
+	plan, err := experiment.BuildPlan(e)
 	if err != nil {
 		return err
 	}

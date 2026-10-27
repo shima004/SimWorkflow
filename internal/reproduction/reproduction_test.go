@@ -22,6 +22,30 @@ import (
 
 const prefix = "experiments/0123456789abcdef0123456789abcdef"
 
+func TestPlansAboveTenThousandHaveNoFixedCountLimit(t *testing.T) {
+	e, err := experiment.ReadFile("../../examples/experiments/python-module-comparison.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Spec.Agents = e.Spec.Agents[:1]
+	e.Spec.Agents[0].Matrix = nil
+	e.Spec.Conditions.Maps = e.Spec.Conditions.Maps[:1]
+	e.Spec.Conditions.Seeds = make([]int64, 10001)
+	for i := range e.Spec.Conditions.Seeds {
+		e.Spec.Conditions.Seeds[i] = int64(i + 1)
+	}
+	// Keep the independently enforced signed-transfer duration within bounds.
+	e.Spec.Execution.MaxParallelRuns = 10001
+	e.Spec.Execution.Timeout = "1m"
+	plan, err := experiment.BuildPlan(e)
+	if err != nil || plan.TotalRuns != 10001 {
+		t.Fatal("planning retained a fixed count limit", err)
+	}
+	if err := reproduction.ValidatePlan(plan); err != nil {
+		t.Fatal("submission/export/reproduction retained a fixed count limit", err)
+	}
+}
+
 func tarBundle(t *testing.T) []byte {
 	t.Helper()
 	var result bytes.Buffer
@@ -51,7 +75,7 @@ func exported(t *testing.T, logs bool) (*testfixture.Environment, *experiment.Pl
 	if !strings.Contains(locked.Spec.Simulator.Image, "@sha256:") || !strings.Contains(locked.Spec.Conditions.Maps[0].Source, "/reproduction/maps/") {
 		t.Fatal("inputs were not pinned and snapshotted")
 	}
-	plan, err := experiment.BuildPlan(locked, 100)
+	plan, err := experiment.BuildPlan(locked)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +207,7 @@ func TestLogsAreExplicitAndExistingZIPIsPreserved(t *testing.T) {
 
 func TestLegacyTaggedInputsFailWithoutInventingHistoricalDigest(t *testing.T) {
 	env := testfixture.New(t)
-	plan, err := experiment.BuildPlan(env.Experiment(), 100)
+	plan, err := experiment.BuildPlan(env.Experiment())
 	if err != nil {
 		t.Fatal(err)
 	}

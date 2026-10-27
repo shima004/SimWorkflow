@@ -22,7 +22,7 @@ func TestGroupedModuleOutputsAndDetails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan, err := experiment.BuildPlan(e, 100)
+	plan, err := experiment.BuildPlan(e)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestGroupedResultsRecoverLabelsFromPlanForOlderHelpers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan, err := experiment.BuildPlan(e, 100)
+	plan, err := experiment.BuildPlan(e)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -172,7 +172,7 @@ func TestRunProgressUsesCurrentAttemptAndHandlesOlderWorkers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan, err := experiment.BuildPlan(e, 100)
+	plan, err := experiment.BuildPlan(e)
 	if err != nil {
 		t.Fatal(err)
 	}

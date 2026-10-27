@@ -25,7 +25,7 @@ func TestGroupCartesianProductAndAtomicSets(t *testing.T) {
 	a.Matrix.Modules = map[string][]string{"Extra.Module": {"impl.One", "impl.Two"}}
 	e.Spec.Conditions.Seeds = []int64{1, 2}
 	before, _ := json.Marshal(e)
-	plan, err := BuildPlan(e, 16)
+	plan, err := BuildPlan(e)
 	if err != nil || plan.TotalRuns != 16 || plan.Agents[0].Configurations != 8 {
 		t.Fatalf("expected 2x2 groups x2 module candidates x2 seeds: %v", err)
 	}
@@ -64,16 +64,13 @@ func TestGroupCartesianProductAndAtomicSets(t *testing.T) {
 	first, _ := json.Marshal(plan)
 	// YAML mapping insertion order must not affect expansion or identities.
 	a.Matrix.Groups = map[string][]ModuleSet{"B": a.Matrix.Groups["B"], "A": a.Matrix.Groups["A"]}
-	again, err := BuildPlan(e, 16)
+	again, err := BuildPlan(e)
 	if err != nil {
 		t.Fatal(err)
 	}
 	second, _ := json.Marshal(again)
 	if string(first) != string(second) {
 		t.Fatal("group expansion must be deterministic")
-	}
-	if _, err := BuildPlan(e, 15); err == nil {
-		t.Fatal("group products must obey the total run limit")
 	}
 	plan.Runs[0].Configuration.Groups["A"] = "modified"
 	plan.Runs[0].Configuration.Modules["ExtendActionClear.PathPlanning"] = "impl.Modified"
@@ -84,12 +81,12 @@ func TestGroupCartesianProductAndAtomicSets(t *testing.T) {
 
 func TestGroupExclusionsAndIdentity(t *testing.T) {
 	e := groupedSample(t)
-	base, err := BuildPlan(e, 10)
+	base, err := BuildPlan(e)
 	if err != nil {
 		t.Fatal(err)
 	}
 	e.Spec.Agents[0].Matrix.Exclude = []Exclusion{{Groups: map[string]string{"A": "astar", "B": "kmeanspp"}}}
-	plan, err := BuildPlan(e, 10)
+	plan, err := BuildPlan(e)
 	if err != nil || plan.TotalRuns != 3 {
 		t.Fatal("group-based exclusions must remove exactly the selected combination")
 	}
@@ -101,18 +98,18 @@ func TestGroupExclusionsAndIdentity(t *testing.T) {
 	key := "ExtendActionClear.PathPlanning"
 	value := e.Spec.Agents[0].Matrix.Groups["A"][0].Modules[key]
 	e.Spec.Agents[0].Matrix.Exclude = []Exclusion{{Modules: map[string]string{key: value}, Groups: map[string]string{"B": "kmeans"}}}
-	plan, err = BuildPlan(e, 10)
+	plan, err = BuildPlan(e)
 	if err != nil || plan.TotalRuns != 3 {
 		t.Fatal("module/group criteria in one exclusion must both match")
 	}
 	e.Spec.Agents[0].Matrix.Exclude = []Exclusion{{Modules: map[string]string{key: value}}}
-	plan, err = BuildPlan(e, 10)
+	plan, err = BuildPlan(e)
 	if err != nil || plan.TotalRuns != 2 {
 		t.Fatal("module exclusions must also recognize grouped module values")
 	}
 	e.Spec.Agents[0].Matrix.Exclude = nil
 	e.Spec.Agents[0].Matrix.Groups["A"][0].Name = "renamed"
-	renamed, err := BuildPlan(e, 10)
+	renamed, err := BuildPlan(e)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,13 +156,13 @@ func TestExcludedGroupSubtreesArePruned(t *testing.T) {
 	for i := 0; i < 80; i++ {
 		a.Matrix.Groups[fmt.Sprintf("Z%02d", i)] = []ModuleSet{{Name: "one", Modules: map[string]string{fmt.Sprintf("Module.K%02d", i): "impl.One"}}, {Name: "two", Modules: map[string]string{fmt.Sprintf("Module.K%02d", i): "impl.Two"}}}
 	}
-	if _, err := BuildPlan(e, 10); err == nil || !strings.Contains(err.Error(), "remove all") {
+	if _, err := BuildPlan(e); err == nil || !strings.Contains(err.Error(), "remove all") {
 		t.Fatal("fully excluded branches must be pruned before enumerating their huge product")
 	}
 }
 
 func TestLegacyIdentitiesRemainUnchanged(t *testing.T) {
-	plan, err := BuildPlan(sample(t), 100)
+	plan, err := BuildPlan(sample(t))
 	if err != nil {
 		t.Fatal(err)
 	}

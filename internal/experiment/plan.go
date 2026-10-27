@@ -9,10 +9,6 @@ import (
 	"maps"
 )
 
-// DefaultMaxRuns prevents accidental allocation of enormous Cartesian products.
-// It can be raised explicitly by a local planning command.
-const DefaultMaxRuns = 10000
-
 type Plan struct {
 	UnresolvedMaps  bool           `json:"unresolvedMaps,omitempty"`
 	APIVersion      string         `json:"apiVersion"`
@@ -53,16 +49,14 @@ type Run struct {
 // BuildPlan orders group axes, then module axes by key, candidates by input order, then maps and seeds
 // by input order. IDs describe resolved inputs and do not depend on map order.
 // They identify a planned configuration/run, not an execution attempt.
-func BuildPlan(e *Experiment, maxRuns int) (*Plan, error) {
-	if maxRuns <= 0 {
-		return nil, errors.New("max runs must be a positive integer")
-	}
+func BuildPlan(e *Experiment) (*Plan, error) {
 	if err := e.Validate(); err != nil {
 		return nil, err
 	}
-	// Division avoids overflow in len(maps)*len(seeds).
-	if len(e.Spec.Conditions.Maps) > maxRuns/len(e.Spec.Conditions.Seeds) {
-		return nil, fmt.Errorf("map/seed combinations exceed the limit of %d runs", maxRuns)
+	// Only guard native integer overflow; there is no configurable run-count cap.
+	maxInt := int(^uint(0) >> 1)
+	if len(e.Spec.Conditions.Maps) > maxInt/len(e.Spec.Conditions.Seeds) {
+		return nil, errors.New("map/seed combinations exceed the addressable plan size")
 	}
 	runsPerConfig := len(e.Spec.Conditions.Maps) * len(e.Spec.Conditions.Seeds)
 	plan := &Plan{
@@ -79,8 +73,8 @@ func BuildPlan(e *Experiment, maxRuns int) (*Plan, error) {
 	for _, agent := range e.Spec.Agents {
 		count := 0
 		err := expand(agent, func(modules, groups map[string]string) error {
-			if len(plan.Runs) > maxRuns-runsPerConfig {
-				return fmt.Errorf("experiment exceeds the limit of %d runs; raise --max-runs explicitly if intended", maxRuns)
+			if len(plan.Runs) > maxInt-runsPerConfig {
+				return errors.New("experiment exceeds the addressable plan size")
 			}
 			runtime := agent.Runtime
 			if runtime == "" {

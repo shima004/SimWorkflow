@@ -17,7 +17,7 @@ func TestBuildTwoPhaseWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.Spec.Agents[0].ResourcesByRole = map[string]experiment.Resources{"fireBrigade": {CPU: "0.5", Memory: "1Gi"}}
-	plan, err := experiment.BuildPlan(e, 100)
+	plan, err := experiment.BuildPlan(e)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestHundredRunRemoteConfigurationsKeepWorkflowBelowSizeLimit(t *testing.T) 
 		e.Spec.Conditions.Seeds[i] = int64(i + 1)
 	}
 	e.Spec.Execution.MaxParallelRuns = 10
-	plan, err := experiment.BuildPlan(e, 100)
+	plan, err := experiment.BuildPlan(e)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestFourHundredRunsShareTemplatesAndKeepEachConfigurationScoped(t *testing.
 		e.Spec.Conditions.Seeds[i] = int64(i + 1)
 	}
 	e.Spec.Execution.MaxParallelRuns = 12
-	plan, err := experiment.BuildPlan(e, 400)
+	plan, err := experiment.BuildPlan(e)
 	if err != nil {
 		t.Fatal(err)
 	}

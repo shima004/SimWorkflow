@@ -102,6 +102,43 @@ func TestConfigurationBundleSequencesSelectArbitrarySeedsAndProfiles(t *testing.
 	}
 }
 
+func TestConfigurationBundlesAboveTenThousand(t *testing.T) {
+	base := bundleConfigs(Precompute)[0]
+	configs := make([]Config, 10001)
+	for i := range configs {
+		configs[i] = base
+		configs[i].Run.ID = fmt.Sprintf("run-%032x", i)
+		configs[i].Run.Seed = int64(i)
+	}
+	for _, indexed := range []bool{false, true} {
+		create := CreateConfigBundle
+		if indexed {
+			create = CreateSequenceConfigBundle
+		}
+		path, sha, err := create(context.Background(), "execution", Precompute, configs)
+		if err != nil {
+			t.Fatal("bundle creation retained a fixed count limit", err)
+		}
+		data, err := os.ReadFile(path)
+		os.Remove(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(data) }))
+		source := RunConfigSource{BundleURL: server.URL, BundleSHA256: sha, Stage: Precompute, ExecutionID: "execution", RunID: configs[10000].Run.ID}
+		if indexed {
+			source.RunID = ""
+			source.Sequence = experiment.SequenceName(base.Run)
+			source.Index = "10000"
+		}
+		got, err := ReadRunConfigSource(context.Background(), source)
+		server.Close()
+		if err != nil || got.Run.ID != configs[10000].Run.ID || got.Run.Seed != 10000 {
+			t.Fatal("bundle reading or index selection retained a fixed count limit", err)
+		}
+	}
+}
+
 func TestConfigBundleRejectsBrokenSequenceInventory(t *testing.T) {
 	configs := bundleConfigs(Precompute)
 	runs := []experiment.Run{configs[0].Run, configs[1].Run}

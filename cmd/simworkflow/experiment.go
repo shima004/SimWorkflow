@@ -26,7 +26,6 @@ func runExperiment(args []string, out, errOut io.Writer) error {
 	flags := flag.NewFlagSet("experiment "+command, flag.ContinueOnError)
 	flags.SetOutput(errOut)
 	file := flags.String("f", "", "experiment YAML file (required)")
-	maxRuns := flags.Int("max-runs", experiment.DefaultMaxRuns, "maximum number of expanded runs")
 	var format string
 	if command == "plan" {
 		flags.StringVar(&format, "format", "text", "output format: text or json")
@@ -47,7 +46,7 @@ func runExperiment(args []string, out, errOut io.Writer) error {
 	if err != nil {
 		return err
 	}
-	plan, err := experiment.BuildPlan(e, *maxRuns)
+	plan, err := experiment.BuildPlan(e)
 	if err != nil {
 		return err
 	}

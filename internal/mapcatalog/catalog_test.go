@@ -124,7 +124,7 @@ func TestRegisterInspectListAndResolveLatest(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.Spec.Conditions.Maps = []experiment.Map{{Name: "test", Version: "latest"}}
-	preview, err := experiment.BuildPlan(e, 100)
+	preview, err := experiment.BuildPlan(e)
 	if err != nil || !preview.UnresolvedMaps {
 		t.Fatal("offline plan must mark unresolved map IDs")
 	}
@@ -132,7 +132,7 @@ func TestRegisterInspectListAndResolveLatest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan, err := experiment.BuildPlan(resolved, 100)
+	plan, err := experiment.BuildPlan(resolved)
 	if err != nil || plan.UnresolvedMaps {
 		t.Fatal(err)
 	}
