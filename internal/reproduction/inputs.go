@@ -23,7 +23,17 @@ type Origin struct {
 	ManifestSHA256 string            `json:"manifestSHA256"`
 	Runs           map[string]string `json:"runs"`
 }
+
+// RetryOrigin links a fresh execution to the original experiment and its parent.
+// Run identities are preserved across retries; execution IDs and transfer URLs are new.
+type RetryOrigin struct {
+	RootWorkflow   string `json:"rootWorkflow"`
+	RootPrefix     string `json:"rootPrefix"`
+	ParentWorkflow string `json:"parentWorkflow"`
+	ParentPrefix   string `json:"parentPrefix"`
+}
 type Metadata struct {
+	Retry                *RetryOrigin           `json:"retry,omitempty"`
 	Origin               *Origin                `json:"origin,omitempty"`
 	Schema               string                 `json:"schema"`
 	PlanSHA256           string                 `json:"planSHA256,omitempty"`

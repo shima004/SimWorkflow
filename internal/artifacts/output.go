@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,15 +66,39 @@ func openOutput(path, workflow, prefix string) (*os.Root, *Report, error) {
 	if previous.Workflow != workflow || previous.ResultPrefix != prefix {
 		return failLocked(errors.New("output belongs to a different experiment; choose another --output"))
 	}
+	if previous.WithRetries {
+		for id, attempt := range previous.Attempts {
+			if !runPattern.MatchString(id) || !validAttempt(attempt) {
+				return failLocked(errors.New("existing download.json has invalid attempt records"))
+			}
+		}
+	} else if len(previous.Attempts) != 0 {
+		return failLocked(errors.New("existing download.json has unexpected attempt records"))
+	}
 	seen := map[string]bool{}
 	for _, file := range previous.Downloaded {
-		if !safePath(file.Path) || seen[file.Path] || file.Size < 0 || !experiment.ValidSHA256(file.SHA256) || !strings.HasPrefix(file.Source, prefix+"/") {
+		allowedPrefix := prefix + "/"
+		if previous.WithRetries && file.Path != "plan.json" {
+			id := strings.SplitN(file.Path, "/", 2)[0]
+			attempt, ok := previous.Attempts[id]
+			if !ok || file.Workflow != attempt.Workflow || file.ExecutionID != attempt.ExecutionID || file.RunID != id {
+				return failLocked(errors.New("existing download.json has inconsistent file provenance"))
+			}
+			allowedPrefix = attempt.ResultPrefix + "/" + id + "/"
+		}
+		if !safePath(file.Path) || seen[file.Path] || file.Size < 0 || !experiment.ValidSHA256(file.SHA256) || !strings.HasPrefix(file.Source, allowedPrefix) {
 			return failLocked(errors.New("existing download.json has invalid file records"))
 		}
 		seen[file.Path] = true
 	}
 	return root, &previous, nil
 }
+
+func validAttempt(a Attempt) bool {
+	return ValidPrefix(a.ResultPrefix) && a.ExecutionID == strings.TrimPrefix(a.ResultPrefix, "experiments/") && a.Workflow != "" && !strings.ContainsAny(a.Workflow, "/\\?#")
+}
+
+func sameAttempts(a, b map[string]Attempt) bool { return maps.Equal(a, b) }
 
 func rootMkdirAll(root *os.Root, path string) error {
 	if path == "." {

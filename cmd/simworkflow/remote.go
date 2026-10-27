@@ -38,13 +38,16 @@ func validHelperImage(image string) bool {
 }
 
 func remoteCommand(command string) bool {
-	return command == "render" || command == "submit" || command == "status" || command == "results" || command == "download" || command == "list" || command == "stop" || command == "export" || command == "reproduce"
+	return command == "render" || command == "submit" || command == "status" || command == "results" || command == "download" || command == "list" || command == "stop" || command == "export" || command == "reproduce" || command == "retry"
 }
 
 func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 	command := args[0]
+	if command == "retry" {
+		return runRetry(ctx, args[1:], c, out, errOut)
+	}
 	if command == "export" || command == "reproduce" {
 		return runReproduction(ctx, args, c, out, errOut)
 	}
@@ -58,6 +61,10 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	flags.SetOutput(errOut)
 	if command == "status" || command == "results" {
 		watch := flags.Bool("watch", false, "watch per-run progress every 5 seconds; interactive in a terminal (status only)")
+		var withRetries bool
+		if command == "results" {
+			flags.BoolVar(&withRetries, "with-retries", false, "combine retries, preferring the latest successful attempt per run")
+		}
 		var plain bool
 		if command == "status" {
 			flags.BoolVar(&plain, "plain", false, "use text output instead of the interactive watch screen")
@@ -70,6 +77,9 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 		}
 		if flags.NArg() != 1 {
 			return errors.New("specify one workflow name after command options")
+		}
+		if command == "results" && withRetries {
+			return runCombinedResults(ctx, c, flags.Arg(0), out)
 		}
 		client := argo.New(c)
 		if command == "status" && *watch && !plain && interactiveOutput(os.Stdin, out) {
@@ -344,6 +354,12 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 	if err != nil {
 		return err
 	}
+	if meta.Retry != nil {
+		annotations := wf["metadata"].(map[string]any)["annotations"].(map[string]string)
+		annotations["simworkflow.io/retry-root-workflow"] = meta.Retry.RootWorkflow
+		annotations["simworkflow.io/retry-root-prefix"] = meta.Retry.RootPrefix
+		annotations["simworkflow.io/retry-parent-workflow"] = meta.Retry.ParentWorkflow
+	}
 	// Leave room for node status under Argo's 1MiB Workflow limit. Reject before
 	// submitting an oversized inline spec rather than creating a doomed run.
 	encodedWorkflow, err := json.Marshal(wf)
@@ -386,6 +402,13 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 	snapshot, err := argo.New(c).Submit(ctx, wf)
 	if err != nil {
 		return err
+	}
+	if meta.Retry != nil {
+		record := retryRecord{Workflow: snapshot.Metadata.Name, Prefix: prefix, Origin: *meta.Retry, SubmittedAt: time.Now().UTC()}
+		if err := store.PutJSON(ctx, meta.Retry.RootPrefix+"/retries/"+executionID+".json", record); err != nil {
+			fmt.Fprintf(out, "Submitted %s (%d runs). Results: s3://%s/%s/\n", snapshot.Metadata.Name, plan.TotalRuns, c.S3.Bucket, prefix)
+			return fmt.Errorf("workflow was submitted but retry index could not be saved; keep its name and use it directly: %w", err)
+		}
 	}
 	_, err = fmt.Fprintf(out, "Submitted %s (%d runs). Results: s3://%s/%s/\n", snapshot.Metadata.Name, plan.TotalRuns, c.S3.Bucket, prefix)
 	return err

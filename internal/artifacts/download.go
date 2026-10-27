@@ -35,27 +35,42 @@ type Options struct {
 	Workflow, Phase, Output string
 	Include, Runs, Files    []string
 	Stage                   string
+	WithRetries             bool
+	Attempts                map[string]Attempt
+}
+
+// Attempt selects one execution for all stages and artifacts of a logical run.
+type Attempt struct {
+	Workflow     string `json:"workflow"`
+	ResultPrefix string `json:"resultPrefix"`
+	ExecutionID  string `json:"executionId"`
+	Phase        string `json:"phase"`
 }
 type File struct {
-	Path   string `json:"path"`
-	Source string `json:"source"`
-	Size   int64  `json:"sizeBytes"`
-	SHA256 string `json:"sha256"`
+	Path        string `json:"path"`
+	Source      string `json:"source"`
+	Size        int64  `json:"sizeBytes"`
+	SHA256      string `json:"sha256"`
+	Workflow    string `json:"workflow,omitempty"`
+	ExecutionID string `json:"executionId,omitempty"`
+	RunID       string `json:"runId,omitempty"`
 }
 type Report struct {
-	Added          int       `json:"addedFiles"`
-	Skipped        []string  `json:"skipped,omitempty"`
-	Workflow       string    `json:"workflow"`
-	WorkflowPhase  string    `json:"workflowPhase"`
-	ResultPrefix   string    `json:"resultPrefix"`
-	Include        []string  `json:"include"`
-	Stage          string    `json:"stage"`
-	Runs           []string  `json:"runs"`
-	RequestedFiles []string  `json:"requestedFiles,omitempty"`
-	Downloaded     []File    `json:"downloaded"`
-	Unavailable    []string  `json:"unavailable"`
-	Error          string    `json:"error,omitempty"`
-	CreatedAt      time.Time `json:"createdAt"`
+	Added          int                `json:"addedFiles"`
+	Skipped        []string           `json:"skipped,omitempty"`
+	Workflow       string             `json:"workflow"`
+	WorkflowPhase  string             `json:"workflowPhase"`
+	ResultPrefix   string             `json:"resultPrefix"`
+	Include        []string           `json:"include"`
+	Stage          string             `json:"stage"`
+	Runs           []string           `json:"runs"`
+	RequestedFiles []string           `json:"requestedFiles,omitempty"`
+	Downloaded     []File             `json:"downloaded"`
+	Unavailable    []string           `json:"unavailable"`
+	Error          string             `json:"error,omitempty"`
+	CreatedAt      time.Time          `json:"createdAt"`
+	WithRetries    bool               `json:"withRetries,omitempty"`
+	Attempts       map[string]Attempt `json:"attempts,omitempty"`
 }
 
 type downloader struct {
@@ -129,6 +144,18 @@ func Download(ctx context.Context, source Source, plan *experiment.Plan, prefix 
 		}
 		known[r.ID] = true
 	}
+	if o.WithRetries {
+		if len(o.Attempts) != len(known) {
+			return report, errors.New("combined download requires one selected attempt for each run")
+		}
+		for id, attempt := range o.Attempts {
+			if !known[id] || !validAttempt(attempt) {
+				return report, errors.New("invalid selected download attempt")
+			}
+		}
+	} else if len(o.Attempts) != 0 {
+		return report, errors.New("attempt selections require a combined download")
+	}
 	wanted := map[string]bool{}
 	for _, id := range o.Runs {
 		if !known[id] {
@@ -143,6 +170,7 @@ func Download(ctx context.Context, source Source, plan *experiment.Plan, prefix 
 		}
 	}
 	report = Report{Workflow: o.Workflow, WorkflowPhase: o.Phase, ResultPrefix: prefix, Include: o.Include, Stage: o.Stage, RequestedFiles: o.Files, Downloaded: []File{}, Unavailable: []string{}, CreatedAt: time.Now().UTC()}
+	report.WithRetries, report.Attempts = o.WithRetries, o.Attempts
 	for _, r := range runs {
 		report.Runs = append(report.Runs, r.ID)
 	}
@@ -152,6 +180,9 @@ func Download(ctx context.Context, source Source, plan *experiment.Plan, prefix 
 	}
 	defer root.Close()
 	defer root.Remove(".download.lock")
+	if previous != nil && (previous.WithRetries != o.WithRetries || !sameAttempts(previous.Attempts, o.Attempts)) {
+		return report, errors.New("selected retry attempts have changed; choose a new --output to keep results from different attempts separate")
+	}
 	d := downloader{source: source, ctx: ctx, output: o.Output, selected: selected, report: &report, root: root, existing: map[string]File{}}
 	if previous != nil {
 		report.Downloaded = append(report.Downloaded, previous.Downloaded...)
@@ -173,8 +204,12 @@ func Download(ctx context.Context, source Source, plan *experiment.Plan, prefix 
 		}
 	}
 	for _, run := range runs {
+		runPrefix := prefix
+		if o.WithRetries {
+			runPrefix = o.Attempts[run.ID].ResultPrefix
+		}
 		if selected["precompute"] {
-			if err = d.object(prefix+"/"+run.ID+"/precompute/data.zip", run.ID+"/precompute/data.zip"); err != nil {
+			if err = d.object(runPrefix+"/"+run.ID+"/precompute/data.zip", run.ID+"/precompute/data.zip"); err != nil {
 				return report, err
 			}
 		}
@@ -182,7 +217,7 @@ func Download(ctx context.Context, source Source, plan *experiment.Plan, prefix 
 			if o.Stage != "all" && stage != o.Stage {
 				continue
 			}
-			key := prefix + "/" + run.ID
+			key := runPrefix + "/" + run.ID
 			if stage == "precompute" {
 				key += "/precompute"
 			}
@@ -247,7 +282,15 @@ func (d *downloader) save(name, source string, body io.Reader) (err error) {
 	if closeErr != nil {
 		return closeErr
 	}
-	d.remember(File{Path: name, Source: source, Size: n, SHA256: hex.EncodeToString(h.Sum(nil))})
+	file := File{Path: name, Source: source, Size: n, SHA256: hex.EncodeToString(h.Sum(nil))}
+	if d.report.WithRetries {
+		file.Workflow, file.ExecutionID = d.report.Workflow, strings.TrimPrefix(d.report.ResultPrefix, "experiments/")
+		runID := strings.SplitN(name, "/", 2)[0]
+		if attempt, ok := d.report.Attempts[runID]; ok {
+			file.Workflow, file.ExecutionID, file.RunID = attempt.Workflow, attempt.ExecutionID, runID
+		}
+	}
+	d.remember(file)
 	return nil
 }
 

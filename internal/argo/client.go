@@ -25,7 +25,8 @@ type Snapshot struct {
 	RunNodeNames  map[string]string `json:"-"`
 	RunStageNodes map[string][]Node `json:"-"`
 	Spec          struct {
-		Templates []struct {
+		ServiceAccountName string `json:"serviceAccountName"`
+		Templates          []struct {
 			InitContainers []struct {
 				Name  string `json:"name"`
 				Image string `json:"image"`
@@ -36,6 +37,7 @@ type Snapshot struct {
 		} `json:"templates"`
 	} `json:"spec"`
 	Metadata struct {
+		CreatedAt   time.Time         `json:"creationTimestamp"`
 		Name        string            `json:"name"`
 		Namespace   string            `json:"namespace"`
 		Annotations map[string]string `json:"annotations"`
