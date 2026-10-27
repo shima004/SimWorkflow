@@ -22,6 +22,17 @@ type Client struct {
 }
 
 type Snapshot struct {
+	Spec struct {
+		Templates []struct {
+			InitContainers []struct {
+				Name  string `json:"name"`
+				Image string `json:"image"`
+				Env   []struct {
+					Name string `json:"name"`
+				} `json:"env"`
+			} `json:"initContainers"`
+		} `json:"templates"`
+	} `json:"spec"`
 	Metadata struct {
 		Name        string            `json:"name"`
 		Namespace   string            `json:"namespace"`

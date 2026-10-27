@@ -39,7 +39,7 @@ func runWithCredentials(args []string, lookup func(string) (string, bool), out, 
 	configFile := flags.String("config", "", "config YAML file (default: user configuration directory/simworkflow/config.yaml; empty disables YAML loading)")
 	showVersion := flags.Bool("version", false, "print version and source commit")
 	flags.Usage = func() {
-		fmt.Fprintln(errOut, "Usage: simworkflow [--config FILE] [-env-file .env] config <init|path|check> [options]\n       simworkflow [--config FILE] [-env-file .env] experiment <validate|plan|modules|render|submit|list|stop|status|results|download> [options]\n       simworkflow [--config FILE] [-env-file .env] map <register|list|inspect> [options]")
+		fmt.Fprintln(errOut, "Usage: simworkflow [--config FILE] [-env-file .env] config <init|path|check> [options]\n       simworkflow [--config FILE] [-env-file .env] experiment <validate|plan|modules|render|submit|list|stop|status|results|download|export|reproduce> [options]\n       simworkflow [--config FILE] [-env-file .env] map <register|list|inspect> [options]")
 		flags.PrintDefaults()
 		fmt.Fprintln(errOut, "       simworkflow credentials <set|status|delete> [argo|s3|registry] [options]")
 		fmt.Fprintln(errOut, "       simworkflow [--config FILE] [--env-file FILE] agent build [options] [CONTEXT]")

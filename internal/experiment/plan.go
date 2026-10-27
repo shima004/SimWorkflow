@@ -120,6 +120,16 @@ func digest(value any) string {
 	return hex.EncodeToString(sum[:16])
 }
 
+func ConfigurationIdentity(c Configuration) string {
+	c.ID = ""
+	return "config-" + digest(c)
+}
+
+func RunIdentity(r Run) string {
+	r.ID = ""
+	return "run-" + digest(r)
+}
+
 func expand(agent Agent, emit func(map[string]string, map[string]string) error) error {
 	modules := maps.Clone(agent.Modules)
 	if modules == nil {

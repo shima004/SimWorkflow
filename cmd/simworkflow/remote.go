@@ -21,10 +21,13 @@ import (
 	"simworkflow/internal/config"
 	"simworkflow/internal/experiment"
 	"simworkflow/internal/mapcatalog"
+	"simworkflow/internal/reproduction"
 	"simworkflow/internal/storage"
 	"simworkflow/internal/worker"
 	"simworkflow/internal/workflow"
 )
+
+var prepareReproduction = reproduction.Capture
 
 // Release builds replace this with the tested helper digest from the same source.
 var defaultHelperImage = "ghcr.io/shima004/simworkflow-worker@sha256:2e204474aa5c348c0d2196cc83adde038170fd9885bb09c2e83b4a4fd31cc027"
@@ -35,13 +38,16 @@ func validHelperImage(image string) bool {
 }
 
 func remoteCommand(command string) bool {
-	return command == "render" || command == "submit" || command == "status" || command == "results" || command == "download" || command == "list" || command == "stop"
+	return command == "render" || command == "submit" || command == "status" || command == "results" || command == "download" || command == "list" || command == "stop" || command == "export" || command == "reproduce"
 }
 
 func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 	command := args[0]
+	if command == "export" || command == "reproduce" {
+		return runReproduction(ctx, args, c, out, errOut)
+	}
 	if command == "list" || command == "stop" {
 		return runLifecycle(ctx, args, c, out, errOut)
 	}
@@ -183,10 +189,25 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	if err != nil {
 		return err
 	}
+	e, meta, err := prepareReproduction(ctx, c, e, *helper, version, commit)
+	if err != nil {
+		return err
+	}
+	*helper = meta.HelperImage
 	plan, err := experiment.BuildPlan(e, *maxRuns)
 	if err != nil {
 		return err
 	}
+	return submitPlan(ctx, c, plan, *helper, *account, *configStorage, command, *output, meta, out)
+}
+
+func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, helper, account, configStorage, command, output string, meta reproduction.Metadata, out io.Writer) error {
+	meta.ConfigStorage = configStorage
+	if err := reproduction.ValidatePlan(plan); err != nil {
+		return err
+	}
+	store := storage.New(c)
+	var err error
 	timeout, _ := time.ParseDuration(plan.Timeout)
 	if timeout > 20*time.Hour {
 		return errors.New("execution timeout must be at most 20h for signed transfers")
@@ -248,7 +269,7 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 				c.PrecomputeDownload = &transfer
 				pair.Simulation = c
 			}
-			if *configStorage == "s3" {
+			if configStorage == "s3" {
 				configKey := prefix + "/configs/" + run.ID + "/" + stage + ".json"
 				if err := store.PutJSON(ctx, configKey, c); err != nil {
 					return err
@@ -266,7 +287,7 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 		}
 		configs = append(configs, pair)
 	}
-	wf, err := workflow.Build(plan, configs, workflow.Options{Namespace: c.Argo.Namespace, HelperImage: *helper, ServiceAccount: *account, ExecutionID: executionID, ResultPrefix: prefix})
+	wf, err := workflow.Build(plan, configs, workflow.Options{Namespace: c.Argo.Namespace, HelperImage: helper, ServiceAccount: account, ExecutionID: executionID, ResultPrefix: prefix})
 	if err != nil {
 		return err
 	}
@@ -277,17 +298,24 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 		return err
 	}
 	if len(encodedWorkflow) > 900*1024 {
-		if *configStorage == "s3" {
+		if configStorage == "s3" {
 			return errors.New("workflow definition is too large even with S3 configuration; split the experiment")
 		}
 		return errors.New("workflow definition is too large; use --config-storage s3 with a compatible helper image or split the experiment")
+	}
+	if err := store.PutJSON(ctx, prefix+"/plan.json", plan); err != nil {
+		return err
+	}
+	meta.PlanSHA256 = reproduction.PlanSHA256(plan)
+	if err := store.PutJSON(ctx, prefix+"/reproduction.json", meta); err != nil {
+		return err
 	}
 	if command == "render" {
 		data, err := yaml.Marshal(wf)
 		if err != nil {
 			return err
 		}
-		f, err := os.OpenFile(*output, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		f, err := os.OpenFile(output, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 		if err != nil {
 			return err
 		}
@@ -299,14 +327,7 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 		if closeErr != nil {
 			return closeErr
 		}
-		if err := store.PutJSON(ctx, prefix+"/plan.json", plan); err != nil {
-			os.Remove(*output)
-			return err
-		}
-		_, err = fmt.Fprintf(out, "Rendered %d runs to %s (private file; signed URLs expire after 24h).\n", plan.TotalRuns, *output)
-		return err
-	}
-	if err := store.PutJSON(ctx, prefix+"/plan.json", plan); err != nil {
+		_, err = fmt.Fprintf(out, "Rendered %d runs to %s (private file; signed URLs expire after 24h).\n", plan.TotalRuns, output)
 		return err
 	}
 	snapshot, err := argo.New(c).Submit(ctx, wf)

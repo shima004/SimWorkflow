@@ -56,6 +56,17 @@ type Resources struct {
 // CPU retains decimal precision when validating Kubernetes millicore increments.
 type CPU string
 
+func (c CPU) MarshalYAML() (any, error) {
+	if _, err := c.MilliCores(); err != nil {
+		return nil, err
+	}
+	tag := "!!int"
+	if strings.ContainsAny(string(c), ".eE/") {
+		tag = "!!float"
+	}
+	return &yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: string(c)}, nil
+}
+
 func (c *CPU) UnmarshalYAML(n *yaml.Node) error {
 	if n.Kind != yaml.ScalarNode || (n.Tag != "!!int" && n.Tag != "!!float") {
 		return fmt.Errorf("line %d: resources.cpu must be a number of cores", n.Line)

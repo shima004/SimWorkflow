@@ -2,14 +2,23 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"simworkflow/internal/config"
+	"simworkflow/internal/experiment"
+	"simworkflow/internal/reproduction"
 	"strings"
 	"testing"
 )
 
 func TestMain(m *testing.M) {
+	// Legacy command fixtures test routing/rendering with declared image names.
+	// Capture is integration-tested against local registry and S3 APIs separately.
+	prepareReproduction = func(ctx context.Context, c config.Config, e *experiment.Experiment, helper, version, commit string) (*experiment.Experiment, reproduction.Metadata, error) {
+		return e, reproduction.Metadata{Schema: reproduction.Schema, Platform: "linux/amd64", HelperImage: helper, CLIVersion: version, CLICommit: commit, Definition: e}, nil
+	}
 	// Never read a developer's real common configuration during CLI tests.
 	dir, err := os.MkdirTemp("", "simworkflow-test-user-config-*")
 	if err != nil {
