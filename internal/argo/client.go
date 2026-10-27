@@ -22,7 +22,9 @@ type Client struct {
 }
 
 type Snapshot struct {
-	Spec struct {
+	RunNodeNames  map[string]string `json:"-"`
+	RunStageNodes map[string][]Node `json:"-"`
+	Spec          struct {
 		Templates []struct {
 			InitContainers []struct {
 				Name  string `json:"name"`

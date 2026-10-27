@@ -108,6 +108,51 @@ func TestSimScopeChoosesCurrentSimulationAttempt(t *testing.T) {
 	}
 }
 
+func TestSimScopeResolvesSequenceFromSavedPlan(t *testing.T) {
+	plan := detailsPlan(t)
+	group := experiment.RunSequences(plan.Runs)[0]
+	run := plan.Runs[0]
+	for _, pending := range []bool{false, true} {
+		snapshot := progressSnapshot(plan)
+		snapshot.Metadata.Name = "test"
+		snapshot.Metadata.Annotations["simworkflow.io/run-sequences"] = "v1"
+		snapshot.Metadata.Annotations["simworkflow.io/result-prefix"] = "experiments/" + strings.Repeat("a", 32)
+		root := "test." + group.Name + "(0:0)[1].simulation"
+		snapshot.Status.Nodes = map[string]argo.Node{"sim": {Type: "Pod", Name: root + "(0)", TemplateName: "shared-simulation-abc", DisplayName: "simulation(0)", Phase: "Running", PodIP: "10.42.1.2", StartedAt: time.Now()}}
+		if pending {
+			snapshot.Status.Nodes["retry"] = argo.Node{Type: "Pod", Name: root + "(1)", TemplateName: "shared-simulation-abc", DisplayName: "simulation(1)", Phase: "Pending"}
+		}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasPrefix(r.URL.Path, "/api/v1/workflows/") {
+				json.NewEncoder(w).Encode(snapshot)
+				return
+			}
+			if strings.HasSuffix(r.URL.Path, "/plan.json") {
+				json.NewEncoder(w).Encode(plan)
+				return
+			}
+			t.Error("sequence resolution must not read unrelated artifacts")
+			w.WriteHeader(404)
+		}))
+		c := config.Config{SimScopeURL: "http://viewer.example", Argo: config.Argo{Server: server.URL, Namespace: "argo"}, S3: config.S3{Endpoint: server.URL, Bucket: "results", Region: "us-east-1", AccessKeyID: "key", SecretAccessKey: "test", ForcePathStyle: true}, HTTPTimeout: time.Second}
+		raw, err := prepareSimScope(context.Background(), c, "test", run)
+		server.Close()
+		if pending {
+			if err == nil || raw != "" {
+				t.Fatal("pending loop retry must not open old Pod")
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		u, _ := url.Parse(raw)
+		if u.Query().Get("host") != "10.42.1.2" || u.Query().Get("port") != "27931" {
+			t.Fatal("wrong loop live endpoint")
+		}
+	}
+}
+
 func TestSimScopePublishesOnlyRescueLogAndReusesCache(t *testing.T) {
 	run := detailsPlan(t).Runs[0]
 	const prefix = "experiments/0123456789abcdef0123456789abcdef"

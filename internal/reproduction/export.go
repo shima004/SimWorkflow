@@ -47,7 +47,7 @@ func Export(ctx context.Context, c config.Config, plan *experiment.Plan, meta Me
 	if meta.ConfigStorage == "" {
 		meta.ConfigStorage = "inline"
 	}
-	if meta.ConfigStorage != "s3" && meta.ConfigStorage != "s3-bundle" && meta.ConfigStorage != "inline" {
+	if meta.ConfigStorage != "s3" && meta.ConfigStorage != "s3-bundle" && meta.ConfigStorage != "s3-sequence" && meta.ConfigStorage != "inline" {
 		return errors.New("unsupported worker configuration format")
 	}
 	if meta.PlanSHA256 != "" && meta.PlanSHA256 != PlanSHA256(plan) {

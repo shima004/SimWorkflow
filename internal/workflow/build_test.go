@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -268,6 +269,7 @@ func TestFourHundredRunsShareTemplatesAndKeepEachConfigurationScoped(t *testing.
 			t.Fatal("different container settings need distinct stage templates and wrapper", err)
 		}
 		plan.Runs[399] = original
+		configs[399].Precompute.Run, configs[399].Simulation.Run = original, original
 	}
 	bundledConfigs := append([]RunConfig(nil), configs...)
 	for i := range bundledConfigs {
@@ -323,5 +325,57 @@ func TestFourHundredRunsShareTemplatesAndKeepEachConfigurationScoped(t *testing.
 	}
 	if _, err := Build(plan, configs, bundleOptions); err == nil {
 		t.Fatal("mixed configuration sources accepted")
+	}
+	bundleOptions.Sequences = true
+	sequenceWorkflow, err := Build(plan, bundledConfigs, bundleOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sequenceData, _ := json.Marshal(sequenceWorkflow)
+	t.Logf("400-run withSequence definition: %d bytes", len(sequenceData))
+	if len(sequenceData) > 12*1024 || strings.Contains(string(sequenceData), plan.Runs[0].ID) {
+		t.Fatal("sequence definition must replace per-run task enumeration")
+	}
+	checkSequences := func(wf map[string]any, runs []experiment.Run) {
+		t.Helper()
+		groups := experiment.RunSequences(runs)
+		templates := wf["spec"].(map[string]any)["templates"].([]any)
+		var tasks []any
+		for _, raw := range templates {
+			template := raw.(map[string]any)
+			if dag, ok := template["dag"].(map[string]any); ok {
+				if dag["failFast"] != false {
+					t.Fatal("failure isolation lost")
+				}
+				tasks = dag["tasks"].([]any)
+			}
+		}
+		if len(tasks) != len(groups) {
+			t.Fatal("one loop is required per container profile")
+		}
+		for i, raw := range tasks {
+			task := raw.(map[string]any)
+			seq := task["withSequence"].(map[string]any)
+			if task["name"] != groups[i].Name || seq["start"] != "0" || seq["count"] != strconv.Itoa(len(groups[i].Runs)) {
+				t.Fatal("wrong loop extent or identity", task)
+			}
+			params := task["arguments"].(map[string]any)["parameters"].([]any)
+			if params[0].(map[string]any)["value"] != groups[i].Name || params[1].(map[string]any)["value"] != "{{item}}" {
+				t.Fatal("loop must pass sequence and local index")
+			}
+		}
+	}
+	checkSequences(sequenceWorkflow, plan.Runs)
+	modified := plan.Runs[399]
+	modified.Configuration.ResourcesByRole = map[string]experiment.Resources{"policeForce": {CPU: "2", Memory: "2Gi"}}
+	plan.Runs[399] = modified
+	bundledConfigs[399].Precompute.Run, bundledConfigs[399].Simulation.Run = modified, modified
+	sequenceWorkflow, err = Build(plan, bundledConfigs, bundleOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkSequences(sequenceWorkflow, plan.Runs)
+	if len(sequenceWorkflow["spec"].(map[string]any)["templates"].([]any)) != 7 {
+		t.Fatal("resource changes must retain distinct Pods")
 	}
 }

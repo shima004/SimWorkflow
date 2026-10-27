@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"simworkflow/internal/experiment"
@@ -20,6 +21,7 @@ type Options struct {
 	ResultPrefix     string
 	PrecomputeBundle *worker.ConfigBundleReference
 	SimulationBundle *worker.ConfigBundleReference
+	Sequences        bool
 }
 
 type RunConfig struct {
@@ -37,10 +39,15 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 		return nil, errors.New("workflow requires helper image, namespace, service account and one configuration per run")
 	}
 	bundled := options.PrecomputeBundle != nil || options.SimulationBundle != nil
+	if options.Sequences && !bundled {
+		return nil, errors.New("sequence workflows require verified stage bundles")
+	}
 	if bundled && (options.PrecomputeBundle == nil || options.SimulationBundle == nil || options.PrecomputeBundle.URL == "" || options.SimulationBundle.URL == "" || !experiment.ValidSHA256(options.PrecomputeBundle.SHA256) || !experiment.ValidSHA256(options.SimulationBundle.SHA256) || options.ExecutionID == "") {
 		return nil, errors.New("workflow requires both stage bundle URLs, SHA-256 hashes and execution identity")
 	}
 	tasks := []any{}
+	sequenceTasks := map[string]map[string]any{}
+	sequenceCounts := map[string]int{}
 	templates := []any{}
 	sharedTemplates := map[string]bool{}
 	addShared := func(template map[string]any, prefix string) (string, error) {
@@ -104,6 +111,10 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 					map[string]any{"name": "SIMWORKFLOW_STAGE", "value": c.Stage},
 					map[string]any{"name": "SIMWORKFLOW_EXECUTION_ID", "value": options.ExecutionID},
 				}
+				if options.Sequences {
+					envs[2] = map[string]any{"name": "SIMWORKFLOW_SEQUENCE", "value": "{{inputs.parameters.sequence}}"}
+					envs = append(envs, map[string]any{"name": "SIMWORKFLOW_RUN_INDEX", "value": "{{inputs.parameters.run-index}}"})
+				}
 			}
 			containers := []any{
 				map[string]any{"name": "simulator", "image": run.Simulator.Image, "command": []string{"/tools/simworkflow", "worker", "server"}, "resources": resource(run.Simulator.Resources)},
@@ -128,12 +139,17 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 					parameter, value = "run-id", "{{inputs.parameters.run-id}}"
 				}
 				template["inputs"] = map[string]any{"parameters": []any{map[string]any{"name": parameter}}}
+				parameters := []any{map[string]any{"name": parameter, "value": value}}
+				if options.Sequences {
+					template["inputs"] = map[string]any{"parameters": []any{map[string]any{"name": "sequence"}, map[string]any{"name": "run-index"}}}
+					parameters = []any{map[string]any{"name": "sequence", "value": "{{inputs.parameters.sequence}}"}, map[string]any{"name": "run-index", "value": "{{inputs.parameters.run-index}}"}}
+				}
 				name, err := addShared(template, c.Stage)
 				if err != nil {
 					return nil, err
 				}
 				step["template"] = name
-				step["arguments"] = map[string]any{"parameters": []any{map[string]any{"name": parameter, "value": value}}}
+				step["arguments"] = map[string]any{"parameters": parameters}
 			} else {
 				templates = append(templates, template)
 			}
@@ -145,6 +161,9 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 			wrapper["inputs"] = map[string]any{"parameters": []any{map[string]any{"name": "precompute-url"}, map[string]any{"name": "simulation-url"}}}
 			if bundled {
 				wrapper["inputs"] = map[string]any{"parameters": []any{map[string]any{"name": "run-id"}}}
+			}
+			if options.Sequences {
+				wrapper["inputs"] = map[string]any{"parameters": []any{map[string]any{"name": "sequence"}, map[string]any{"name": "run-index"}}}
 			}
 			name, err := addShared(wrapper, "run")
 			if err != nil {
@@ -161,7 +180,24 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 		} else {
 			templates = append(templates, wrapper)
 		}
-		tasks = append(tasks, task)
+		if options.Sequences {
+			group := experiment.SequenceName(run)
+			sequenceCounts[group]++
+			if previous, ok := sequenceTasks[group]; ok {
+				if previous["template"] != task["template"] {
+					return nil, errors.New("sequence members have inconsistent pod settings or deadlines")
+				}
+				previous["withSequence"].(map[string]any)["count"] = strconv.Itoa(sequenceCounts[group])
+			} else {
+				task["name"] = group
+				task["arguments"] = map[string]any{"parameters": []any{map[string]any{"name": "sequence", "value": group}, map[string]any{"name": "run-index", "value": "{{item}}"}}}
+				task["withSequence"] = map[string]any{"start": "0", "count": "1"}
+				sequenceTasks[group] = task
+				tasks = append(tasks, task)
+			}
+		} else {
+			tasks = append(tasks, task)
+		}
 	}
 	templates = append([]any{map[string]any{"name": "experiment", "dag": map[string]any{"failFast": false, "tasks": tasks}}}, templates...)
 	name := plan.Experiment.Name
@@ -179,9 +215,13 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 			map[string]any{"name": "simulation-bundle-sha256", "value": options.SimulationBundle.SHA256},
 		}}
 	}
+	annotations := map[string]string{"simworkflow.io/execution-id": options.ExecutionID, "simworkflow.io/result-prefix": options.ResultPrefix}
+	if options.Sequences {
+		annotations["simworkflow.io/run-sequences"] = "v1"
+	}
 	return map[string]any{
 		"apiVersion": "argoproj.io/v1alpha1", "kind": "Workflow",
-		"metadata": map[string]any{"generateName": name + "-", "namespace": options.Namespace, "labels": map[string]string{"app.kubernetes.io/managed-by": "simworkflow"}, "annotations": map[string]string{"simworkflow.io/execution-id": options.ExecutionID, "simworkflow.io/result-prefix": options.ResultPrefix}},
+		"metadata": map[string]any{"generateName": name + "-", "namespace": options.Namespace, "labels": map[string]string{"app.kubernetes.io/managed-by": "simworkflow"}, "annotations": annotations},
 		"spec":     spec,
 	}, nil
 }

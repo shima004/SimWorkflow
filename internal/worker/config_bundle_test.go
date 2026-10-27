@@ -7,10 +7,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -30,6 +32,112 @@ func bundleConfigs(stage string) []Config {
 		configs = append(configs, c)
 	}
 	return configs
+}
+
+func TestConfigurationBundleSequencesSelectArbitrarySeedsAndProfiles(t *testing.T) {
+	for _, stage := range []string{Precompute, Simulation} {
+		configs := bundleConfigs(stage)
+		configs[0].Run.Seed, configs[1].Run.Seed = 42, 7
+		third := configs[0]
+		third.Run.ID = "run-" + strings.Repeat("c", 32)
+		third.Run.Configuration.Image = "different-agent:v1"
+		third.Run.Seed = 123
+		// Interleave profiles to test local, rather than global, sequence indexes.
+		configs = []Config{configs[0], third, configs[1]}
+		path, sha, err := CreateSequenceConfigBundle(context.Background(), "execution", stage, configs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.Remove(path)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(data) }))
+		defer server.Close()
+		groups := experiment.RunSequences([]experiment.Run{configs[0].Run, configs[1].Run, configs[2].Run})
+		for _, group := range groups {
+			for i, id := range group.Runs {
+				source := RunConfigSource{BundleURL: server.URL, BundleSHA256: sha, Stage: stage, ExecutionID: "execution", Sequence: group.Name, Index: strconv.Itoa(i)}
+				got, err := ReadRunConfigSource(context.Background(), source)
+				if err != nil || got.Run.ID != id {
+					t.Fatal("wrong indexed run selected", err, got.Run.ID, id)
+				}
+				for _, change := range []func(*RunConfigSource){
+					func(s *RunConfigSource) { s.Index = "-1" },
+					func(s *RunConfigSource) { s.Index = "01" },
+					func(s *RunConfigSource) { s.Index = "+1" },
+					func(s *RunConfigSource) { s.Index = "2" },
+					func(s *RunConfigSource) { s.Sequence = "runs-" + strings.Repeat("0", 32) },
+					func(s *RunConfigSource) { s.RunID = id },
+				} {
+					bad := source
+					change(&bad)
+					if _, err := ReadRunConfigSource(context.Background(), bad); err == nil {
+						t.Fatal("invalid sequence selector accepted", bad.Index)
+					}
+				}
+			}
+		}
+	}
+	// Manifests now contain the index and legitimately exceed the v1 4KiB size.
+	configs := bundleConfigs(Precompute)[:1]
+	base := configs[0]
+	for i := 1; i < 200; i++ {
+		c := base
+		c.Run.ID = fmt.Sprintf("run-%032x", i)
+		configs = append(configs, c)
+	}
+	path, sha, err := CreateSequenceConfigBundle(context.Background(), "execution", Precompute, configs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(path)
+	data, _ := os.ReadFile(path)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(data) }))
+	defer server.Close()
+	got, err := ReadRunConfigSource(context.Background(), RunConfigSource{BundleURL: server.URL, BundleSHA256: sha, Stage: Precompute, ExecutionID: "execution", Sequence: experiment.SequenceName(base.Run), Index: "199"})
+	if err != nil || got.Run.ID != configs[199].Run.ID {
+		t.Fatal("large index manifest failed", err)
+	}
+}
+
+func TestConfigBundleRejectsBrokenSequenceInventory(t *testing.T) {
+	configs := bundleConfigs(Precompute)
+	runs := []experiment.Run{configs[0].Run, configs[1].Run}
+	for _, kind := range []string{"duplicate-member", "missing-member", "unknown-member", "duplicate-group", "wrong-profile"} {
+		t.Run(kind, func(t *testing.T) {
+			groups := experiment.RunSequences(runs)
+			switch kind {
+			case "duplicate-member":
+				groups[0].Runs[1] = groups[0].Runs[0]
+			case "missing-member":
+				groups[0].Runs = groups[0].Runs[:1]
+			case "unknown-member":
+				groups[0].Runs[1] = "run-" + strings.Repeat("c", 32)
+			case "duplicate-group":
+				groups = append(groups, groups[0])
+			case "wrong-profile":
+				groups[0].Name = "runs-" + strings.Repeat("0", 32)
+			}
+			var data bytes.Buffer
+			z := zip.NewWriter(&data)
+			w, _ := z.Create("manifest.json")
+			json.NewEncoder(w).Encode(configBundleManifest{Schema: "simworkflow/config-bundle/v2", ExecutionID: "execution", Stage: Precompute, Runs: 2, Sequences: groups})
+			for _, c := range configs {
+				w, _ := z.Create(c.Run.ID + ".json")
+				json.NewEncoder(w).Encode(c)
+			}
+			z.Close()
+			sha := sha256.Sum256(data.Bytes())
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(data.Bytes()) }))
+			defer server.Close()
+			_, err := ReadRunConfigSource(context.Background(), RunConfigSource{BundleURL: server.URL, BundleSHA256: hex.EncodeToString(sha[:]), Stage: Precompute, ExecutionID: "execution", Sequence: groups[0].Name, Index: "0"})
+			if err == nil {
+				t.Fatal("invalid mapping or container profile accepted")
+			}
+		})
+	}
 }
 
 func TestConfigurationBundlesKeepStagesAndRunsSeparate(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,11 +20,14 @@ import (
 )
 
 const ConfigBundleCapabilityLabel = "io.simworkflow.config-bundle"
+const ConfigSequenceCapabilityLabel = "io.simworkflow.config-sequence"
+const maxConfigBundleManifestBytes = 4 << 20
 const maxConfigBundleBytes = int64(64 << 20)
 const maxConfigBundleExpanded = int64(256 << 20)
 const maxRunConfigBytes = 1 << 20
 
 var bundleRunID = regexp.MustCompile(`^run-[a-f0-9]{32}$`)
+var bundleSequenceName = regexp.MustCompile(`^runs-[a-f0-9]{32}$`)
 
 type ConfigBundleReference struct {
 	URL    string
@@ -31,14 +35,23 @@ type ConfigBundleReference struct {
 }
 
 type configBundleManifest struct {
-	Schema      string `json:"schema"`
-	ExecutionID string `json:"executionId"`
-	Stage       string `json:"stage"`
-	Runs        int    `json:"runs"`
+	Schema      string                   `json:"schema"`
+	ExecutionID string                   `json:"executionId"`
+	Stage       string                   `json:"stage"`
+	Runs        int                      `json:"runs"`
+	Sequences   []experiment.RunSequence `json:"sequences,omitempty"`
 }
 
 // CreateConfigBundle writes one stage only. The caller removes the private file.
 func CreateConfigBundle(ctx context.Context, executionID, stage string, configs []Config) (path, digest string, err error) {
+	return createConfigBundle(ctx, executionID, stage, configs, false)
+}
+
+func CreateSequenceConfigBundle(ctx context.Context, executionID, stage string, configs []Config) (path, digest string, err error) {
+	return createConfigBundle(ctx, executionID, stage, configs, true)
+}
+
+func createConfigBundle(ctx context.Context, executionID, stage string, configs []Config, indexed bool) (path, digest string, err error) {
 	if executionID == "" || (stage != Precompute && stage != Simulation) || len(configs) == 0 || len(configs) > experiment.DefaultMaxRuns {
 		return "", "", errors.New("invalid configuration bundle inputs")
 	}
@@ -63,7 +76,19 @@ func CreateConfigBundle(ctx context.Context, executionID, stage string, configs 
 		_, err = entry.Write(data)
 		return err
 	}
-	manifest, _ := json.Marshal(configBundleManifest{Schema: "simworkflow/config-bundle/v1", ExecutionID: executionID, Stage: stage, Runs: len(configs)})
+	m := configBundleManifest{Schema: "simworkflow/config-bundle/v1", ExecutionID: executionID, Stage: stage, Runs: len(configs)}
+	if indexed {
+		m.Schema = "simworkflow/config-bundle/v2"
+		runs := make([]experiment.Run, len(configs))
+		for i, c := range configs {
+			runs[i] = c.Run
+		}
+		m.Sequences = experiment.RunSequences(runs)
+	}
+	manifest, _ := json.Marshal(m)
+	if len(manifest) > maxConfigBundleManifestBytes {
+		return path, "", errors.New("configuration bundle manifest exceeds size limit")
+	}
 	if err = write("manifest.json", manifest); err != nil {
 		return path, "", err
 	}
@@ -114,14 +139,21 @@ func validBundleConfig(c Config, executionID, stage, runID string) bool {
 
 type RunConfigSource struct {
 	Inline, Remote, BundleURL, BundleSHA256, RunID, Stage, ExecutionID string
+	Sequence, Index                                                    string
 }
 
 func ReadRunConfigSource(ctx context.Context, source RunConfigSource) (Config, error) {
-	bundle := source.BundleURL != "" || source.BundleSHA256 != "" || source.RunID != "" || source.Stage != "" || source.ExecutionID != ""
+	bundle := source.BundleURL != "" || source.BundleSHA256 != "" || source.RunID != "" || source.Stage != "" || source.ExecutionID != "" || source.Sequence != "" || source.Index != ""
 	if !bundle {
 		return ReadRunConfig(ctx, source.Inline, source.Remote)
 	}
-	if source.Inline != "" || source.Remote != "" || !validRunConfigURL(source.BundleURL) || !experiment.ValidSHA256(source.BundleSHA256) || !bundleRunID.MatchString(source.RunID) || source.ExecutionID == "" || (source.Stage != Precompute && source.Stage != Simulation) {
+	indexed := source.Sequence != "" || source.Index != ""
+	index, indexErr := strconv.Atoi(source.Index)
+	validSelector := bundleRunID.MatchString(source.RunID)
+	if indexed {
+		validSelector = source.RunID == "" && bundleSequenceName.MatchString(source.Sequence) && indexErr == nil && index >= 0 && index < experiment.DefaultMaxRuns && strconv.Itoa(index) == source.Index
+	}
+	if source.Inline != "" || source.Remote != "" || !validRunConfigURL(source.BundleURL) || !experiment.ValidSHA256(source.BundleSHA256) || !validSelector || source.ExecutionID == "" || (source.Stage != Precompute && source.Stage != Simulation) {
 		return Config{}, errors.New("invalid or conflicting configuration bundle source")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -149,7 +181,11 @@ func ReadRunConfigSource(ctx context.Context, source RunConfigSource) (Config, e
 	entries := map[string]*zip.File{}
 	var expanded uint64
 	for _, entry := range z.File {
-		if !entry.Mode().IsRegular() || entries[entry.Name] != nil || entry.UncompressedSize64 > maxRunConfigBytes || (entry.Name != "manifest.json" && !bundleRunID.MatchString(strings.TrimSuffix(entry.Name, ".json"))) || (entry.Name != "manifest.json" && !strings.HasSuffix(entry.Name, ".json")) {
+		limit := uint64(maxRunConfigBytes)
+		if entry.Name == "manifest.json" {
+			limit = maxConfigBundleManifestBytes
+		}
+		if !entry.Mode().IsRegular() || entries[entry.Name] != nil || entry.UncompressedSize64 > limit || (entry.Name != "manifest.json" && !bundleRunID.MatchString(strings.TrimSuffix(entry.Name, ".json"))) || (entry.Name != "manifest.json" && !strings.HasSuffix(entry.Name, ".json")) {
 			return Config{}, errors.New("unsafe, duplicate or oversized configuration bundle member")
 		}
 		expanded += entry.UncompressedSize64
@@ -175,11 +211,37 @@ func ReadRunConfigSource(ctx context.Context, source RunConfigSource) (Config, e
 		return json.Unmarshal(data, target)
 	}
 	var manifest configBundleManifest
-	if decode("manifest.json", 4096, &manifest) != nil || manifest.Schema != "simworkflow/config-bundle/v1" || manifest.Stage != source.Stage || manifest.ExecutionID != source.ExecutionID || manifest.Runs != len(entries)-1 {
+	schema := "simworkflow/config-bundle/v1"
+	if indexed {
+		schema = "simworkflow/config-bundle/v2"
+	}
+	if decode("manifest.json", maxConfigBundleManifestBytes, &manifest) != nil || manifest.Schema != schema || manifest.Stage != source.Stage || manifest.ExecutionID != source.ExecutionID || manifest.Runs != len(entries)-1 {
 		return Config{}, errors.New("configuration bundle manifest mismatch")
 	}
+	if indexed {
+		seen := map[string]bool{}
+		groups := map[string]bool{}
+		for _, group := range manifest.Sequences {
+			if !bundleSequenceName.MatchString(group.Name) || groups[group.Name] || len(group.Runs) == 0 {
+				return Config{}, errors.New("invalid sequence inventory")
+			}
+			groups[group.Name] = true
+			for _, id := range group.Runs {
+				if !bundleRunID.MatchString(id) || seen[id] || entries[id+".json"] == nil {
+					return Config{}, errors.New("invalid sequence inventory")
+				}
+				seen[id] = true
+			}
+			if group.Name == source.Sequence && index < len(group.Runs) {
+				source.RunID = group.Runs[index]
+			}
+		}
+		if len(seen) != manifest.Runs || source.RunID == "" {
+			return Config{}, errors.New("sequence or index is absent from configuration bundle")
+		}
+	}
 	var c Config
-	if decode(source.RunID+".json", maxRunConfigBytes, &c) != nil || !validBundleConfig(c, source.ExecutionID, source.Stage, source.RunID) {
+	if decode(source.RunID+".json", maxRunConfigBytes, &c) != nil || !validBundleConfig(c, source.ExecutionID, source.Stage, source.RunID) || (indexed && experiment.SequenceName(c.Run) != source.Sequence) {
 		return Config{}, errors.New("configuration bundle run mismatch or invalid permissions")
 	}
 	return c, nil

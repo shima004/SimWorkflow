@@ -24,17 +24,18 @@ type Origin struct {
 	Runs           map[string]string `json:"runs"`
 }
 type Metadata struct {
-	Origin             *Origin                `json:"origin,omitempty"`
-	Schema             string                 `json:"schema"`
-	PlanSHA256         string                 `json:"planSHA256,omitempty"`
-	CLIVersion         string                 `json:"cliVersion"`
-	CLICommit          string                 `json:"cliCommit"`
-	Platform           string                 `json:"platform"`
-	HelperImage        string                 `json:"helperImage"`
-	ConfigStorage      string                 `json:"configStorage,omitempty"`
-	HelperConfigBundle bool                   `json:"helperConfigBundle,omitempty"`
-	Images             map[string]string      `json:"images"`
-	Definition         *experiment.Experiment `json:"definition,omitempty"`
+	Origin               *Origin                `json:"origin,omitempty"`
+	Schema               string                 `json:"schema"`
+	PlanSHA256           string                 `json:"planSHA256,omitempty"`
+	CLIVersion           string                 `json:"cliVersion"`
+	CLICommit            string                 `json:"cliCommit"`
+	Platform             string                 `json:"platform"`
+	HelperImage          string                 `json:"helperImage"`
+	ConfigStorage        string                 `json:"configStorage,omitempty"`
+	HelperConfigBundle   bool                   `json:"helperConfigBundle,omitempty"`
+	HelperConfigSequence bool                   `json:"helperConfigSequence,omitempty"`
+	Images               map[string]string      `json:"images"`
+	Definition           *experiment.Experiment `json:"definition,omitempty"`
 }
 
 // Capture pins image contents and stores immutable map snapshots before submission.
@@ -67,6 +68,7 @@ func Capture(ctx context.Context, c config.Config, input *experiment.Experiment,
 		return nil, meta, errors.New("could not inspect helper capabilities")
 	}
 	meta.HelperConfigBundle = helperConfig.Config.Labels[worker.ConfigBundleCapabilityLabel] == "v1"
+	meta.HelperConfigSequence = meta.HelperConfigBundle && helperConfig.Config.Labels[worker.ConfigSequenceCapabilityLabel] == "v1"
 	e.Spec.Simulator.Image, err = pin(e.Spec.Simulator.Image)
 	if err != nil {
 		return nil, meta, fmt.Errorf("pin simulator: %w", err)

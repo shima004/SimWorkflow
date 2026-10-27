@@ -71,6 +71,17 @@ func prepareSimScope(ctx context.Context, c config.Config, workflow string, run 
 	if err != nil {
 		return "", err
 	}
+	if snapshot.Metadata.Annotations["simworkflow.io/run-sequences"] == "v1" {
+		prefix := snapshot.Metadata.Annotations["simworkflow.io/result-prefix"]
+		if !artifacts.ValidPrefix(prefix) {
+			return "", errors.New("workflow has no valid SimWorkflow result prefix")
+		}
+		var plan experiment.Plan
+		if err := readProgressJSON(ctx, storage.New(c), prefix+"/plan.json", &plan); err != nil {
+			return "", errors.New("simulation sequence plan unavailable; try again later")
+		}
+		attachSequenceNodes(snapshot, &plan)
+	}
 	node, found := latestStageNode(snapshot, run.ID, worker.Simulation)
 	if !found || node.Phase == "Pending" {
 		return "", errors.New("simulation is not ready; press w after simulation starts")

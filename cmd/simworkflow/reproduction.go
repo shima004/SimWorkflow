@@ -53,6 +53,7 @@ func runReproduction(ctx context.Context, args []string, c config.Config, out, e
 		}
 		helper := ""
 		configStorage := "inline"
+		sequenced := false
 		for _, template := range snapshot.Spec.Templates {
 			for _, container := range template.InitContainers {
 				if container.Name == "prepare-experiment" {
@@ -63,6 +64,9 @@ func runReproduction(ctx context.Context, args []string, c config.Config, out, e
 						if env.Name == "SIMWORKFLOW_CONFIG_BUNDLE_URL" {
 							configStorage = "s3-bundle"
 						}
+						if env.Name == "SIMWORKFLOW_SEQUENCE" {
+							sequenced = true
+						}
 					}
 					if helper != "" && helper != container.Image {
 						return errors.New("workflow uses inconsistent helper images")
@@ -70,6 +74,9 @@ func runReproduction(ctx context.Context, args []string, c config.Config, out, e
 					helper = container.Image
 				}
 			}
+		}
+		if sequenced {
+			configStorage = "s3-sequence"
 		}
 		if meta.Schema != "" && helper != "" && helper != meta.HelperImage {
 			return errors.New("saved helper differs from actual workflow")

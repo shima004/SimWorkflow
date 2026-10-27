@@ -52,6 +52,7 @@ func writePlannedRunProgress(ctx context.Context, store *storage.Store, snapshot
 }
 
 func readPlannedRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.Snapshot, plan *experiment.Plan) []runProgressRow {
+	attachSequenceNodes(snapshot, plan)
 	// Each row has independent request deadlines. A slow object must not
 	// consume the budget of later runs; bound S3 concurrency and retain plan order.
 	rows := make([]runProgressRow, len(plan.Runs))
@@ -165,9 +166,9 @@ func readRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.S
 func latestStageNode(snapshot *argo.Snapshot, runID, stage string) (argo.Node, bool) {
 	var latest argo.Node
 	latestAttempt, found := -1, false
-	for _, node := range snapshot.Status.Nodes {
+	consider := func(node argo.Node) {
 		if node.Type != "Pod" || !matchesStageNode(snapshot, node, runID, stage) {
-			continue
+			return
 		}
 		attempt := 0
 		if i := strings.LastIndex(node.DisplayName, "("); i >= 0 {
@@ -175,6 +176,15 @@ func latestStageNode(snapshot *argo.Snapshot, runID, stage string) (argo.Node, b
 		}
 		if !found || attempt > latestAttempt || (attempt == latestAttempt && !node.StartedAt.Before(latest.StartedAt)) {
 			latest, latestAttempt, found = node, attempt, true
+		}
+	}
+	if snapshot.RunStageNodes != nil {
+		for _, node := range snapshot.RunStageNodes[runID+"-"+stage] {
+			consider(node)
+		}
+	} else {
+		for _, node := range snapshot.Status.Nodes {
+			consider(node)
 		}
 	}
 	return latest, found
@@ -193,7 +203,14 @@ func matchesStageNode(snapshot *argo.Snapshot, node argo.Node, runID, stage stri
 	} else if stage != worker.Precompute {
 		return false
 	}
-	expected := fmt.Sprintf("%s.%s[%d].%s", snapshot.Metadata.Name, runID, index, stage)
+	root := runID
+	if snapshot.RunNodeNames != nil {
+		root = snapshot.RunNodeNames[runID]
+		if root == "" {
+			return false
+		}
+	}
+	expected := fmt.Sprintf("%s.%s[%d].%s", snapshot.Metadata.Name, root, index, stage)
 	if node.Name == expected {
 		return true
 	}
@@ -207,4 +224,40 @@ func matchesStageNode(snapshot *argo.Snapshot, node argo.Node, runID, stage stri
 	}
 	_, err := strconv.ParseUint(suffix[1:len(suffix)-1], 10, 32)
 	return err == nil
+}
+
+// Derive loop positions from the exact saved plan before concurrent row reads.
+// Index Pods once so a large sequence does not require a full node scan per row.
+func attachSequenceNodes(snapshot *argo.Snapshot, plan *experiment.Plan) {
+	snapshot.RunNodeNames = nil
+	snapshot.RunStageNodes = nil
+	if snapshot.Metadata.Annotations["simworkflow.io/run-sequences"] != "v1" {
+		return
+	}
+	snapshot.RunNodeNames = map[string]string{}
+	snapshot.RunStageNodes = map[string][]argo.Node{}
+	paths := map[string]string{}
+	for _, group := range experiment.RunSequences(plan.Runs) {
+		for index, id := range group.Runs {
+			root := fmt.Sprintf("%s(%d:%d)", group.Name, index, index)
+			snapshot.RunNodeNames[id] = root
+			for i, stage := range []string{worker.Precompute, worker.Simulation} {
+				paths[fmt.Sprintf("%s.%s[%d].%s", snapshot.Metadata.Name, root, i, stage)] = id + "-" + stage
+			}
+		}
+	}
+	for _, node := range snapshot.Status.Nodes {
+		if node.Type != "Pod" {
+			continue
+		}
+		path := node.Name
+		if i := strings.LastIndex(path, "("); i >= 0 && strings.HasSuffix(path, ")") {
+			if _, err := strconv.ParseUint(path[i+1:len(path)-1], 10, 32); err == nil {
+				path = path[:i]
+			}
+		}
+		if key, ok := paths[path]; ok {
+			snapshot.RunStageNodes[key] = append(snapshot.RunStageNodes[key], node)
+		}
+	}
 }

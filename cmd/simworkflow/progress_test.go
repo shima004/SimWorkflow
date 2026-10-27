@@ -127,6 +127,46 @@ func TestSharedStageNodesKeepRunsAndRetryAttemptsSeparate(t *testing.T) {
 	}
 }
 
+func TestSequenceProgressKeepsMembersAndRetriesSeparate(t *testing.T) {
+	plan := detailsPlan(t)
+	if len(plan.Runs) < 2 {
+		t.Fatal("test requires multiple runs")
+	}
+	snapshot := progressSnapshot(plan)
+	snapshot.Metadata.Name = "loop-test"
+	snapshot.Metadata.Annotations["simworkflow.io/run-sequences"] = "v1"
+	groups := experiment.RunSequences(plan.Runs)
+	if len(groups[0].Runs) < 2 {
+		t.Fatal("test requires multiple members")
+	}
+	start := time.Date(2026, 10, 25, 1, 0, 0, 0, time.UTC)
+	root := "loop-test." + groups[0].Name + "(0:0)"
+	snapshot.Status.Nodes = map[string]argo.Node{
+		"pre":     {Type: "Pod", Name: root + "[0].precompute", TemplateName: "shared-precompute-abc", Phase: "Succeeded", StartedAt: start, FinishedAt: start.Add(time.Minute)},
+		"sim0":    {Type: "Pod", Name: root + "[1].simulation(0)", TemplateName: "shared-simulation-abc", DisplayName: "simulation(0)", Phase: "Failed", StartedAt: start},
+		"sim1":    {Type: "Pod", Name: root + "[1].simulation(1)", TemplateName: "shared-simulation-abc", DisplayName: "simulation(1)", Phase: "Running", StartedAt: start.Add(4 * time.Minute)},
+		"other":   {Type: "Pod", Name: "loop-test." + groups[0].Name + "(1:1)[1].simulation(0)", TemplateName: "shared-simulation-abc", DisplayName: "simulation(0)", Phase: "Succeeded", StartedAt: start, FinishedAt: start.Add(2 * time.Minute)},
+		"foreign": {Type: "Pod", Name: "other-workflow." + groups[0].Name + "(0:0)[1].simulation(9)", TemplateName: "shared-simulation-abc", DisplayName: "simulation(9)", Phase: "Failed"},
+	}
+	attachSequenceNodes(snapshot, plan)
+	first, ok := latestStageNode(snapshot, groups[0].Runs[0], worker.Simulation)
+	if !ok || first.Phase != "Running" || workflowElapsed(first.StartedAt, first.FinishedAt, start.Add(5*time.Minute), first.Phase) != "1m0s" {
+		t.Fatal("loop retry elapsed time mixed across members", first)
+	}
+	second, ok := latestStageNode(snapshot, groups[0].Runs[1], worker.Simulation)
+	if !ok || second.Phase != "Succeeded" || second.FinishedAt.Sub(second.StartedAt) != 2*time.Minute {
+		t.Fatal("wrong loop member selected", second)
+	}
+	first.Phase = "Pending"
+	first.StartedAt = time.Time{}
+	snapshot.Status.Nodes["sim1"] = first
+	attachSequenceNodes(snapshot, plan)
+	latest, ok := latestStageNode(snapshot, groups[0].Runs[0], worker.Simulation)
+	if !ok || latest.Phase != "Pending" {
+		t.Fatal("pending loop retry must hide previous attempt")
+	}
+}
+
 func TestRunProgressUsesCurrentAttemptAndHandlesOlderWorkers(t *testing.T) {
 	e, err := experiment.ReadFile("../../examples/experiments/precompute-baseline.yaml")
 	if err != nil {

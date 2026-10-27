@@ -88,7 +88,7 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 	if err := json.Unmarshal(source.Objects.Get("/fixture/"+prefix+"/reproduction.json"), &capture); err != nil || capture.PlanSHA256 != reproduction.PlanSHA256(&original) {
 		t.Fatal("submission did not save reproduction provenance")
 	}
-	if capture.ConfigStorage != "s3-bundle" || !capture.HelperConfigBundle {
+	if capture.ConfigStorage != "s3-sequence" || !capture.HelperConfigSequence || !capture.HelperConfigBundle {
 		t.Fatal("compatible helper must automatically use stage bundles")
 	}
 	for _, stage := range []string{worker.Precompute, worker.Simulation} {
@@ -98,7 +98,7 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 			t.Fatal("stage bundle not saved")
 		}
 		sha := sha256.Sum256(data)
-		c, err := worker.ReadRunConfigSource(context.Background(), worker.RunConfigSource{BundleURL: source.S3.URL + key, BundleSHA256: hex.EncodeToString(sha[:]), RunID: original.Runs[0].ID, Stage: stage, ExecutionID: snapshot.Metadata.Annotations["simworkflow.io/execution-id"]})
+		c, err := worker.ReadRunConfigSource(context.Background(), worker.RunConfigSource{BundleURL: source.S3.URL + key, BundleSHA256: hex.EncodeToString(sha[:]), Sequence: experiment.SequenceName(original.Runs[0]), Index: "0", Stage: stage, ExecutionID: snapshot.Metadata.Annotations["simworkflow.io/execution-id"]})
 		if err != nil || c.Run.ID != original.Runs[0].ID || len(c.Run.Configuration.Groups) != 2 {
 			t.Fatal("saved bundle was not usable by a worker", err)
 		}
@@ -138,7 +138,7 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 	if metadata.Origin == nil || metadata.Origin.Workflow != "fixture-workflow" || len(metadata.Origin.Runs) != len(original.Runs) {
 		t.Fatal("original/new run mapping was not recorded")
 	}
-	if metadata.ConfigStorage != "s3-bundle" {
+	if metadata.ConfigStorage != "s3-sequence" {
 		t.Fatal("reproduction lost configuration mode")
 	}
 	for _, template := range after.Spec.Templates {

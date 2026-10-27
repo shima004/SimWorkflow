@@ -158,7 +158,7 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	account := flags.String("service-account", "simworkflow", "workflow executor ServiceAccount")
 	maxRuns := flags.Int("max-runs", experiment.DefaultMaxRuns, "maximum expanded runs")
 	output := flags.String("output", "", "new private YAML file for render; contains temporary signed URLs")
-	configStorage := flags.String("config-storage", "auto", "worker configuration: auto, s3-bundle, s3 or inline (auto uses stage bundles with a compatible helper)")
+	configStorage := flags.String("config-storage", "auto", "worker configuration: auto, s3-sequence, s3-bundle, s3 or inline (auto selects a compatible format)")
 	if err := flags.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -174,8 +174,8 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	if !validHelperImage(*helper) {
 		return errors.New("helper-image must be a container image reference with a tag or digest, without a URL scheme or credentials")
 	}
-	if *configStorage != "inline" && *configStorage != "s3" && *configStorage != "s3-bundle" && *configStorage != "auto" {
-		return errors.New("config-storage must be auto, s3-bundle, s3 or inline")
+	if *configStorage != "inline" && *configStorage != "s3" && *configStorage != "s3-bundle" && *configStorage != "s3-sequence" && *configStorage != "auto" {
+		return errors.New("config-storage must be auto, s3-sequence, s3-bundle, s3 or inline")
 	}
 	if command == "render" && *output == "" {
 		return errors.New("render requires --output FILE; temporary signed URLs are never printed")
@@ -210,6 +210,12 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 		if meta.HelperConfigBundle {
 			configStorage = "s3-bundle"
 		}
+		if meta.HelperConfigSequence {
+			configStorage = "s3-sequence"
+		}
+	}
+	if configStorage == "s3-sequence" && (!meta.HelperConfigSequence || !meta.HelperConfigBundle) {
+		return errors.New("helper does not advertise sequence configuration support; use an updated helper or --config-storage auto")
 	}
 	if configStorage == "s3-bundle" && !meta.HelperConfigBundle {
 		return errors.New("helper does not advertise configuration bundle v1 support; use an updated helper image or --config-storage s3")
@@ -300,7 +306,8 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 		configs = append(configs, pair)
 	}
 	options := workflow.Options{Namespace: c.Argo.Namespace, HelperImage: helper, ServiceAccount: account, ExecutionID: executionID, ResultPrefix: prefix}
-	if configStorage == "s3-bundle" {
+	options.Sequences = configStorage == "s3-sequence"
+	if configStorage == "s3-bundle" || configStorage == "s3-sequence" {
 		for _, stage := range []string{worker.Precompute, worker.Simulation} {
 			stageConfigs := make([]worker.Config, len(configs))
 			for i, pair := range configs {
@@ -309,7 +316,11 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 					stageConfigs[i] = pair.Simulation
 				}
 			}
-			path, sha, err := worker.CreateConfigBundle(ctx, executionID, stage, stageConfigs)
+			create := worker.CreateConfigBundle
+			if options.Sequences {
+				create = worker.CreateSequenceConfigBundle
+			}
+			path, sha, err := create(ctx, executionID, stage, stageConfigs)
 			if err != nil {
 				return err
 			}
@@ -348,7 +359,7 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 		return err
 	}
 	if len(encodedWorkflow) > 900*1024 {
-		if configStorage == "s3" || configStorage == "s3-bundle" {
+		if configStorage == "s3" || configStorage == "s3-bundle" || configStorage == "s3-sequence" {
 			return fmt.Errorf("workflow definition is too large even with S3 configuration (%d bytes, limit %d bytes, %d runs); reduce runs or distinct image/resource configurations; node-status offloading does not shrink the definition", len(encodedWorkflow), 900*1024, plan.TotalRuns)
 		}
 		return errors.New("workflow definition is too large; use --config-storage s3 with a compatible helper image or split the experiment")

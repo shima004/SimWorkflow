@@ -48,6 +48,10 @@ func (a *Archive) ImportTo(ctx context.Context, c config.Config, name, repositor
 		return nil, meta, nil, errors.New("could not inspect bundled helper capabilities")
 	}
 	meta.HelperConfigBundle = helperConfig.Config.Labels[worker.ConfigBundleCapabilityLabel] == "v1"
+	meta.HelperConfigSequence = meta.HelperConfigBundle && helperConfig.Config.Labels[worker.ConfigSequenceCapabilityLabel] == "v1"
+	if meta.ConfigStorage == "s3-sequence" && !meta.HelperConfigSequence {
+		return nil, meta, nil, errors.New("bundled helper does not support sequence configurations")
+	}
 	if meta.ConfigStorage == "s3-bundle" && !meta.HelperConfigBundle {
 		return nil, meta, nil, errors.New("bundled helper does not support configuration bundles")
 	}

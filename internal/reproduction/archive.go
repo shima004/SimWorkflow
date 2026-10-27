@@ -232,7 +232,7 @@ func OpenContext(ctx context.Context, path string) (a *Archive, err error) {
 	if err != nil || manifest.Schema != Schema || manifest.Metadata.Schema != Schema || manifest.Metadata.Platform != "linux/amd64" || len(manifest.Files) != len(members)-1 {
 		return nil, errors.New("invalid bundle manifest")
 	}
-	if mode := manifest.Metadata.ConfigStorage; mode != "" && mode != "s3" && mode != "s3-bundle" && mode != "inline" {
+	if mode := manifest.Metadata.ConfigStorage; mode != "" && mode != "s3" && mode != "s3-bundle" && mode != "s3-sequence" && mode != "inline" {
 		return nil, errors.New("unsupported worker configuration format")
 	}
 	dir, err := os.MkdirTemp("", "simworkflow-reproduce-*")
