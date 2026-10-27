@@ -26,11 +26,16 @@ func TestSignedTransferDurationBudget(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		runs      int
+		timeout   string
 		wantError bool
 	}{
-		{"beyond previous one-day budget", 24, false},
-		{"one hour before seven-day expiry", 167, false},
-		{"no safety margin", 168, true},
+		{"beyond previous one-day budget", 24, "54m", false},
+		{"one hour before seven-day expiry", 167, "54m", false},
+		{"no safety margin", 168, "54m", true},
+		{"single run over twenty hours", 1, "48h", false},
+		{"single run at total budget", 1, "166h54m", false},
+		{"single run exceeds total budget", 1, "166h54m1s", true},
+		{"extreme timeout cannot overflow budget check", 1, "2562047h47m16s", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e, err := experiment.ReadFile("../../examples/experiments/python-module-comparison.yaml")
@@ -45,8 +50,7 @@ func TestSignedTransferDurationBudget(t *testing.T) {
 				e.Spec.Conditions.Seeds[i] = int64(i + 1)
 			}
 			e.Spec.Execution.MaxParallelRuns = 1
-			// With the six-minute allowance, each wave consumes exactly one hour.
-			e.Spec.Execution.Timeout = "54m"
+			e.Spec.Execution.Timeout = tc.timeout
 			plan, err := experiment.BuildPlan(e)
 			if err != nil {
 				t.Fatal(err)

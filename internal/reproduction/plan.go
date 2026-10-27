@@ -40,11 +40,12 @@ func ValidatePlan(p *experiment.Plan) error {
 		}
 	}
 	duration, err := time.ParseDuration(p.Timeout)
-	if err != nil || duration > 20*time.Hour {
-		return errors.New("reproduction timeout must be at most 20h")
+	if err != nil || duration <= 0 {
+		return errors.New("invalid reproduction timeout")
 	}
 	waves := (len(p.Runs)-1)/p.MaxParallelRuns + 1
-	if int64(waves) > int64(storage.SignedTransferBudget/(duration+360*time.Second)) {
+	// Check before adding the per-wave allowance to avoid duration overflow.
+	if duration > storage.SignedTransferBudget || int64(waves) > int64(storage.SignedTransferBudget/(duration+360*time.Second)) {
 		return errors.New("reproduction duration exceeds signed transfer validity")
 	}
 	return nil

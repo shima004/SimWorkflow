@@ -226,13 +226,6 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 	store := storage.New(c)
 	var err error
 	timeout, _ := time.ParseDuration(plan.Timeout)
-	if timeout > 20*time.Hour {
-		return errors.New("execution timeout must be at most 20h for signed transfers")
-	}
-	waves := (plan.TotalRuns-1)/plan.MaxParallelRuns + 1
-	if int64(waves) > int64(storage.SignedTransferBudget/(timeout+360*time.Second)) {
-		return errors.New("estimated experiment duration exceeds signed URL validity; split the experiment")
-	}
 	var random [16]byte
 	if _, err := rand.Read(random[:]); err != nil {
 		return err
