@@ -110,7 +110,9 @@ URLを含むワーカー設定は結果バンドルに含めません。
 
 ## ワーカー設定とWorkflowサイズ
 
-`render`／`submit` はデフォルトで `--config-storage s3` を使用します。段階ごとのワーカー設定をS3の `experiments/<execution-id>/configs/<run-id>/<stage>.json` に保存し、Workflowには当該設定のGET用署名付きURLだけを渡します。ワーカーは起動時に設定を取得します。100実行でも事前計算・本実行を分け、同じWorkflow内で指定した並列数を維持します。
+`render`／`submit` はデフォルトで `--config-storage s3` を使用します。段階ごとのワーカー設定をS3の `experiments/<execution-id>/configs/<run-id>/<stage>.json` に保存し、Workflowには当該設定のGET用署名付きURLだけを渡します。ワーカーは起動時に設定を取得します。
+
+S3方式では、同じイメージ・種類別CPU／メモリ・制限時間の実行が、事前計算・本実行・その実行順序を定義するテンプレートを共有します。モジュール・マップ・シードが違ってもコンテナ定義を複製せず、各run IDのDAGタスクから専用の設定URLを渡します。異なるイメージやリソース設定は別テンプレートになります。各実行は別々のPodで動き、同じWorkflow内で並列数、失敗の独立性、本実行だけの再試行を維持します。helperの更新は不要です。
 
 ```sh
 simworkflow experiment submit \
@@ -120,6 +122,21 @@ simworkflow experiment submit \
 `s3` 方式はCLI既定の公開helperイメージで利用できます。独自のhelperでもS3からの設定取得機能が必要です。設定取得の署名URLも24時間有効で、Podに長期アクセスキーは渡しません。設定オブジェクトには他の転送用URLも含まれるため、バケットは非公開で管理します。設定オブジェクトは結果バンドルや通常の結果ダウンロードには含めません。各実行につき2個の設定JSONを保存し、自動削除は行いません。
 
 `--config-storage inline` を明示すると従来どおり設定JSONをWorkflowに埋め込み、旧ワーカーを使用できます。CLIは生成定義が900KiBを超える場合、Argoへ送信する前にエラーにします。これはノード状態用の余裕を残すための検査で、クラスタ側のWorkflowサイズ制限は変更しません。
+
+### 実行中のノード状態が大きくなる場合
+
+定義の共通化後も、実行中のノード状態は実行数に応じて増えます。大規模な実験では、ArgoのSQL接続を設定し、`nodeStatusOffLoad: true` を有効にします。Helmでは既存の `controller.persistence` に追加します。
+
+```yaml
+controller:
+  persistence:
+    nodeStatusOffLoad: true
+    # 既存のpostgresqlなどの接続設定は維持する
+```
+
+`archive: true` による終了したWorkflowの保存とは別機能です。既存のDB接続が正常なら、その接続を利用できます。ノード状態の退避は定義そのものを小さくしないため、CLIのサイズ検査は維持します。実行数や設定URLの長さ、異なるイメージ・リソースの組み合わせによっては、共通化後も定義サイズの上限に達します。
+
+CLIはArgo Server APIから取得したノード状態を使って進捗・経過時間・SimScopeの接続先を判定します。直接Kubernetesリソースだけを読む構成にはしません。設定の詳細は [Argoの公式ガイド](https://argo-workflows.readthedocs.io/en/release-4.1/offloading-large-workflows/) を参照してください。
 
 ## タイムアウト
 

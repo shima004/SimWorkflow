@@ -68,7 +68,7 @@ func TestRemoteCommands(t *testing.T) {
 					if init.Image != defaultHelperImage {
 						t.Error("prepare must use the pinned default helper")
 					}
-					if len(init.Env) != 1 || init.Env[0].Name != "SIMWORKFLOW_RUN_URL" || !strings.Contains(init.Env[0].Value, "/configs/") {
+					if len(init.Env) != 1 || init.Env[0].Name != "SIMWORKFLOW_RUN_URL" || init.Env[0].Value != "{{inputs.parameters.config-url}}" {
 						t.Error("submit without config-storage must use S3 configuration URLs")
 					}
 				}
@@ -167,7 +167,7 @@ func TestRemoteCommands(t *testing.T) {
 		configCount++
 	}
 	mu.Unlock()
-	if configCount != 18 || bytes.Count(remoteYAML, []byte("SIMWORKFLOW_RUN_URL")) != 18 || bytes.Contains(remoteYAML, []byte("SIMWORKFLOW_RUN:")) {
+	if configCount != 18 || bytes.Count(remoteYAML, []byte("SIMWORKFLOW_RUN_URL")) != 2 || bytes.Contains(remoteYAML, []byte("SIMWORKFLOW_RUN:")) {
 		t.Fatal("all nine runs must reference both stage configurations in S3")
 	}
 	out.Reset()

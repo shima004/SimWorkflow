@@ -53,9 +53,12 @@ func TestSimScopeChoosesCurrentSimulationAttempt(t *testing.T) {
 	for _, tc := range []struct {
 		name, stage, phase, ip string
 		retry                  bool
+		shared                 bool
 		wantLive               bool
 	}{
 		{name: "running simulation", stage: "simulation", phase: "Running", ip: "10.42.1.2", wantLive: true},
+		{name: "running shared simulation", stage: "simulation", phase: "Running", ip: "10.42.1.2", wantLive: true, shared: true},
+		{name: "pending shared retry", stage: "simulation", phase: "Running", ip: "10.42.1.2", retry: true, shared: true},
 		{name: "precompute must not open", stage: "precompute", phase: "Running", ip: "10.42.1.2"},
 		{name: "pending retry hides old running Pod", stage: "simulation", phase: "Running", ip: "10.42.1.2", retry: true},
 		{name: "no Pod IP yet", stage: "simulation", phase: "Running"},
@@ -66,6 +69,14 @@ func TestSimScopeChoosesCurrentSimulationAttempt(t *testing.T) {
 			snap.Status.Nodes = map[string]argo.Node{"first": {Type: "Pod", TemplateName: run.ID + "-" + tc.stage, DisplayName: "simulation(0)", Phase: tc.phase, PodIP: tc.ip, StartedAt: time.Now()}}
 			if tc.retry {
 				snap.Status.Nodes["retry"] = argo.Node{Type: "Pod", TemplateName: run.ID + "-simulation", DisplayName: "simulation(1)", Phase: "Pending"}
+			}
+			if tc.shared {
+				snap.Metadata.Name = "test"
+				for key, node := range snap.Status.Nodes {
+					node.TemplateName = "shared-simulation-abc"
+					node.Name = "test." + run.ID + "[1]." + node.DisplayName
+					snap.Status.Nodes[key] = node
+				}
 			}
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if !strings.HasPrefix(r.URL.Path, "/api/v1/workflows/") {

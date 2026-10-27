@@ -299,7 +299,7 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 	}
 	if len(encodedWorkflow) > 900*1024 {
 		if configStorage == "s3" {
-			return errors.New("workflow definition is too large even with S3 configuration; split the experiment")
+			return fmt.Errorf("workflow definition is too large even with S3 configuration (%d bytes, limit %d bytes, %d runs); reduce runs or distinct image/resource configurations; node-status offloading does not shrink the definition", len(encodedWorkflow), 900*1024, plan.TotalRuns)
 		}
 		return errors.New("workflow definition is too large; use --config-storage s3 with a compatible helper image or split the experiment")
 	}

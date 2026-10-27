@@ -174,7 +174,99 @@ func TestHundredRunRemoteConfigurationsKeepWorkflowBelowSizeLimit(t *testing.T) 
 			count++
 		}
 	}
-	if count != 200 {
-		t.Fatal("all 100 runs must retain both stages")
+	if count != 2 {
+		t.Fatal("all 100 runs must share the two stage templates")
+	}
+}
+
+func TestFourHundredRunsShareTemplatesAndKeepEachConfigurationScoped(t *testing.T) {
+	e, err := experiment.ReadFile("../../examples/experiments/python-module-comparison.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Spec.Agents[0].Matrix.Modules["SampleSearch.PathPlanning"] = []string{"example.First", "example.Second"}
+	e.Spec.Conditions.Seeds = make([]int64, 100)
+	for i := range e.Spec.Conditions.Seeds {
+		e.Spec.Conditions.Seeds[i] = int64(i + 1)
+	}
+	e.Spec.Execution.MaxParallelRuns = 12
+	plan, err := experiment.BuildPlan(e, 400)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var configs []RunConfig
+	for _, run := range plan.Runs {
+		configs = append(configs, RunConfig{
+			Precompute:    worker.Config{Stage: worker.Precompute, Run: run, TimeoutSeconds: 1800, PrecomputeUpload: &storage.Transfer{URL: "https://example.com/private-put"}},
+			Simulation:    worker.Config{Stage: worker.Simulation, Run: run, TimeoutSeconds: 1800, PrecomputeDownload: &storage.Transfer{URL: "https://example.com/private-get"}},
+			PrecomputeURL: "https://s3.example/experiments/execution/configs/" + run.ID + "/precompute.json?signature=" + strings.Repeat("a", 600),
+			SimulationURL: "https://s3.example/experiments/execution/configs/" + run.ID + "/simulation.json?signature=" + strings.Repeat("b", 600),
+		})
+	}
+	options := Options{Namespace: "argo", HelperImage: "worker:test", ServiceAccount: "runner"}
+	wf, err := Build(plan, configs, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(wf)
+	t.Logf("400-run definition: %d bytes", len(data))
+	if len(data) >= 900*1024 || strings.Contains(string(data), "private-put") || strings.Contains(string(data), "private-get") {
+		t.Fatal("workflow must remain small and contain only scoped configuration URLs")
+	}
+	spec := wf["spec"].(map[string]any)
+	templates := spec["templates"].([]any)
+	if spec["parallelism"] != 12 || len(templates) != 4 {
+		t.Fatal("expected one DAG, one shared run wrapper and two shared stages")
+	}
+	byName := map[string]map[string]any{}
+	for _, raw := range templates {
+		template := raw.(map[string]any)
+		byName[template["name"].(string)] = template
+	}
+	tasks := byName["experiment"]["dag"].(map[string]any)["tasks"].([]any)
+	if len(tasks) != 400 || byName["experiment"]["dag"].(map[string]any)["failFast"] != false {
+		t.Fatal("runs must remain independent DAG tasks")
+	}
+	for i, raw := range tasks {
+		task := raw.(map[string]any)
+		if task["name"] != plan.Runs[i].ID {
+			t.Fatal("task identities must match the saved plan")
+		}
+		arguments := task["arguments"].(map[string]any)["parameters"].([]any)
+		if arguments[0].(map[string]any)["value"] != configs[i].PrecomputeURL || arguments[1].(map[string]any)["value"] != configs[i].SimulationURL {
+			t.Fatal("run must receive its own scoped stage configurations")
+		}
+		steps := byName[task["template"].(string)]["steps"].([]any)
+		for j, stage := range []string{worker.Precompute, worker.Simulation} {
+			step := steps[j].([]any)[0].(map[string]any)
+			if step["name"] != stage || step["arguments"].(map[string]any)["parameters"].([]any)[0].(map[string]any)["value"] != "{{inputs.parameters."+stage+"-url}}" {
+				t.Fatal("stages must run in order with separate configurations")
+			}
+			pod := byName[step["template"].(string)]
+			if pod["activeDeadlineSeconds"] != int64(1980) || (pod["retryStrategy"] != nil) != (stage == worker.Simulation) {
+				t.Fatal("stage deadline and simulation-only retry must be preserved")
+			}
+		}
+	}
+	// Only container/pod settings affect sharing. Module and seed variations
+	// share templates, but changing an image or any role's resources must not.
+	for _, change := range []func(*experiment.Run){
+		func(r *experiment.Run) {
+			r.Configuration.ResourcesByRole = map[string]experiment.Resources{"policeForce": {CPU: "2", Memory: "2Gi"}}
+		},
+		func(r *experiment.Run) { r.Simulator.Image = "different-simulator:v1" },
+		func(r *experiment.Run) { r.Configuration.Image = "different-agent:v1" },
+		func(r *experiment.Run) { r.Simulator.Resources.Memory = "12Gi" },
+	} {
+		original := plan.Runs[399]
+		modified := original
+		change(&modified)
+		plan.Runs[399] = modified
+		configs[399].Precompute.Run, configs[399].Simulation.Run = modified, modified
+		wf, err := Build(plan, configs, options)
+		if err != nil || len(wf["spec"].(map[string]any)["templates"].([]any)) != 7 {
+			t.Fatal("different container settings need distinct stage templates and wrapper", err)
+		}
+		plan.Runs[399] = original
 	}
 }

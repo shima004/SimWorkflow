@@ -166,7 +166,7 @@ func latestStageNode(snapshot *argo.Snapshot, runID, stage string) (argo.Node, b
 	var latest argo.Node
 	latestAttempt, found := -1, false
 	for _, node := range snapshot.Status.Nodes {
-		if node.Type != "Pod" || node.TemplateName != runID+"-"+stage {
+		if node.Type != "Pod" || !matchesStageNode(snapshot, node, runID, stage) {
 			continue
 		}
 		attempt := 0
@@ -178,4 +178,33 @@ func latestStageNode(snapshot *argo.Snapshot, runID, stage string) (argo.Node, b
 		}
 	}
 	return latest, found
+}
+
+func matchesStageNode(snapshot *argo.Snapshot, node argo.Node, runID, stage string) bool {
+	if node.TemplateName == runID+"-"+stage {
+		return true // Workflows submitted before shared templates were introduced.
+	}
+	if snapshot.Metadata.Name == "" || !strings.HasPrefix(node.TemplateName, "shared-"+stage+"-") {
+		return false
+	}
+	index := 0
+	if stage == worker.Simulation {
+		index = 1
+	} else if stage != worker.Precompute {
+		return false
+	}
+	expected := fmt.Sprintf("%s.%s[%d].%s", snapshot.Metadata.Name, runID, index, stage)
+	if node.Name == expected {
+		return true
+	}
+	// Retry Pod names append the numeric attempt to the step's node name.
+	suffix, ok := strings.CutPrefix(node.Name, expected)
+	if !ok {
+		return false
+	}
+	if !strings.HasPrefix(suffix, "(") || !strings.HasSuffix(suffix, ")") {
+		return false
+	}
+	_, err := strconv.ParseUint(suffix[1:len(suffix)-1], 10, 32)
+	return err == nil
 }

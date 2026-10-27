@@ -48,6 +48,7 @@ type Snapshot struct {
 }
 
 type Node struct {
+	Name         string    `json:"name"`
 	TemplateName string    `json:"templateName"`
 	Type         string    `json:"type"`
 	StartedAt    time.Time `json:"startedAt"`

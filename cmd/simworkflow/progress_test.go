@@ -92,6 +92,41 @@ func TestIndividualRunElapsedUsesCurrentStageAndAttempt(t *testing.T) {
 	}
 }
 
+func TestSharedStageNodesKeepRunsAndRetryAttemptsSeparate(t *testing.T) {
+	plan := detailsPlan(t)
+	run := plan.Runs[0]
+	start := time.Date(2026, 10, 25, 1, 0, 0, 0, time.UTC)
+	snapshot := progressSnapshot(plan)
+	snapshot.Metadata.Name = "shared-experiment"
+	prefix := "shared-experiment." + run.ID
+	snapshot.Status.Nodes = map[string]argo.Node{
+		"pre":             {Name: prefix + "[0].precompute", Type: "Pod", TemplateName: "shared-precompute-abc", Phase: "Succeeded", StartedAt: start},
+		"sim0":            {Name: prefix + "[1].simulation(0)", Type: "Pod", TemplateName: "shared-simulation-abc", DisplayName: "simulation(0)", Phase: "Failed", StartedAt: start},
+		"sim1":            {Name: prefix + "[1].simulation(1)", Type: "Pod", TemplateName: "shared-simulation-abc", DisplayName: "simulation(1)", Phase: "Running", StartedAt: start.Add(4 * time.Minute)},
+		"other":           {Name: "shared-experiment.other-run[1].simulation(9)", Type: "Pod", TemplateName: "shared-simulation-abc", DisplayName: "simulation(9)", Phase: "Succeeded"},
+		"different-group": {Name: prefix + "[0].simulation(9)", Type: "Pod", TemplateName: "shared-simulation-abc", DisplayName: "simulation(9)", Phase: "Succeeded"},
+		"malformed":       {Name: "(9)", Type: "Pod", TemplateName: "shared-simulation-abc", DisplayName: "simulation(9)", Phase: "Succeeded"},
+	}
+	store := progressTestStore(func(r *http.Request) (*http.Response, error) { return progressResponse(r, nil, 404), nil })
+	row := readRunProgress(context.Background(), store, snapshot, run)
+	if row.stage != "simulation" || row.phase != "Running" || workflowElapsed(row.startedAt, row.finishedAt, start.Add(5*time.Minute), row.phase) != "1m0s" {
+		t.Fatal("shared templates must retain per-run, per-attempt elapsed time", row)
+	}
+	node := snapshot.Status.Nodes["sim1"]
+	node.Phase, node.StartedAt = "Pending", time.Time{}
+	snapshot.Status.Nodes["sim1"] = node
+	latest, found := latestStageNode(snapshot, run.ID, "simulation")
+	if !found || latest.Phase != "Pending" {
+		t.Fatal("a pending retry must hide its failed predecessor")
+	}
+	for _, suffix := range []string{"", "(0)", "(1)"} {
+		node.Name = prefix + "[1].simulation" + suffix
+		if !matchesStageNode(snapshot, node, run.ID, "simulation") {
+			t.Fatal("valid Argo step node not recognized", node.Name)
+		}
+	}
+}
+
 func TestRunProgressUsesCurrentAttemptAndHandlesOlderWorkers(t *testing.T) {
 	e, err := experiment.ReadFile("../../examples/experiments/precompute-baseline.yaml")
 	if err != nil {
