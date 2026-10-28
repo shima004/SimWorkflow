@@ -33,8 +33,8 @@ if [ "${1:-}" = "-jar" ] && [ "${2:-}" = "/opt/rcrs-server/jars/rcrs-server-laun
         mkdir -p "$rcrs_score_home/logs"
         ln -s "$rcrs_log_dir" "$rcrs_score_home/logs/log"
         export RCRS_HOME="$rcrs_score_home"
-        # The launcher also reads RCRS_HOME. Its explicit root must continue
-        # pointing at the original server while child JVMs use the score path.
+        # Explicit root also supports distributions without the maps/ directory
+        # used by the launcher's automatic root detection.
         set -- "$@" --root /opt/rcrs-server
     fi
 fi

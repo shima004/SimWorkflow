@@ -1,39 +1,41 @@
-# 旧RCRSサーバーの互換イメージ
+# 既存イメージのサーバーを利用する補助手順
 
-ローカルイメージの `rcrs-server` を取り出し、現在のSimWorkflowが使うランチャーで起動できるイメージを作成します。旧サーバーのJAR・ライブラリ・ソース・LICENSEは変更せずに収録します。ランチャーはDockerfileでdigestを固定しています。
+ユーザーが改造したシミュレーターをSimWorkflowで使うための全体の手順は、[改造したシミュレーターを使う](../README.md) を参照してください。ビルド済み配布物から作る標準のDockerfileも、1つ上のディレクトリにあります。
 
-## ビルド
+このディレクトリは、サーバー本体が既存のローカルイメージ内にある場合や、固定パスへ出力するスコアログの互換対応が必要な場合の補助テンプレートです。`legacy` というディレクトリ名でも、利用対象を特定年度・特定ユーザーのイメージには限定していません。
 
-リポジトリのルートで実行します。Python 3.11以降とDockerが必要です。出力先は存在しないディレクトリを指定します。
+## サーバー本体を用意する
+
+Python 3.11以降とDockerを使い、SimWorkflowリポジトリのルートで実行します。イメージ名とサーバー配置先は、自分のイメージに合わせて変更します。出力先には存在しないディレクトリを指定します。
 
 ```sh
 python3 templates/simulators/legacy/prepare-context.py \
-  --source-image tob213/rrs-sim:latest \
-  --output artifacts/legacy-server-build
-
-docker build --platform linux/amd64 \
-  -f templates/simulators/legacy/Dockerfile \
-  -t registry.example.com/simworkflow/rcrs-server-legacy:v1 \
-  artifacts/legacy-server-build
+  --source-image registry.example.com/my-team/modified-server:v1 \
+  --source-path /opt/rcrs-server \
+  --output artifacts/my-simulator-build
 ```
 
-抽出時に元コンテナは起動しません。`source.json` に元イメージのdigestとJAR・ライブラリのSHA-256を保存し、作成イメージの `/usr/share/simworkflow/legacy-source.json` にも収録します。元イメージはローカルに必要です。取り出したサーバーや検証ログは `artifacts/` 配下に置き、Gitへ登録しません。
+元イメージはローカルに必要です。抽出時に元コンテナは起動しません。出力先には `rcrs-server/`、`java-wrapper.sh`、元イメージのdigestとJAR・ライブラリのSHA-256を記録した `source.json` が作成されます。
 
-実行ノードから取得できるレジストリへ登録した後、実験YAMLの `spec.simulator.image` をその参照へ変更します。helperイメージを変更する必要はありません。マップの `score.function` は元の独自クラスを指定できます。
+取り出した本体を通常のログ保存方式で使う場合は、[標準のビルド手順](../README.md#3-ビルドして登録する) で `templates/simulators/Dockerfile` を使用します。
 
-## 起動契約
+## 固定パスのスコアログを引き継ぐ場合
 
-- サーバー配置：`/opt/rcrs-server`
-- 起動：`java -jar /opt/rcrs-server/jars/rcrs-server-launcher.jar precompute|comprun --nogui --map DIR --config DIR --log DIR --team NAME`
-- 実行ユーザー：`rcrs`、Javaランタイムはランチャー用ベースイメージを使用
-- `ScoreCalcFunction` が固定パスへ出力する `scores.log` は、`--log` で指定した段階別ディレクトリへ保存
+このディレクトリの `Dockerfile` と `java-wrapper.sh` は、スコア関数が `$RCRS_HOME/logs/log/scores.log` に書き込む実装に対応しています。ユーザーの実装がこの方式を使う場合は、次の形でビルド・登録できます。
 
-Javaの起動ラッパーは旧クラスを変更せず、スコア出力用の `RCRS_HOME` とランチャーの明示的な `--root` を設定します。スコア用のリンクは一時ディレクトリへ作成し、結果バンドルが走査するログ領域にはリンクを置きません。
+```sh
+simworkflow agent build \
+  --repository my-team/simulator \
+  --tag v1 \
+  --dockerfile templates/simulators/legacy/Dockerfile \
+  --push \
+  artifacts/my-simulator-build
+```
 
-`outputs.collect` に `simulatorLogs` を含めると、`scores.log` も結果バンドルに収録されます。各行は元の実装どおりであり、厳密なJSONではありません。計算対象がない場合の `NaN` も変更しません。
+サーバーのJAR・ライブラリ・ソース・LICENSEは変更せずに収録し、現在のCLIに対応するランチャーを追加します。Javaランタイムはランチャー用ベースイメージを使用します。元イメージ情報は `/usr/share/simworkflow/legacy-source.json` にも収録します。
 
-## 確認した元イメージ
+起動ラッパーはスコア用の `RCRS_HOME` を一時ディレクトリへ設定し、`logs/log` から `--log` で指定された段階別ログへリンクします。ランチャーのサーバー配置は `--root /opt/rcrs-server` で指定します。結果バンドルが走査するログ領域にはリンクを置きません。
 
-`tob213/rrs-sim@sha256:ce32722975f6b3c296b2a4d54a43c966fb24e951fa3bc65320e4b8508a7a0974`
+`outputs.collect` に `simulatorLogs` を含めると、`scores.log` も結果バンドルに収録されます。内容の書式・計算式はユーザーのスコア関数のものを維持します。別の固定パスを使う実装では、その実装に合わせてラッパーを変更してください。
 
-このイメージの `standard.jar` には `ScoreCalcFunction` と追加指標の実装があります。別の元イメージを使う場合は、必要なスコアクラスとランチャーとの互換性を確認してください。
+登録後のイメージ指定や動作確認は、[全体ガイド](../README.md#4-実験yamlから指定する) に従います。取り出したサーバーや個人用検証ログは `artifacts/` 配下に置き、Gitへ登録しません。

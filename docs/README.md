@@ -29,6 +29,7 @@
 | [Javaエージェント](../templates/agents/java/README.md) | イメージ作成、Gradle依存の同梱、設定ファイルの配置 |
 | [実行環境の準備](distribution.md) | Argo・S3・レジストリ・RBAC、公開helper、独自helper |
 | [実行の仕組み](execution.md) | 事前計算と本実行、S3保存、失敗・再試行、期限・サイズ制限 |
+| [カスタムシミュレーター](../templates/simulators/README.md) | 改造したサーバーのイメージ作成・登録、起動条件、実験への指定 |
 | [シミュレーターの仕様](simulator.md) | 対象イメージ、起動引数、接続先、JVMメモリ |
 
 ## 開発・検証する

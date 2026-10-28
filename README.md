@@ -57,6 +57,7 @@ simworkflow experiment download --include summary --stage simulation WORKFLOW_NA
 | 最初の実験を動かす | [クイックスタート](docs/quickstart.md) |
 | モジュール単位・セット単位の比較やリソースを定義する | [実験YAMLの仕様](docs/experiment-yaml.md) |
 | エージェントイメージを作る | [ビルド・登録](docs/agent-build.md)・[Python（uv／pip）](templates/agents/python/README.md)・[Java](templates/agents/java/README.md) |
+| 改造したシミュレーターを使う | [イメージ作成・登録と実行条件](templates/simulators/README.md) |
 | 認証情報を安全に保存する | [OSの資格情報ストア](docs/credentials.md) |
 | マップを登録・管理する | [マップ](docs/maps.md) |
 | 実験を一覧表示・停止・監視し、結果を取得する | [進捗・スコア](docs/progress.md)・[ダウンロード](docs/download.md) |
