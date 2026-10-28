@@ -15,6 +15,7 @@ import (
 
 	"simworkflow/internal/experiment"
 	"simworkflow/internal/maparchive"
+	"simworkflow/internal/operation"
 	"simworkflow/internal/storage"
 )
 
@@ -234,25 +235,40 @@ func (c *Catalog) Resolve(ctx context.Context, input *experiment.Experiment) (*e
 	}
 	resolved := *input
 	resolved.Spec.Conditions.Maps = experiment.ExpandMaps(input.Spec.Conditions.Maps)
-	cache := map[string]Metadata{}
+	type lookup struct{ name, version, display string }
+	jobs := []lookup{}
+	indexes := map[string]int{}
+	for _, m := range resolved.Spec.Conditions.Maps {
+		if m.Version == "" {
+			continue
+		}
+		cacheKey := m.RegistryName() + ":" + m.Version
+		if _, ok := indexes[cacheKey]; !ok {
+			indexes[cacheKey] = len(jobs)
+			jobs = append(jobs, lookup{m.RegistryName(), m.Version, m.Name})
+		}
+	}
+	results := make([]Metadata, len(jobs))
+	if err := operation.For(ctx, "Resolve map catalog", len(jobs), func(ctx context.Context, i int) error {
+		job := jobs[i]
+		metadata, err := c.Inspect(ctx, job.name, job.version)
+		if err != nil {
+			return fmt.Errorf("resolve map %s: %w", job.display, err)
+		}
+		results[i] = metadata
+		return nil
+	}); err != nil {
+		return nil, err
+	}
 	for i, m := range resolved.Spec.Conditions.Maps {
 		if m.Version == "" {
 			continue
 		}
-		name := m.RegistryName()
-		cacheKey := name + ":" + m.Version
-		metadata, ok := cache[cacheKey]
-		if !ok {
-			var err error
-			metadata, err = c.Inspect(ctx, name, m.Version)
-			if err != nil {
-				return nil, fmt.Errorf("resolve map %s: %w", m.Name, err)
-			}
-			cache[cacheKey] = metadata
-		}
+		metadata := results[indexes[m.RegistryName()+":"+m.Version]]
 		m.Resolved = &experiment.ResolvedMap{Name: metadata.Name, Version: metadata.Version, Source: metadata.Source, SHA256: metadata.SHA256}
 		resolved.Spec.Conditions.Maps[i] = m
 	}
+
 	if err := resolved.Validate(); err != nil {
 		return nil, err
 	}

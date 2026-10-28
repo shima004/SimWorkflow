@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"simworkflow/internal/experiment"
+	"simworkflow/internal/operation"
 	"simworkflow/internal/storage"
 )
 
@@ -94,7 +95,8 @@ func createConfigBundle(ctx context.Context, executionID, stage string, configs 
 	}
 	seen := map[string]bool{}
 	expanded := int64(len(manifest))
-	for _, c := range configs {
+	operation.Report(ctx, operation.Event{Stage: "Build " + stage + " configuration bundle", Total: len(configs)})
+	for i, c := range configs {
 		if err = ctx.Err(); err != nil {
 			return path, "", err
 		}
@@ -113,6 +115,7 @@ func createConfigBundle(ctx context.Context, executionID, stage string, configs 
 		if err = write(c.Run.ID+".json", data); err != nil {
 			return path, "", err
 		}
+		operation.Report(ctx, operation.Event{Stage: "Build " + stage + " configuration bundle", Completed: i + 1, Total: len(configs)})
 	}
 	if err = z.Close(); err != nil {
 		return path, "", err

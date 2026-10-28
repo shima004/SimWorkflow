@@ -5,14 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 
 	"simworkflow/internal/config"
 	"simworkflow/internal/experiment"
 	"simworkflow/internal/imageio"
-	"simworkflow/internal/maparchive"
-	"simworkflow/internal/storage"
+	"simworkflow/internal/operation"
 	"simworkflow/internal/worker"
 )
 
@@ -67,6 +64,7 @@ func Capture(ctx context.Context, c config.Config, input *experiment.Experiment,
 		}
 		return value, err
 	}
+	operation.Report(ctx, operation.Event{Stage: "Resolve container images", Total: len(e.Spec.Agents) + 2})
 	helperImage, pinnedHelper, err := images.Fetch(ctx, helper)
 	if err != nil {
 		return nil, meta, fmt.Errorf("pin helper: %w", err)
@@ -79,83 +77,31 @@ func Capture(ctx context.Context, c config.Config, input *experiment.Experiment,
 	}
 	meta.HelperConfigBundle = helperConfig.Config.Labels[worker.ConfigBundleCapabilityLabel] == "v1"
 	meta.HelperConfigSequence = meta.HelperConfigBundle && helperConfig.Config.Labels[worker.ConfigSequenceCapabilityLabel] == "v1"
+	mode := "s3"
+	if meta.HelperConfigBundle {
+		mode = "s3-bundle"
+	}
+	if meta.HelperConfigSequence {
+		mode = "s3-sequence"
+	}
+	operation.Report(ctx, operation.Event{Stage: "Helper configuration capability", Detail: mode})
+	operation.Report(ctx, operation.Event{Stage: "Resolve container images", Completed: 1, Total: len(e.Spec.Agents) + 2})
 	e.Spec.Simulator.Image, err = pin(e.Spec.Simulator.Image)
 	if err != nil {
 		return nil, meta, fmt.Errorf("pin simulator: %w", err)
 	}
+	operation.Report(ctx, operation.Event{Stage: "Resolve container images", Completed: 2, Total: len(e.Spec.Agents) + 2})
 	for i := range e.Spec.Agents {
 		e.Spec.Agents[i].Image, err = pin(e.Spec.Agents[i].Image)
 		if err != nil {
 			return nil, meta, fmt.Errorf("pin agent: %w", err)
 		}
+		operation.Report(ctx, operation.Event{Stage: "Resolve container images", Completed: i + 3, Total: len(e.Spec.Agents) + 2})
 	}
-	store := storage.New(c)
-	snapshots := map[string]experiment.Map{}
-	for i, m := range e.Spec.Conditions.Maps {
-		if saved, ok := snapshots[m.Location()]; ok {
-			if m.ExpectedSHA256() != "" && m.ExpectedSHA256() != saved.ExpectedSHA256() {
-				return nil, meta, errors.New("map aliases disagree on SHA-256")
-			}
-			if m.Resolved != nil {
-				copy := *m.Resolved
-				copy.Source = saved.Location()
-				m.Resolved = &copy
-				m.Version = copy.Version
-			} else {
-				m.Source = saved.Location()
-				m.SHA256 = saved.ExpectedSHA256()
-			}
-			e.Spec.Conditions.Maps[i] = m
-			continue
-		}
-		transfer, err := store.Download(ctx, m.Location())
-		if err != nil {
-			return nil, meta, err
-		}
-		response, err := storage.Request(ctx, "GET", transfer, nil)
-		if err != nil {
-			return nil, meta, err
-		}
-		file, err := os.CreateTemp("", "simworkflow-map-snapshot-*.zip")
-		if err != nil {
-			response.Body.Close()
-			return nil, meta, err
-		}
-		path := file.Name()
-		n, copyErr := io.Copy(file, io.LimitReader(response.Body, maparchive.MaxBytes+1))
-		response.Body.Close()
-		closeErr := file.Close()
-		if copyErr != nil || closeErr != nil || n > maparchive.MaxBytes {
-			os.Remove(path)
-			return nil, meta, errors.New("could not snapshot map within 2GiB limit")
-		}
-		info, err := maparchive.Inspect(path)
-		if err != nil {
-			os.Remove(path)
-			return nil, meta, err
-		}
-		if expected := m.ExpectedSHA256(); expected != "" && expected != info.SHA256 {
-			os.Remove(path)
-			return nil, meta, errors.New("map does not match recorded SHA-256")
-		}
-		location, err := saveMap(ctx, store, path, info.SHA256)
-		os.Remove(path)
-		if err != nil {
-			return nil, meta, err
-		}
-		original := m.Location()
-		if m.Resolved != nil {
-			copy := *m.Resolved
-			copy.Source = location
-			m.Resolved = &copy
-			m.Version = copy.Version
-		} else {
-			m.Source = location
-			m.SHA256 = info.SHA256
-		}
-		snapshots[original] = m
-		e.Spec.Conditions.Maps[i] = m
+	if err := snapshotInputs(ctx, c, e); err != nil {
+		return nil, meta, err
 	}
+
 	meta.Definition = e
 	return e, meta, nil
 }

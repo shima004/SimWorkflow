@@ -21,6 +21,7 @@ import (
 	"simworkflow/internal/config"
 	"simworkflow/internal/experiment"
 	"simworkflow/internal/mapcatalog"
+	"simworkflow/internal/operation"
 	"simworkflow/internal/reproduction"
 	"simworkflow/internal/storage"
 	"simworkflow/internal/worker"
@@ -45,6 +46,9 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 	command := args[0]
+	if command == "render" || command == "submit" || command == "retry" {
+		ctx = operation.WithReporter(ctx, submissionReporter(errOut))
+	}
 	if command == "retry" {
 		return runRetry(ctx, args[1:], c, out, errOut)
 	}
@@ -230,9 +234,12 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 		return errors.New("helper does not advertise configuration bundle v1 support; use an updated helper image or --config-storage s3")
 	}
 	meta.ConfigStorage = configStorage
+	operation.Report(ctx, operation.Event{Stage: "Worker configuration storage", Detail: configStorage})
+	operation.Report(ctx, operation.Event{Stage: "Validate execution plan", Total: 1})
 	if err := reproduction.ValidatePlan(plan); err != nil {
 		return err
 	}
+	operation.Report(ctx, operation.Event{Stage: "Validate execution plan", Completed: 1, Total: 1})
 	store := storage.New(c)
 	var err error
 	timeout, _ := time.ParseDuration(plan.Timeout)
@@ -243,16 +250,29 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 	executionID := hex.EncodeToString(random[:])
 	prefix := "experiments/" + executionID
 	configs := make([]workflow.RunConfig, 0, len(plan.Runs))
-	downloads := map[string]storage.Transfer{}
+	sources := []string{}
+	seenSources := map[string]bool{}
 	for _, run := range plan.Runs {
-		mapTransfer, ok := downloads[run.Map.Location()]
-		if !ok {
-			mapTransfer, err = store.Download(ctx, run.Map.Location())
-			if err != nil {
-				return err
-			}
-			downloads[run.Map.Location()] = mapTransfer
+		if source := run.Map.Location(); !seenSources[source] {
+			seenSources[source] = true
+			sources = append(sources, source)
 		}
+	}
+	transfers := make([]storage.Transfer, len(sources))
+	if err := operation.For(ctx, "Check map snapshots", len(sources), func(ctx context.Context, i int) error {
+		transfer, err := store.Download(ctx, sources[i])
+		transfers[i] = transfer
+		return err
+	}); err != nil {
+		return err
+	}
+	downloads := map[string]storage.Transfer{}
+	for i, source := range sources {
+		downloads[source] = transfers[i]
+	}
+	operation.Report(ctx, operation.Event{Stage: "Generate run configurations", Total: len(plan.Runs)})
+	for i, run := range plan.Runs {
+		mapTransfer := downloads[run.Map.Location()]
 		resultPrefix := prefix + "/" + run.ID
 		pair := workflow.RunConfig{}
 		for _, stage := range []string{worker.Precompute, worker.Simulation} {
@@ -306,6 +326,7 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 			}
 		}
 		configs = append(configs, pair)
+		operation.Report(ctx, operation.Event{Stage: "Generate run configurations", Completed: i + 1, Total: len(plan.Runs)})
 	}
 	options := workflow.Options{Namespace: c.Argo.Namespace, HelperImage: helper, ServiceAccount: account, ExecutionID: executionID, ResultPrefix: prefix}
 	options.Sequences = configStorage == "s3-sequence"
@@ -332,12 +353,14 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 				return err
 			}
 			key := prefix + "/configs/" + stage + ".zip"
+			operation.Report(ctx, operation.Event{Stage: "Upload " + stage + " configuration bundle", Total: 1})
 			err = store.PutImmutable(ctx, key, f, "application/zip", map[string]string{"sha256": sha})
 			f.Close()
 			os.Remove(path)
 			if err != nil {
 				return err
 			}
+			operation.Report(ctx, operation.Event{Stage: "Upload " + stage + " configuration bundle", Completed: 1, Total: 1})
 			transfer, err := store.SignDownload(ctx, store.Bucket, key)
 			if err != nil {
 				return err
@@ -350,10 +373,12 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 			}
 		}
 	}
+	operation.Report(ctx, operation.Event{Stage: "Build workflow definition", Total: 1})
 	wf, err := workflow.Build(plan, configs, options)
 	if err != nil {
 		return err
 	}
+	operation.Report(ctx, operation.Event{Stage: "Build workflow definition", Completed: 1, Total: 1})
 	if meta.Retry != nil {
 		annotations := wf["metadata"].(map[string]any)["annotations"].(map[string]string)
 		annotations["simworkflow.io/retry-root-workflow"] = meta.Retry.RootWorkflow
@@ -372,13 +397,16 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 		}
 		return errors.New("workflow definition is too large; use --config-storage s3 with a compatible helper image or split the experiment")
 	}
+	operation.Report(ctx, operation.Event{Stage: "Save execution plan", Total: 2})
 	if err := store.PutJSON(ctx, prefix+"/plan.json", plan); err != nil {
 		return err
 	}
+	operation.Report(ctx, operation.Event{Stage: "Save execution plan", Completed: 1, Total: 2})
 	meta.PlanSHA256 = reproduction.PlanSHA256(plan)
 	if err := store.PutJSON(ctx, prefix+"/reproduction.json", meta); err != nil {
 		return err
 	}
+	operation.Report(ctx, operation.Event{Stage: "Save execution plan", Completed: 2, Total: 2})
 	if command == "render" {
 		data, err := yaml.Marshal(wf)
 		if err != nil {
@@ -399,10 +427,12 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 		_, err = fmt.Fprintf(out, "Rendered %d runs to %s (private file; signed URLs expire after 168h).\n", plan.TotalRuns, output)
 		return err
 	}
+	operation.Report(ctx, operation.Event{Stage: "Submit workflow to Argo", Total: 1})
 	snapshot, err := argo.New(c).Submit(ctx, wf)
 	if err != nil {
 		return err
 	}
+	operation.Report(ctx, operation.Event{Stage: "Submit workflow to Argo", Completed: 1, Total: 1})
 	if meta.Retry != nil {
 		record := retryRecord{Workflow: snapshot.Metadata.Name, Prefix: prefix, Origin: *meta.Retry, SubmittedAt: time.Now().UTC()}
 		if err := store.PutJSON(ctx, meta.Retry.RootPrefix+"/retries/"+executionID+".json", record); err != nil {
