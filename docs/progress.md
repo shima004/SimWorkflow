@@ -10,6 +10,23 @@ simworkflow experiment status --watch --plain WORKFLOW_NAME
 simworkflow experiment results WORKFLOW_NAME
 ```
 
+## シミュレーション終了後の処理
+
+一覧の `ACTIVITY` 列で、結果収集コンテナ `main` の処理を確認できます。TUI・`--plain`・通常のstatusで共通です。
+
+| ACTIVITY | 処理 |
+| --- | --- |
+| Reading score | ログ末尾から最終スコアを取得 |
+| Compressing | 結果または事前計算データを圧縮 |
+| Uploading precompute | 事前計算データをS3へ保存 |
+| Uploading results | 結果バンドルをS3へ保存 |
+| Uploading summary | 要約をS3へ保存 |
+| - | 実行中、完了、または未対応helper |
+
+シミュレーターが終了しても、結果保存が完了するまではSTATEがRunningのままです。短い処理は画面の更新間に通過することがあります。各処理への切り替えはmainの標準出力にも記録します。
+
+この表示とスコア取得の高速化には対応済みhelperイメージが必要です。CLIだけを更新しても、既存Podや指定済みhelperの処理は変わりません。mainのリソース指定は [実験YAML](experiment-yaml.md) を参照してください。
+
 ## STATEの件数と推定時間
 
 `status --watch` は画面上部に、実行一覧全体のSTATE別件数と推定時間を固定表示します。画面外の行も集計に含めます。狭い端末では折り返して表示し、その下の実行一覧をスクロールできます。`--plain` や通常の `status` にも同じ集計を表示します。

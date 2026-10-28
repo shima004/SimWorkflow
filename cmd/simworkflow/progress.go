@@ -95,12 +95,12 @@ func readPlannedRunProgress(ctx context.Context, store *storage.Store, snapshot 
 
 func writeProgressRows(out io.Writer, rows []runProgressRow, now time.Time) (bool, error) {
 	writer := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(writer, "RUN\tMAP\tSEED\tSTAGE\tSTATE\tELAPSED\tSTEP\tSCORE\tUPDATED")
+	fmt.Fprintln(writer, "RUN\tMAP\tSEED\tSTAGE\tSTATE\tACTIVITY\tELAPSED\tSTEP\tSCORE\tUPDATED")
 	retry := false
 	for _, row := range rows {
 		if row.runID != "" {
 			elapsed := workflowElapsed(row.startedAt, row.finishedAt, now, row.phase)
-			fmt.Fprintf(writer, "%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n", row.runID, row.mapName, row.seed, row.stage, row.phase, elapsed, row.steps, row.score, row.updated)
+			fmt.Fprintf(writer, "%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", row.runID, row.mapName, row.seed, row.stage, row.phase, row.activity, elapsed, row.steps, row.score, row.updated)
 		}
 		retry = retry || row.retry
 	}
@@ -108,13 +108,13 @@ func writeProgressRows(out io.Writer, rows []runProgressRow, now time.Time) (boo
 }
 
 type runProgressRow struct {
-	runID, mapName, stage, phase, steps, score, updated string
-	seed                                                int64
-	startedAt, finishedAt                               time.Time
-	retry                                               bool
-	completedSteps, totalSteps                          int
-	progressStartedAt, progressUpdatedAt                time.Time
-	precomputeStartedAt, precomputeFinishedAt           time.Time
+	runID, mapName, stage, phase, activity, steps, score, updated string
+	seed                                                          int64
+	startedAt, finishedAt                                         time.Time
+	retry                                                         bool
+	completedSteps, totalSteps                                    int
+	progressStartedAt, progressUpdatedAt                          time.Time
+	precomputeStartedAt, precomputeFinishedAt                     time.Time
 }
 
 func readProgressJSON(ctx context.Context, store *storage.Store, key string, value any) error {
@@ -143,6 +143,7 @@ func readRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.S
 		}
 	}
 	steps, score, updated := "-", "-", "-"
+	activity := "-"
 	completedSteps, totalSteps := 0, 0
 	var progressStarted, progressUpdated time.Time
 	if p := run.Simulator.Parameters; p != nil && p.Timesteps != nil {
@@ -156,6 +157,9 @@ func readRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.S
 		var progress worker.Progress
 		err := readProgressJSON(ctx, store, stagePrefix+"/progress.json", &progress)
 		if phase != "Pending" && err == nil && progress.ExecutionID == snapshot.Metadata.Annotations["simworkflow.io/execution-id"] && progress.RunID == run.ID && progress.Stage == stage && !progress.UpdatedAt.Before(started) {
+			if phase == "Running" {
+				activity = progressActivity(progress.Activity)
+			}
 			if stage == worker.Simulation {
 				completedSteps = progress.CompletedSteps
 				if progress.TotalSteps > 0 {
@@ -195,7 +199,25 @@ func readRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.S
 	if (snapshot.Status.Phase == "Failed" || snapshot.Status.Phase == "Error") && phase == "Pending" {
 		phase = "Not run"
 	}
-	return runProgressRow{runID: run.ID, mapName: run.Map.DisplayName(), seed: run.Seed, stage: stage, phase: phase, steps: steps, score: score, updated: updated, startedAt: started, finishedAt: finished, retry: retry, completedSteps: completedSteps, totalSteps: totalSteps, progressStartedAt: progressStarted, progressUpdatedAt: progressUpdated, precomputeStartedAt: preStarted, precomputeFinishedAt: preFinished}
+	return runProgressRow{runID: run.ID, mapName: run.Map.DisplayName(), seed: run.Seed, stage: stage, phase: phase, activity: activity, steps: steps, score: score, updated: updated, startedAt: started, finishedAt: finished, retry: retry, completedSteps: completedSteps, totalSteps: totalSteps, progressStartedAt: progressStarted, progressUpdatedAt: progressUpdated, precomputeStartedAt: preStarted, precomputeFinishedAt: preFinished}
+}
+
+// Accept only known activities; never render arbitrary worker strings in a terminal.
+func progressActivity(activity string) string {
+	switch activity {
+	case "reading-score":
+		return "Reading score"
+	case "compressing":
+		return "Compressing"
+	case "uploading-precompute":
+		return "Uploading precompute"
+	case "uploading-results":
+		return "Uploading results"
+	case "uploading-summary":
+		return "Uploading summary"
+	default:
+		return "-"
+	}
 }
 
 // Prefer the highest retry attempt, including Pending retries with no start time.

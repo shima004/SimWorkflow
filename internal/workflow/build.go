@@ -118,7 +118,7 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 			}
 			containers := []any{
 				map[string]any{"name": "simulator", "image": run.Simulator.Image, "command": []string{"/tools/simworkflow", "worker", "server"}, "resources": resource(run.Simulator.Resources)},
-				map[string]any{"name": "main", "image": options.HelperImage, "command": []string{"/tools/simworkflow", "worker", "collect"}, "env": []any{map[string]any{"name": "SIMWORKFLOW_POD_IP", "valueFrom": map[string]any{"fieldRef": map[string]any{"fieldPath": "status.podIP"}}}}, "resources": resource(experiment.Resources{CPU: "0.1", Memory: "256Mi"})},
+				map[string]any{"name": "main", "image": options.HelperImage, "command": []string{"/tools/simworkflow", "worker", "collect"}, "env": []any{map[string]any{"name": "SIMWORKFLOW_POD_IP", "valueFrom": map[string]any{"fieldRef": map[string]any{"fieldPath": "status.podIP"}}}}, "resources": resource(experiment.EffectiveCollectorResources(plan.CollectorResources))},
 			}
 			for _, role := range experiment.Roles() {
 				containers = append(containers, map[string]any{"name": worker.AgentActor(role), "image": run.Configuration.Image, "command": []string{"/tools/simworkflow", "worker", "agent", "--role", role}, "resources": resource(run.Configuration.ResourcesForRole(role))})

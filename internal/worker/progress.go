@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"simworkflow/internal/storage"
@@ -20,6 +22,7 @@ import (
 // Progress contains observations only, never the worker's signed capabilities.
 // CompletedSteps counts completed kernel timesteps, not elapsed wall time.
 type Progress struct {
+	Activity       string    `json:"activity,omitempty"`
 	PodIP          string    `json:"podIP,omitempty"`
 	ExecutionID    string    `json:"executionId"`
 	RunID          string    `json:"runId"`
@@ -58,7 +61,7 @@ func (t *progressTail) read(path string) {
 	if _, err := f.Seek(t.offset, io.SeekStart); err != nil {
 		return
 	}
-	reader := bufio.NewReader(f)
+	reader := bufio.NewReader(io.LimitReader(f, 8<<20))
 	// Bound each pass so reporting remains responsive while the kernel logs.
 	for read := 0; read < 8<<20; {
 		line, err := reader.ReadString('\n')
@@ -68,34 +71,75 @@ func (t *progressTail) read(path string) {
 		}
 		read += len(line)
 		t.offset += int64(len(line))
-		if match := totalStepPattern.FindStringSubmatch(line); match != nil {
-			if n, err := strconv.Atoi(match[1]); err == nil && n > 0 {
-				t.value.TotalSteps = n
-			}
+		t.observe(line)
+	}
+}
+
+func (t *progressTail) observe(line string) {
+	if match := totalStepPattern.FindStringSubmatch(line); match != nil {
+		if n, err := strconv.Atoi(match[1]); err == nil && n > 0 {
+			t.value.TotalSteps = n
 		}
-		if match := completedStepPattern.FindStringSubmatch(line); match != nil {
-			if n, err := strconv.Atoi(match[1]); err == nil && n > t.value.CompletedSteps {
-				t.value.CompletedSteps = n
-			}
+	}
+	if match := completedStepPattern.FindStringSubmatch(line); match != nil {
+		if n, err := strconv.Atoi(match[1]); err == nil && n > t.value.CompletedSteps {
+			t.value.CompletedSteps = n
 		}
-		if matches := scorePattern.FindAllStringSubmatch(line, -1); len(matches) > 0 {
-			if n, err := strconv.ParseFloat(matches[len(matches)-1][1], 64); err == nil {
-				t.value.Score = &n
-			}
+	}
+	if matches := scorePattern.FindAllStringSubmatch(line, -1); len(matches) > 0 {
+		if n, err := strconv.ParseFloat(matches[len(matches)-1][1], 64); err == nil {
+			t.value.Score = &n
 		}
 	}
 }
 
+// Once execution finishes, observe the final lines rather than draining any
+// DEBUG-log backlog before publishing result-processing status.
+func (t *progressTail) readLatest(path string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return
+	}
+	if t.file != nil && (!os.SameFile(t.file, info) || info.Size() < t.offset) {
+		t.value.CompletedSteps, t.value.TotalSteps, t.value.Score = 0, 0, nil
+	}
+	t.file = info
+	start := max(int64(0), info.Size()-(64<<10))
+	data := make([]byte, info.Size()-start)
+	if _, err := f.ReadAt(data, start); err != nil {
+		return
+	}
+	if start > 0 {
+		_, data, _ = bytes.Cut(data, []byte("\n"))
+	}
+	for {
+		line, rest, ok := bytes.Cut(data, []byte("\n"))
+		if !ok {
+			break
+		}
+		t.observe(string(line))
+		data = rest
+	}
+}
+
 type progressReporter struct {
-	cancel context.CancelFunc
-	done   chan struct{}
-	tail   progressTail
-	root   string
-	c      Config
+	activity atomic.Value
+	notify   chan struct{}
+	cancel   context.CancelFunc
+	done     chan struct{}
+	tail     progressTail
+	root     string
+	c        Config
 }
 
 func startProgress(ctx context.Context, root string, c Config) *progressReporter {
-	p := &progressReporter{root: root, c: c}
+	p := &progressReporter{root: root, c: c, notify: make(chan struct{}, 1)}
+	p.activity.Store("")
 	p.tail.value = Progress{ExecutionID: c.ExecutionID, RunID: c.Run.ID, Stage: c.Stage, Phase: "Running", StartedAt: time.Now().UTC()}
 	if c.Stage == Simulation {
 		if ip := net.ParseIP(os.Getenv("SIMWORKFLOW_POD_IP")); ip != nil {
@@ -120,15 +164,30 @@ func startProgress(ctx context.Context, root string, c Config) *progressReporter
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+			case <-p.notify:
 			}
 		}
 	}()
 	return p
 }
 
+func (p *progressReporter) setActivity(activity string) {
+	p.activity.Store(activity)
+	fmt.Printf("collector: %s\n", activity)
+	select {
+	case p.notify <- struct{}{}:
+	default:
+	}
+}
+
 func (p *progressReporter) publish(ctx context.Context) {
+	p.tail.value.Activity, _ = p.activity.Load().(string)
 	if p.c.Stage == Simulation {
-		p.tail.read(filepath.Join(p.root, "logs/simulation/kernel.log"))
+		if p.tail.value.Activity != "" || p.tail.value.Phase != "Running" {
+			p.tail.readLatest(filepath.Join(p.root, "logs/simulation/kernel.log"))
+		} else {
+			p.tail.read(filepath.Join(p.root, "logs/simulation/kernel.log"))
+		}
 	}
 	p.tail.value.UpdatedAt = time.Now().UTC()
 	data, err := json.Marshal(p.tail.value)
@@ -150,6 +209,7 @@ func (p *progressReporter) finish(phase string) {
 	}
 	p.cancel()
 	<-p.done
+	p.activity.Store("")
 	p.tail.value.Phase = phase
 	p.publish(context.Background())
 }

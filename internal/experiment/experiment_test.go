@@ -263,3 +263,35 @@ func TestRegisteredMapsParametersAndValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestCollectorResourcesValidationAndPlan(t *testing.T) {
+	e := sample(t)
+	original, err := BuildPlan(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := EffectiveCollectorResources(nil); got.CPU != "1" || got.Memory != "256Mi" {
+		t.Fatal(got)
+	}
+	e.Spec.Execution.CollectorResources = &Resources{CPU: "2", Memory: "512Mi"}
+	plan, err := BuildPlan(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.CollectorResources == nil || *plan.CollectorResources != *e.Spec.Execution.CollectorResources {
+		t.Fatal("collector budget lost")
+	}
+	if plan.Runs[0].ID != original.Runs[0].ID {
+		t.Fatal("collector budget changed logical run identity")
+	}
+	e.Spec.Execution.CollectorResources.CPU = "3"
+	if plan.CollectorResources.CPU != "2" {
+		t.Fatal("plan aliases mutable definition")
+	}
+	for _, r := range []Resources{{CPU: "0", Memory: "256Mi"}, {CPU: "1", Memory: "invalid"}, {CPU: "1"}} {
+		e.Spec.Execution.CollectorResources = &r
+		if err := e.Validate(); err == nil || !strings.Contains(err.Error(), "collectorResources") {
+			t.Fatal("invalid collector accepted", r, err)
+		}
+	}
+}

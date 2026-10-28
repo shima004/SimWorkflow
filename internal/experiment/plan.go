@@ -10,15 +10,16 @@ import (
 )
 
 type Plan struct {
-	UnresolvedMaps  bool           `json:"unresolvedMaps,omitempty"`
-	APIVersion      string         `json:"apiVersion"`
-	Experiment      Metadata       `json:"experiment"`
-	TotalRuns       int            `json:"totalRuns"`
-	MaxParallelRuns int            `json:"maxParallelRuns"`
-	Timeout         string         `json:"timeout"`
-	Collect         []string       `json:"collect"`
-	Agents          []AgentSummary `json:"agents"`
-	Runs            []Run          `json:"runs"`
+	CollectorResources *Resources     `json:"collectorResources,omitempty"`
+	UnresolvedMaps     bool           `json:"unresolvedMaps,omitempty"`
+	APIVersion         string         `json:"apiVersion"`
+	Experiment         Metadata       `json:"experiment"`
+	TotalRuns          int            `json:"totalRuns"`
+	MaxParallelRuns    int            `json:"maxParallelRuns"`
+	Timeout            string         `json:"timeout"`
+	Collect            []string       `json:"collect"`
+	Agents             []AgentSummary `json:"agents"`
+	Runs               []Run          `json:"runs"`
 }
 
 type AgentSummary struct {
@@ -65,6 +66,10 @@ func BuildPlan(e *Experiment) (*Plan, error) {
 		MaxParallelRuns: e.Spec.Execution.MaxParallelRuns, Timeout: e.Spec.Execution.Timeout,
 		Collect: append([]string(nil), e.Spec.Outputs.Collect...),
 		Agents:  []AgentSummary{}, Runs: []Run{},
+	}
+	if r := e.Spec.Execution.CollectorResources; r != nil {
+		copy := *r
+		plan.CollectorResources = &copy
 	}
 	for _, m := range conditionMaps {
 		if m.Version != "" && m.Resolved == nil {

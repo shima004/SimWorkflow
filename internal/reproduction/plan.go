@@ -34,7 +34,7 @@ func ValidatePlan(p *experiment.Plan) error {
 		if cfg.ID != experiment.ConfigurationIdentity(cfg) {
 			return errors.New("configuration identity mismatch")
 		}
-		e := &experiment.Experiment{APIVersion: experiment.APIVersion, Kind: "Experiment", Metadata: p.Experiment, Spec: experiment.Spec{Simulator: r.Simulator, Agents: []experiment.Agent{{Name: cfg.Agent, Runtime: cfg.Runtime, Image: cfg.Image, Resources: cfg.Resources, ResourcesByRole: cfg.ResourcesByRole, Modules: cfg.Modules}}, Conditions: experiment.Conditions{Maps: []experiment.Map{r.Map}, Seeds: []int64{r.Seed}}, Execution: experiment.Execution{MaxParallelRuns: p.MaxParallelRuns, Timeout: p.Timeout}, Outputs: experiment.Outputs{Collect: p.Collect}}}
+		e := &experiment.Experiment{APIVersion: experiment.APIVersion, Kind: "Experiment", Metadata: p.Experiment, Spec: experiment.Spec{Simulator: r.Simulator, Agents: []experiment.Agent{{Name: cfg.Agent, Runtime: cfg.Runtime, Image: cfg.Image, Resources: cfg.Resources, ResourcesByRole: cfg.ResourcesByRole, Modules: cfg.Modules}}, Conditions: experiment.Conditions{Maps: []experiment.Map{r.Map}, Seeds: []int64{r.Seed}}, Execution: experiment.Execution{MaxParallelRuns: p.MaxParallelRuns, Timeout: p.Timeout, CollectorResources: p.CollectorResources}, Outputs: experiment.Outputs{Collect: p.Collect}}}
 		if err := e.Validate(); err != nil {
 			return fmt.Errorf("invalid reproduction run: %w", err)
 		}

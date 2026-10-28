@@ -379,3 +379,62 @@ func TestFourHundredRunsShareTemplatesAndKeepEachConfigurationScoped(t *testing.
 		t.Fatal("resource changes must retain distinct Pods")
 	}
 }
+
+func TestCollectorResourcesInBothStages(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		resources   *experiment.Resources
+		cpu, memory string
+	}{
+		{"default", nil, "1", "256Mi"},
+		{"custom", &experiment.Resources{CPU: "2", Memory: "512Mi"}, "2", "512Mi"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, err := experiment.ReadFile("../../examples/experiments/python-module-comparison.yaml")
+			if err != nil {
+				t.Fatal(err)
+			}
+			e.Spec.Execution.CollectorResources = tc.resources
+			plan, err := experiment.BuildPlan(e)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var configs []RunConfig
+			for _, run := range plan.Runs {
+				configs = append(configs, RunConfig{
+					Precompute: worker.Config{Stage: worker.Precompute, Run: run, TimeoutSeconds: 1800, PrecomputeUpload: &storage.Transfer{URL: "https://example.com/put"}},
+					Simulation: worker.Config{Stage: worker.Simulation, Run: run, TimeoutSeconds: 1800, PrecomputeDownload: &storage.Transfer{URL: "https://example.com/get"}},
+				})
+			}
+			wf, err := Build(plan, configs, Options{Namespace: "experiments", HelperImage: "worker:test", ServiceAccount: "runner"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			count := 0
+			for _, raw := range wf["spec"].(map[string]any)["templates"].([]any) {
+				template := raw.(map[string]any)
+				set, ok := template["containerSet"].(map[string]any)
+				if !ok {
+					continue
+				}
+				for _, raw := range set["containers"].([]any) {
+					c := raw.(map[string]any)
+					if c["name"] != "main" {
+						continue
+					}
+					count++
+					resources := c["resources"].(map[string]any)
+					for _, key := range []string{"requests", "limits"} {
+						r := resources[key].(map[string]any)
+						if r["cpu"] != tc.cpu || r["memory"] != tc.memory {
+							t.Fatal("wrong collector budget", r)
+						}
+					}
+				}
+			}
+			if count != 2*len(plan.Runs) {
+				t.Fatal("missing stage collectors", count)
+			}
+		})
+	}
+}

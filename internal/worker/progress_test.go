@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"simworkflow/internal/experiment"
 	"simworkflow/internal/storage"
@@ -117,5 +118,59 @@ func TestProgressUploadFailureDoesNotFailCollection(t *testing.T) {
 	c := Config{Stage: Simulation, Run: experiment.Run{ID: "run-one"}, ProgressUpload: &storage.Transfer{URL: server.URL + "/progress"}, Bundle: storage.Transfer{URL: server.URL + "/bundle"}, Summary: storage.Transfer{URL: server.URL + "/summary"}}
 	if err := collect(context.Background(), root, c); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestProgressActivityNotifications(t *testing.T) {
+	published := make(chan Progress, 32)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var progress Progress
+		if err := json.NewDecoder(r.Body).Decode(&progress); err != nil {
+			t.Error(err)
+		}
+		published <- progress
+	}))
+	defer server.Close()
+	c := Config{Stage: Simulation, Run: experiment.Run{ID: "run-one"}, ProgressUpload: &storage.Transfer{URL: server.URL}}
+	p := startProgress(context.Background(), t.TempDir(), c)
+	defer p.finish("Succeeded")
+	for _, activity := range []string{"reading-score", "compressing", "uploading-results", "uploading-summary"} {
+		p.setActivity(activity)
+		deadline := time.After(2 * time.Second)
+	waiting:
+		for {
+			select {
+			case progress := <-published:
+				if progress.Activity == activity {
+					break waiting
+				}
+			case <-deadline:
+				t.Fatalf("activity not published: %s", activity)
+			}
+		}
+	}
+}
+
+func TestFinalProgressSkipsLargeLogBacklog(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "kernel.log")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const size = int64(1 << 30)
+	if err = f.Truncate(size); err != nil {
+		t.Fatal(err)
+	}
+	suffix := []byte("\nTimestep 300 complete\nScore: 12.5\n")
+	if _, err = f.WriteAt(suffix, size-int64(len(suffix))); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	var tail progressTail
+	tail.value.ExecutionID = "execution"
+	tail.value.TotalSteps = 300
+	tail.readLatest(path)
+	if tail.value.CompletedSteps != 300 || tail.value.Score == nil || *tail.value.Score != 12.5 || tail.value.ExecutionID != "execution" || tail.value.TotalSteps != 300 {
+		t.Fatal(tail.value)
 	}
 }

@@ -85,7 +85,7 @@ func TestIndividualRunElapsedUsesCurrentStageAndAttempt(t *testing.T) {
 			}
 			lines := strings.Split(strings.TrimSpace(out.String()), "\n")
 			cells := strings.Fields(lines[1])
-			if !strings.Contains(lines[0], "ELAPSED") || cells[3] != tc.wantStage || cells[5] != tc.wantElapsed {
+			if !strings.Contains(lines[0], "ELAPSED") || cells[3] != tc.wantStage || cells[6] != tc.wantElapsed {
 				t.Fatalf("wrong per-stage elapsed time: %s", out.String())
 			}
 		})
@@ -179,12 +179,18 @@ func TestRunProgressUsesCurrentAttemptAndHandlesOlderWorkers(t *testing.T) {
 	run := plan.Runs[0]
 	for _, tc := range []struct {
 		name                                  string
+		activity                              string
 		progressStatus                        int
 		wrongIdentity, retryPending, terminal bool
 		want, absent                          string
 		wantRetry                             bool
 	}{
 		{name: "live", want: "45/300 (15%)"},
+		{name: "collecting score", activity: "reading-score", want: "Reading score"},
+		{name: "compressing", activity: "compressing", want: "Compressing"},
+		{name: "uploading", activity: "uploading-results", want: "Uploading results"},
+		{name: "unknown activity is hidden", activity: "\x1b[31mUntrusted", absent: "Untrusted"},
+		{name: "terminal clears old activity", activity: "compressing", terminal: true, absent: "Compressing"},
 		{name: "wrong execution ignored", wrongIdentity: true, absent: "45/300"},
 		{name: "pending retry hides previous progress", retryPending: true, want: "Pending", absent: "45/300"},
 		{name: "older worker uses final summary", progressStatus: 404, terminal: true, want: "6.5", absent: "45/300"},
@@ -193,7 +199,7 @@ func TestRunProgressUsesCurrentAttemptAndHandlesOlderWorkers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			now := time.Now().UTC()
 			score := 4.5
-			progress := worker.Progress{ExecutionID: "execution", RunID: run.ID, Stage: worker.Simulation, Phase: "Running", CompletedSteps: 45, TotalSteps: 300, Score: &score, UpdatedAt: now}
+			progress := worker.Progress{Activity: tc.activity, ExecutionID: "execution", RunID: run.ID, Stage: worker.Simulation, Phase: "Running", CompletedSteps: 45, TotalSteps: 300, Score: &score, UpdatedAt: now}
 			if tc.wrongIdentity {
 				progress.ExecutionID = "other-execution"
 			}

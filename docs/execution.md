@@ -172,6 +172,12 @@ controller:
 
 CLIはArgo Server APIから取得したノード状態を使って進捗・経過時間・SimScopeの接続先を判定します。直接Kubernetesリソースだけを読む構成にはしません。設定の詳細は [Argoの公式ガイド](https://argo-workflows.readthedocs.io/en/release-4.1/offloading-large-workflows/) を参照してください。
 
+## 結果収集コンテナ
+
+各Podの `main` はサーバーと全エージェントの終了を待ち、最終スコアの取得、バンドルの圧縮、S3への保存を行います。スコアは `kernel.log` の末尾から探し、最終スコアが見つかったところで読み取りを終了します。後ろにスコアがない場合は前方へ探索を続けます。巨大な単一行は4MiBを超えた場合に読み飛ばし、メモリ使用を抑えます。
+
+CPU・メモリは `spec.execution.collectorResources` で指定でき、省略時は1コア・256Miです。ログを収集しない場合も、`score` を選択すればスコア取得は行います。処理中の表示は [進捗の確認](progress.md) を参照してください。
+
 ## タイムアウト
 
 `execution.timeout` は事前計算Podの準備開始から本実行完了までの合計時間です。S3転送と、ステップ間のキュー待ちも含みます。

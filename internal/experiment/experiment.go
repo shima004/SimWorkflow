@@ -136,8 +136,17 @@ type Map struct {
 }
 
 type Execution struct {
-	MaxParallelRuns int    `yaml:"maxParallelRuns" json:"maxParallelRuns"`
-	Timeout         string `yaml:"timeout" json:"timeout"`
+	CollectorResources *Resources `yaml:"collectorResources,omitempty" json:"collectorResources,omitempty"`
+	MaxParallelRuns    int        `yaml:"maxParallelRuns" json:"maxParallelRuns"`
+	Timeout            string     `yaml:"timeout" json:"timeout"`
+}
+
+// EffectiveCollectorResources supplies the budget for result processing in main.
+func EffectiveCollectorResources(resources *Resources) Resources {
+	if resources != nil {
+		return *resources
+	}
+	return Resources{CPU: "1", Memory: "256Mi"}
 }
 
 type Outputs struct {
@@ -363,6 +372,14 @@ func (e *Experiment) Validate() error {
 			add("spec.conditions.seeds", "duplicate seeds are not allowed")
 		}
 		seenSeeds[seed] = true
+	}
+	if r := e.Spec.Execution.CollectorResources; r != nil {
+		if _, err := r.CPU.MilliCores(); err != nil {
+			add("spec.execution.collectorResources.cpu", err.Error())
+		}
+		if _, err := r.MemoryBytes(); err != nil {
+			add("spec.execution.collectorResources.memory", err.Error())
+		}
 	}
 	if e.Spec.Execution.MaxParallelRuns <= 0 {
 		add("spec.execution.maxParallelRuns", "must be a positive integer")

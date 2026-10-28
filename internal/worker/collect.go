@@ -2,7 +2,7 @@ package worker
 
 import (
 	"archive/tar"
-	"bufio"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
@@ -62,19 +62,65 @@ func readScore(root string) *float64 {
 		return nil
 	}
 	defer f.Close()
-	var score *float64
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 4096), 4<<20)
-	for scanner.Scan() {
-		matches := scorePattern.FindAllSubmatch(scanner.Bytes(), -1)
-		if len(matches) > 0 {
-			value, err := strconv.ParseFloat(string(matches[len(matches)-1][1]), 64)
-			if err == nil {
-				score = &value
-			}
-		}
+	info, err := f.Stat()
+	if err != nil {
+		return nil
 	}
-	return score
+	return lastScore(f, info.Size())
+}
+
+// lastScore reads complete lines backwards, stopping at the most recent score.
+// Keep memory bounded even when a simulator writes an exceptionally long line.
+func lastScore(r io.ReaderAt, size int64) *float64 {
+	const chunkSize = 64 << 10
+	const maxLine = 4 << 20
+	var pending []byte
+	discard := false
+	parse := func(line []byte) *float64 {
+		matches := scorePattern.FindAllSubmatch(line, -1)
+		if len(matches) == 0 {
+			return nil
+		}
+		value, err := strconv.ParseFloat(string(matches[len(matches)-1][1]), 64)
+		if err != nil {
+			return nil
+		}
+		return &value
+	}
+	for end := size; end > 0; {
+		start := max(int64(0), end-chunkSize)
+		chunk := make([]byte, end-start, int(end-start)+len(pending))
+		if _, err := r.ReadAt(chunk, start); err != nil {
+			return nil
+		}
+		data := append(chunk, pending...)
+		last := len(data)
+		for {
+			i := bytes.LastIndexByte(data[:last], '\n')
+			if i < 0 {
+				break
+			}
+			if !discard && last-i-1 <= maxLine {
+				if score := parse(data[i+1 : last]); score != nil {
+					return score
+				}
+			}
+			discard = false
+			last = i
+		}
+		if last > maxLine {
+			discard = true
+		}
+		pending = nil
+		if !discard {
+			pending = append(pending, data[:last]...)
+		}
+		end = start
+	}
+	if !discard {
+		return parse(pending)
+	}
+	return nil
 }
 
 func collect(ctx context.Context, root string, c Config) (collectErr error) {
@@ -119,6 +165,7 @@ waiting:
 		summary.Phase = "Succeeded"
 	}
 	if slices.Contains(c.Collect, "score") {
+		reporter.setActivity("reading-score")
 		summary.Score = readScore(root)
 	}
 	// Run deadline cancellation must not prevent saving the failure report.
@@ -126,11 +173,13 @@ waiting:
 	defer cancel()
 	if c.Stage == Precompute && summary.Phase == "Succeeded" {
 		handoff := filepath.Join(root, "precompute.zip")
+		reporter.setActivity("compressing")
 		err := makeHandoff(root, handoff, c)
 		if err == nil {
 			if c.PrecomputeUpload == nil {
 				err = errors.New("missing precompute upload")
 			} else {
+				reporter.setActivity("uploading-precompute")
 				err = uploadFile(uploadCtx, handoff, *c.PrecomputeUpload)
 			}
 		}
@@ -143,6 +192,7 @@ waiting:
 		return err
 	}
 	archive := filepath.Join(root, "bundle.tar.gz")
+	reporter.setActivity("compressing")
 	if err := bundle(root, archive, c.Collect); err != nil {
 		return err
 	}
@@ -150,6 +200,7 @@ waiting:
 	if err != nil {
 		return err
 	}
+	reporter.setActivity("uploading-results")
 	response, err := storage.Request(uploadCtx, http.MethodPut, c.Bundle, f)
 	f.Close()
 	if err != nil {
@@ -160,6 +211,7 @@ waiting:
 	if err != nil {
 		return err
 	}
+	reporter.setActivity("uploading-summary")
 	response, err = storage.Request(uploadCtx, http.MethodPut, c.Summary, strings.NewReader(string(data)))
 	if err != nil {
 		return errors.New("result summary upload failed")
