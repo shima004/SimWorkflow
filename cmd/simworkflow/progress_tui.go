@@ -34,6 +34,7 @@ type progressFrame struct {
 	retryProgress         bool
 	plan                  *experiment.Plan
 	runs                  []experiment.Run
+	estimate              runEstimate
 }
 
 type progressTick struct{}
@@ -61,6 +62,7 @@ type progressModel struct {
 
 func loadProgress(ctx context.Context, c config.Config, name string) tea.Cmd {
 	client, store := argo.New(c), storage.New(c)
+	estimator := newRunEstimator()
 	return func() tea.Msg {
 		snapshot, err := client.Get(ctx, name)
 		if err != nil {
@@ -89,6 +91,7 @@ func loadProgress(ctx context.Context, c config.Config, name string) tea.Cmd {
 		}
 		frame := progressFrame{name: screenText(snapshot.Metadata.Name), phase: screenText(phase), plan: plan, retryProgress: retryProgress, startedAt: snapshot.Status.StartedAt, finishedAt: snapshot.Status.FinishedAt}
 		frame.progressRows = rows
+		frame.estimate = estimator.observe(rows, plan, phase, time.Now())
 		if plan != nil {
 			for _, run := range plan.Runs {
 				if statusRunID.MatchString(run.ID) {
@@ -140,7 +143,15 @@ func watchProgress(ctx context.Context, c config.Config, name string, in io.Read
 
 func (m progressModel) Init() tea.Cmd { return tea.Batch(m.fetch, progressClock()) }
 
-func (m progressModel) bodyHeight() int { return max(0, m.height-4) }
+func (m progressModel) overviewLines() []string {
+	now := m.now
+	if now.IsZero() {
+		now = time.Now()
+	}
+	return progressOverview(m.frame.progressRows, m.frame.estimate, m.frame.phase, m.frame.startedAt, now, m.width)
+}
+
+func (m progressModel) bodyHeight() int { return max(0, m.height-4-len(m.overviewLines())) }
 
 func (m progressModel) bodyRows() []string {
 	if m.details != nil {
@@ -291,8 +302,9 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.MouseButtonWheelRight:
 				m.x += 8
 			case tea.MouseButtonLeft:
-				if m.details == nil && msg.Y >= 3 && msg.Y < 3+m.bodyHeight() && m.y+msg.Y-3 < len(m.frame.rows) {
-					m.selected = m.y + msg.Y - 3
+				firstRow := 3 + len(m.overviewLines())
+				if m.details == nil && msg.Y >= firstRow && msg.Y < firstRow+m.bodyHeight() && m.y+msg.Y-firstRow < len(m.frame.rows) {
+					m.selected = m.y + msg.Y - firstRow
 				}
 			}
 		}
@@ -327,7 +339,9 @@ func (m progressModel) View() string {
 		columns = "Settings: " + m.detailRunID
 	}
 	rows := m.bodyRows()
-	lines := []string{fmt.Sprintf("Workflow: %s  %s", m.frame.name, m.frame.phase), "Workflow Elapsed: " + elapsed + " | " + status, columns}
+	lines := []string{fmt.Sprintf("Workflow: %s  %s", m.frame.name, m.frame.phase), "Workflow Elapsed: " + elapsed + " | " + status}
+	lines = append(lines, m.overviewLines()...)
+	lines = append(lines, columns)
 	for i := 0; i < m.bodyHeight(); i++ {
 		line := ""
 		if m.y+i < len(rows) {

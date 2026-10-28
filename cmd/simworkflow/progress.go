@@ -32,6 +32,10 @@ func workflowElapsed(started, finished, now time.Time, phase string) string {
 }
 
 func writeRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.Snapshot, out io.Writer) (bool, error) {
+	return writeRunProgressEstimate(ctx, store, snapshot, out, newRunEstimator())
+}
+
+func writeRunProgressEstimate(ctx context.Context, store *storage.Store, snapshot *argo.Snapshot, out io.Writer, estimator *runEstimator) (bool, error) {
 	prefix := snapshot.Metadata.Annotations["simworkflow.io/result-prefix"]
 	if !strings.HasPrefix(prefix, "experiments/") || strings.Contains(prefix, "..") {
 		return false, nil
@@ -44,11 +48,23 @@ func writeRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.
 		_, writeErr := fmt.Fprintf(out, "Run details unavailable: %v\n", err)
 		return true, writeErr
 	}
-	return writePlannedRunProgress(ctx, store, snapshot, &plan, out)
+	return writeEstimatedRunProgress(ctx, store, snapshot, &plan, out, estimator)
 }
 
 func writePlannedRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.Snapshot, plan *experiment.Plan, out io.Writer) (bool, error) {
-	return writeProgressRows(out, readPlannedRunProgress(ctx, store, snapshot, plan), time.Now())
+	return writeEstimatedRunProgress(ctx, store, snapshot, plan, out, newRunEstimator())
+}
+
+func writeEstimatedRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.Snapshot, plan *experiment.Plan, out io.Writer, estimator *runEstimator) (bool, error) {
+	rows := readPlannedRunProgress(ctx, store, snapshot, plan)
+	now := time.Now()
+	estimate := estimator.observe(rows, plan, snapshot.Status.Phase, now)
+	for _, line := range progressOverview(rows, estimate, snapshot.Status.Phase, snapshot.Status.StartedAt, now, 0) {
+		if _, err := fmt.Fprintln(out, line); err != nil {
+			return false, err
+		}
+	}
+	return writeProgressRows(out, rows, now)
 }
 
 func readPlannedRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.Snapshot, plan *experiment.Plan) []runProgressRow {
@@ -96,6 +112,9 @@ type runProgressRow struct {
 	seed                                                int64
 	startedAt, finishedAt                               time.Time
 	retry                                               bool
+	completedSteps, totalSteps                          int
+	progressStartedAt, progressUpdatedAt                time.Time
+	precomputeStartedAt, precomputeFinishedAt           time.Time
 }
 
 func readProgressJSON(ctx context.Context, store *storage.Store, key string, value any) error {
@@ -109,14 +128,26 @@ func readRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.S
 	retry := false
 	stage, phase := "-", "Pending"
 	var started, finished time.Time
+	var preStarted, preFinished time.Time
 	// Prefer simulation once scheduled. Within a stage, choose the newest
 	// Pod so a failed first attempt does not hide the retry's state.
 	for _, candidate := range []string{worker.Precompute, worker.Simulation} {
 		if node, found := latestStageNode(snapshot, run.ID, candidate); found {
 			stage, phase, started, finished = candidate, node.Phase, node.StartedAt, node.FinishedAt
+			if candidate == worker.Precompute {
+				preStarted = node.StartedAt
+				if node.Phase == "Succeeded" {
+					preFinished = node.FinishedAt
+				}
+			}
 		}
 	}
 	steps, score, updated := "-", "-", "-"
+	completedSteps, totalSteps := 0, 0
+	var progressStarted, progressUpdated time.Time
+	if p := run.Simulator.Parameters; p != nil && p.Timesteps != nil {
+		totalSteps = *p.Timesteps
+	}
 	stagePrefix := prefix + "/" + run.ID
 	if stage == worker.Precompute {
 		stagePrefix += "/precompute"
@@ -126,6 +157,11 @@ func readRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.S
 		err := readProgressJSON(ctx, store, stagePrefix+"/progress.json", &progress)
 		if phase != "Pending" && err == nil && progress.ExecutionID == snapshot.Metadata.Annotations["simworkflow.io/execution-id"] && progress.RunID == run.ID && progress.Stage == stage && !progress.UpdatedAt.Before(started) {
 			if stage == worker.Simulation {
+				completedSteps = progress.CompletedSteps
+				if progress.TotalSteps > 0 {
+					totalSteps = progress.TotalSteps
+				}
+				progressStarted, progressUpdated = progress.StartedAt, progress.UpdatedAt
 				steps = fmt.Sprint(progress.CompletedSteps)
 				if progress.TotalSteps > 0 {
 					steps += fmt.Sprintf("/%d (%.0f%%)", progress.TotalSteps, 100*float64(progress.CompletedSteps)/float64(progress.TotalSteps))
@@ -159,7 +195,7 @@ func readRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.S
 	if (snapshot.Status.Phase == "Failed" || snapshot.Status.Phase == "Error") && phase == "Pending" {
 		phase = "Not run"
 	}
-	return runProgressRow{runID: run.ID, mapName: run.Map.DisplayName(), seed: run.Seed, stage: stage, phase: phase, steps: steps, score: score, updated: updated, startedAt: started, finishedAt: finished, retry: retry}
+	return runProgressRow{runID: run.ID, mapName: run.Map.DisplayName(), seed: run.Seed, stage: stage, phase: phase, steps: steps, score: score, updated: updated, startedAt: started, finishedAt: finished, retry: retry, completedSteps: completedSteps, totalSteps: totalSteps, progressStartedAt: progressStarted, progressUpdatedAt: progressUpdated, precomputeStartedAt: preStarted, precomputeFinishedAt: preFinished}
 }
 
 // Prefer the highest retry attempt, including Pending retries with no start time.

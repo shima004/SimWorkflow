@@ -89,6 +89,7 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 		if command == "status" && *watch && !plain && interactiveOutput(os.Stdin, out) {
 			return watchProgress(ctx, c, flags.Arg(0), os.Stdin, out)
 		}
+		estimator := newRunEstimator()
 		for {
 			snapshot, err := client.Get(ctx, flags.Arg(0))
 			if err != nil {
@@ -139,7 +140,7 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 			if _, err := fmt.Fprintf(out, "%s: %s  Workflow Elapsed: %s\n", snapshot.Metadata.Name, phase, elapsed); err != nil {
 				return err
 			}
-			retryProgress, err := writeRunProgress(ctx, storage.New(c), snapshot, out)
+			retryProgress, err := writeRunProgressEstimate(ctx, storage.New(c), snapshot, out, estimator)
 			if err != nil {
 				return err
 			}
