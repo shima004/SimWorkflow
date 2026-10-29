@@ -24,9 +24,21 @@ simworkflow map register \
 simworkflow map register \
   --name kobe --version v2 --path ./kobe-v2.zip
 
+# 端末では名前を選んでバージョンを読み込むTUI
+simworkflow map list
+# 名前だけをテキストまたはJSONで取得（メタデータは取得しない）
 simworkflow map list --format text
+simworkflow map list --format json
+# 指定した名前の登録済みバージョンを直接表示
+simworkflow map list --name kobe --format text
 simworkflow map inspect --name kobe --version v1
 ```
+
+`map list` は、最初にS3の `maps/` 直下の名前だけを区切り付き一覧取得で読み込みます。端末ではTUIを開き、選択したマップの登録済みバージョンのメタデータを最大8件並列で取得します。初期表示で全マップ・全バージョンのメタデータをダウンロードしません。
+
+TUIでは上下・PageUp／PageDownで移動し、`/` で名前を部分一致検索、Enterでバージョンを取得、Escで名前一覧へ戻ります。`r` で現在の一覧を再取得、`q` で終了します。バージョン一覧は左右キーで横にスクロールできます。名前一覧へ戻ると選択位置を保持します。
+
+`--format text`／`--format json` を指定するとTUIを使いません。名前未指定なら名前だけを返し、`--name NAME` があればその名前のバージョン情報を返します。標準出力が端末ではない場合も、デフォルトは名前だけのテキスト出力です。`--name` による取得進捗は標準エラーへ出すため、JSON出力をファイルへ保存できます。登録が途中で失敗した名前もS3に残る場合があり、その名前を選ぶと公開済みバージョンが空になることがあります。
 
 ディレクトリの場合、`map/` と `config/` だけをZIPへ収録します。これらの中にはシミュレーターへ渡すファイルだけを置いてください。同じファイル内容からは同じZIPを生成します。ZIP入力は元のバイト列を保存します。
 

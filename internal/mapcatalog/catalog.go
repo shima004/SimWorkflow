@@ -189,6 +189,27 @@ func (c *Catalog) Inspect(ctx context.Context, name, version string) (Metadata, 
 	return metadata, nil
 }
 
+// Names reads only the top-level map prefixes. Published versions are loaded
+// separately on selection; incomplete registrations can have no versions yet.
+func (c *Catalog) Names(ctx context.Context) ([]string, error) {
+	prefixes, err := c.Store.ListPrefixes(ctx, "maps/")
+	if err != nil {
+		return nil, err
+	}
+	names := []string{}
+	seen := map[string]bool{}
+	for _, prefix := range prefixes {
+		name := strings.TrimSuffix(strings.TrimPrefix(prefix, "maps/"), "/")
+		if prefix != "maps/"+name+"/" || !experiment.ValidMapName(name) || seen[name] {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
 func (c *Catalog) List(ctx context.Context, name string) ([]Metadata, error) {
 	if name != "" && !experiment.ValidMapName(name) {
 		return nil, errors.New("invalid map name")
@@ -197,11 +218,13 @@ func (c *Catalog) List(ctx context.Context, name string) ([]Metadata, error) {
 	if name != "" {
 		prefix += name + "/"
 	}
+	operation.Report(ctx, operation.Event{Stage: "List map catalog", Detail: "listing registered versions"})
 	keys, err := c.Store.ListKeys(ctx, prefix, "/metadata.json")
 	if err != nil {
 		return nil, err
 	}
-	entries := []Metadata{}
+	type identity struct{ name, version string }
+	jobs := []identity{}
 	for _, path := range keys {
 		parts := strings.Split(path, "/")
 		if len(parts) != 4 || parts[0] != "maps" || parts[3] != "metadata.json" {
@@ -210,12 +233,24 @@ func (c *Catalog) List(ctx context.Context, name string) ([]Metadata, error) {
 		if parts[2] == "latest" {
 			return nil, errors.New("latest cannot be a published map version")
 		}
-		entry, err := c.Inspect(ctx, parts[1], parts[2])
-		if err != nil {
+		if err := validateIdentity(parts[1], parts[2]); err != nil {
 			return nil, err
 		}
-		entries = append(entries, entry)
+		jobs = append(jobs, identity{parts[1], parts[2]})
 	}
+	entries := make([]Metadata, len(jobs))
+	if err := operation.For(ctx, "Read map metadata", len(jobs), func(ctx context.Context, i int) error {
+		job := jobs[i]
+		entry, err := c.Inspect(ctx, job.name, job.version)
+		if err != nil {
+			return err
+		}
+		entries[i] = entry
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
 	sort.Slice(entries, func(i, j int) bool {
 		a, b := entries[i], entries[j]
 		if a.Name != b.Name {

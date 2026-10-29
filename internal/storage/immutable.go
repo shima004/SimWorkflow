@@ -54,3 +54,19 @@ func (s *Store) ListKeys(ctx context.Context, prefix, suffix string) ([]string, 
 	}
 	return keys, nil
 }
+
+// ListPrefixes lists immediate child prefixes without reading their objects.
+func (s *Store) ListPrefixes(ctx context.Context, prefix string) ([]string, error) {
+	prefixes := []string{}
+	pages := s3.NewListObjectsV2Paginator(s.Client, &s3.ListObjectsV2Input{Bucket: aws.String(s.Bucket), Prefix: aws.String(prefix), Delimiter: aws.String("/")})
+	for pages.HasMorePages() {
+		page, err := pages.NextPage(ctx)
+		if err != nil {
+			return nil, safeError(err)
+		}
+		for _, entry := range page.CommonPrefixes {
+			prefixes = append(prefixes, aws.ToString(entry.Prefix))
+		}
+	}
+	return prefixes, nil
+}

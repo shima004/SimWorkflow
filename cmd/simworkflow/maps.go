@@ -7,10 +7,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"os/signal"
 	"text/tabwriter"
 
 	"simworkflow/internal/config"
 	"simworkflow/internal/mapcatalog"
+	"simworkflow/internal/operation"
 	"simworkflow/internal/storage"
 )
 
@@ -25,7 +28,11 @@ func runMap(args []string, c config.Config, out, errOut io.Writer) error {
 	flags := flag.NewFlagSet("map "+command, flag.ContinueOnError)
 	flags.SetOutput(errOut)
 	name := flags.String("name", "", "registered map name")
-	format := flags.String("format", "json", "output format: json or text (list only)")
+	defaultFormat := "json"
+	if command == "list" {
+		defaultFormat = "auto"
+	}
+	format := flags.String("format", defaultFormat, "output format: auto (interactive map browser), json or text (list only)")
 	var version, path, description, origin string
 	if command != "list" {
 		flags.StringVar(&version, "version", "", "version (latest is accepted by inspect)")
@@ -45,14 +52,34 @@ func runMap(args []string, c config.Config, out, errOut io.Writer) error {
 	if flags.NArg() != 0 {
 		return errors.New("map commands accept options only")
 	}
-	if *format != "json" && (*format != "text" || command != "list") {
-		return errors.New("format must be json, or text for map list")
+	if *format != "json" && (command != "list" || (*format != "text" && *format != "auto")) {
+		return errors.New("format must be json, or auto/text for map list")
 	}
 	catalog := &mapcatalog.Catalog{Store: storage.New(c)}
-	ctx := context.Background()
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
 	encoder := json.NewEncoder(out)
 	encoder.SetIndent("", "  ")
 	if command == "list" {
+		if *name == "" {
+			if *format == "auto" && interactiveOutput(os.Stdin, out) {
+				return browseMaps(ctx, catalog, os.Stdin, out)
+			}
+			names, err := catalog.Names(ctx)
+			if err != nil {
+				return err
+			}
+			if *format == "json" {
+				return encoder.Encode(names)
+			}
+			for _, name := range names {
+				if _, err := fmt.Fprintln(out, name); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		ctx = operation.WithReporter(ctx, submissionReporter(errOut))
 		entries, err := catalog.List(ctx, *name)
 		if err != nil {
 			return err
