@@ -1,14 +1,15 @@
 # Javaエージェントのコンテナテンプレート
 
 [adf-sample-agent-java](https://github.com/roborescue/adf-sample-agent-java) をベースにしたエージェント用です。
-Java 21でビルドし、元の `launch.sh` で起動します。ビルドと起動に使うGradle・依存ライブラリはイメージに残します。
+デフォルトはJava 21でビルドし、元の `launch.sh` で起動します。ビルドと起動に使うGradle・依存ライブラリはイメージに残します。
 このテンプレート自体はエージェントのソースコードを含みません。
 
 ## 作成
 
 1. このディレクトリの `Dockerfile`、`.dockerignore`、`simworkflow-runtime.gradle` を、エージェントリポジトリの `gradlew` があるディレクトリへコピーします。
 2. 比較したいモジュールのJavaソースを `src/main/java` 以下に追加します。外部JARを使う場合は、元の `build.gradle` の依存設定に従って追加します。
-3. 同じディレクトリで次のコマンドを実行します。
+3. エージェントの `gradle/wrapper/gradle-wrapper.properties` と `build.gradle` を確認し、Dockerfileの `JAVA_IMAGE` を対応するJDKへ合わせます。例えばGradle 7.3・Java 17のプロジェクトでは `ARG JAVA_IMAGE=eclipse-temurin:17-jdk` に変更します。
+4. 同じディレクトリで次のコマンドを実行します。
 
 ```sh
 simworkflow agent build --repository my-team/agent-java --tag v1 --push .
@@ -18,6 +19,21 @@ simworkflow agent build --repository my-team/agent-java --tag v1 --push .
 ビルド時にGradle本体と依存ライブラリを取得するため、ネットワーク接続が必要です。
 `simworkflow-runtime.gradle` は `runtimeClasspath` も解決し、実行時に必要な推移依存をイメージ内に取得します。コンパイルのみでは、テストのないプロジェクトの実行時依存は取得されないことがあります。
 元のサンプルは一部の依存に `master-SNAPSHOT` を使用しています。実験を再現する際には、依存バージョンとイメージのダイジェストを固定してください。
+
+## JDKとGradleの対応
+
+コンテナ内でGradleを実行するJDKは、エージェントのGradleラッパーが対応するものを選びます。`sourceCompatibility`／`targetCompatibility` だけを変更しても、Gradle自体を起動するJDKは変わりません。
+
+| Gradleを動かすJDK | 必要なGradle |
+| --- | --- |
+| Java 17 | 7.3以上 |
+| Java 21 | 8.5以上 |
+
+`Unsupported class file major version 65` がGradleの初期化スクリプトで発生する場合は、Java 21に未対応の古いGradleをJava 21で動かしていないか確認してください。Java 17用の既存エージェントであれば、まずベースイメージをJava 17に合わせます。Java 21が必要なエージェントはGradleラッパーも対応バージョンを使用します。依存JARの要求Javaバージョンにも合わせてください。CLIはGradleや依存バージョンを自動で変更しません。
+
+依存に `master-SNAPSHOT` を指定した既存エージェントでは、依存先だけがJava 21へ移行している場合があります。その場合、JDKをJava 17へ変更すると `No matching variant ... compatible with Java 21` が発生します。依存指定を維持するならJDK 21、Gradle 8.5以上、`sourceCompatibility`／`targetCompatibility` のJava 21指定を揃え、ソースとの互換性をビルドで確認します。
+
+詳細は [Gradle公式のJava互換表](https://docs.gradle.org/current/userguide/compatibility.html#java_runtime) を参照してください。
 
 ## コンテナの取り決め
 

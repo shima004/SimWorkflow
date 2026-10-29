@@ -1,5 +1,8 @@
 # Copy this file to the root of your adf-sample-agent-java repository.
-FROM eclipse-temurin:21-jdk
+# Match the JDK to the agent's Gradle wrapper and dependencies.
+# Gradle 7.3 supports Java 17; running on Java 21 requires Gradle 8.5+.
+ARG JAVA_IMAGE=eclipse-temurin:21-jdk
+FROM ${JAVA_IMAGE}
 
 WORKDIR /app
 COPY . .
