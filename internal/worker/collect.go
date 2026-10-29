@@ -2,7 +2,6 @@ package worker
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
@@ -69,58 +68,22 @@ func readScore(root string) *float64 {
 	return lastScore(f, info.Size())
 }
 
-// lastScore reads complete lines backwards, stopping at the most recent score.
-// Keep memory bounded even when a simulator writes an exceptionally long line.
+// lastScore searches backwards, stopping at the most recent score.
 func lastScore(r io.ReaderAt, size int64) *float64 {
-	const chunkSize = 64 << 10
-	const maxLine = 4 << 20
-	var pending []byte
-	discard := false
-	parse := func(line []byte) *float64 {
+	var score *float64
+	scanLogBackwards(r, size, false, func(line []byte) bool {
 		matches := scorePattern.FindAllSubmatch(line, -1)
 		if len(matches) == 0 {
-			return nil
+			return false
 		}
 		value, err := strconv.ParseFloat(string(matches[len(matches)-1][1]), 64)
 		if err != nil {
-			return nil
+			return false
 		}
-		return &value
-	}
-	for end := size; end > 0; {
-		start := max(int64(0), end-chunkSize)
-		chunk := make([]byte, end-start, int(end-start)+len(pending))
-		if _, err := r.ReadAt(chunk, start); err != nil {
-			return nil
-		}
-		data := append(chunk, pending...)
-		last := len(data)
-		for {
-			i := bytes.LastIndexByte(data[:last], '\n')
-			if i < 0 {
-				break
-			}
-			if !discard && last-i-1 <= maxLine {
-				if score := parse(data[i+1 : last]); score != nil {
-					return score
-				}
-			}
-			discard = false
-			last = i
-		}
-		if last > maxLine {
-			discard = true
-		}
-		pending = nil
-		if !discard {
-			pending = append(pending, data[:last]...)
-		}
-		end = start
-	}
-	if !discard {
-		return parse(pending)
-	}
-	return nil
+		score = &value
+		return true
+	})
+	return score
 }
 
 func collect(ctx context.Context, root string, c Config) (collectErr error) {

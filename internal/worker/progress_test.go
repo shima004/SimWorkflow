@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -79,7 +80,8 @@ func TestProgressReporterPublishesFinalSnapshot(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "logs/simulation"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "logs/simulation/kernel.log"), []byte("INFO kernel : Timestep 5 complete\nDEBUG kernel : Score: 7\n"), 0600); err != nil {
+	log := "INFO kernel : Termination condition: Timestep >= 300\nINFO kernel : Timestep 5 complete\nDEBUG kernel : Score: 7\n" + strings.Repeat("INFO kernel : Shutting down TCPConnection\n", 5000)
+	if err := os.WriteFile(filepath.Join(root, "logs/simulation/kernel.log"), []byte(log), 0600); err != nil {
 		t.Fatal(err)
 	}
 	c := Config{ExecutionID: "execution", Stage: Simulation, Run: experiment.Run{ID: "run-one"}, ProgressUpload: &storage.Transfer{URL: server.URL}}
@@ -93,6 +95,56 @@ func TestProgressReporterPublishesFinalSnapshot(t *testing.T) {
 	last := records[len(records)-1]
 	if last.PodIP != "10.42.1.7" || last.Phase != "Succeeded" || last.ExecutionID != "execution" || last.RunID != "run-one" || last.CompletedSteps != 5 || last.Score == nil || *last.Score != 7 || last.UpdatedAt.IsZero() {
 		t.Fatal(last)
+	}
+}
+
+func TestFinalProgressFindsObservationsBeforeShutdownLogs(t *testing.T) {
+	for _, tc := range []struct {
+		name, log string
+		steps     int
+		score     float64
+	}{
+		{
+			name: "shutdown beyond one block",
+			log: "Timestep 284 complete\nScore: 125\nTimestep 300 complete\nScore: 121.8\n" +
+				strings.Repeat("INFO kernel : Shutting down TCPConnection\n", 5000),
+			steps: 300, score: 121.8,
+		},
+		{
+			name: "step and score cross block boundaries",
+			log: "Timestep 283 complete\nScore: 130\nTimestep 287 complete\n" +
+				strings.Repeat("DEBUG padding\n", 5000) + "Score: 124\n" +
+				strings.Repeat("INFO shutdown\n", 5000),
+			steps: 287, score: 124,
+		},
+		{
+			name: "score precedes last completed step",
+			log: "Timestep 284 complete\nScore: 125\nScore: 122\nTimestep 299 complete\n" +
+				strings.Repeat("INFO shutdown\n", 5000),
+			steps: 299, score: 122,
+		},
+		{
+			name:  "ignore incomplete final line",
+			log:   "Timestep 290 complete\nScore: 123\nTimestep 300 complete Score: 999",
+			steps: 290, score: 123,
+		},
+		{
+			name:  "oversized shutdown line",
+			log:   "Timestep 298 complete\nScore: 122\n" + strings.Repeat("x", 5<<20) + "\n",
+			steps: 298, score: 122,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "kernel.log")
+			if err := os.WriteFile(path, []byte(tc.log), 0600); err != nil {
+				t.Fatal(err)
+			}
+			tail := progressTail{value: Progress{CompletedSteps: 284, TotalSteps: 300, Score: scoreValue(125)}}
+			tail.readLatest(path)
+			if tail.value.CompletedSteps != tc.steps || tail.value.TotalSteps != 300 || tail.value.Score == nil || *tail.value.Score != tc.score {
+				t.Fatalf("got %+v, want steps=%d score=%g", tail.value, tc.steps, tc.score)
+			}
+		})
 	}
 }
 

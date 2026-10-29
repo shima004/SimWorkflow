@@ -109,22 +109,26 @@ func (t *progressTail) readLatest(path string) {
 		t.value.CompletedSteps, t.value.TotalSteps, t.value.Score = 0, 0, nil
 	}
 	t.file = info
-	start := max(int64(0), info.Size()-(64<<10))
-	data := make([]byte, info.Size()-start)
-	if _, err := f.ReadAt(data, start); err != nil {
-		return
-	}
-	if start > 0 {
-		_, data, _ = bytes.Cut(data, []byte("\n"))
-	}
-	for {
-		line, rest, ok := bytes.Cut(data, []byte("\n"))
-		if !ok {
-			break
+	var latest progressTail
+	foundStep, foundScore := false, false
+	scanLogBackwards(f, info.Size(), true, func(line []byte) bool {
+		// Observe each field only once: older scores must not overwrite the
+		// final score while searching for the last completed timestep.
+		latest.value = Progress{}
+		latest.observe(string(line))
+		if !foundStep && latest.value.CompletedSteps > 0 {
+			t.value.CompletedSteps = max(t.value.CompletedSteps, latest.value.CompletedSteps)
+			foundStep = true
 		}
-		t.observe(string(line))
-		data = rest
-	}
+		if !foundScore && latest.value.Score != nil {
+			t.value.Score = latest.value.Score
+			foundScore = true
+		}
+		if latest.value.TotalSteps > 0 && t.value.TotalSteps == 0 {
+			t.value.TotalSteps = latest.value.TotalSteps
+		}
+		return foundStep && foundScore
+	})
 }
 
 type progressReporter struct {
