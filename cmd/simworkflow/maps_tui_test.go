@@ -95,3 +95,47 @@ func TestMapBrowserFilterScrollRetryAndResize(t *testing.T) {
 		t.Fatal("q did not quit")
 	}
 }
+
+func TestMapBrowserCountsLoadSeparatelyAndSurviveSelection(t *testing.T) {
+	calls := 0
+	m := mapBrowserModel{ctx: context.Background(), width: 80, height: 12, loading: true,
+		loadNames: func(context.Context) ([]string, error) { return []string{"aichi", "orphan"}, nil },
+		loadCounts: func(context.Context, []string) (map[string]int, error) {
+			calls++
+			return map[string]int{"aichi": 30}, nil
+		},
+		loadVersions: func(context.Context, string) ([]mapcatalog.Metadata, error) { return nil, nil },
+	}
+	next, countCmd := m.Update(m.Init()())
+	m = next.(mapBrowserModel)
+	if m.loading || calls != 0 || !strings.Contains(m.View(), "VERSIONS") || !strings.Contains(m.View(), "...") {
+		t.Fatal("names blocked by counting", m.View())
+	}
+	m, versionsCmd := mapKey(m, tea.KeyMsg{Type: tea.KeyEnter})
+	next, _ = m.Update(countCmd())
+	m = next.(mapBrowserModel)
+	if !m.countsLoaded || m.versionCounts["aichi"] != 30 || m.selectedMap != "aichi" {
+		t.Fatal("count response lost during selection")
+	}
+	m, _ = mapKey(m, tea.KeyMsg{Type: tea.KeyEsc})
+	if !strings.Contains(m.View(), "30") || !strings.Contains(m.View(), "0") {
+		t.Fatal("counts not shown", m.View())
+	}
+	oldCountRequest := m.countRequest
+	m, _ = mapKey(m, mapRune("r"))
+	next, _ = m.Update(mapCountsMsg{request: oldCountRequest, counts: map[string]int{"aichi": 999}})
+	m = next.(mapBrowserModel)
+	if m.countsLoaded || strings.Contains(m.View(), "999") {
+		t.Fatal("stale counts replaced refresh")
+	}
+	_ = versionsCmd // The pending version request was canceled when returning.
+}
+
+func TestMapBrowserCountFailureKeepsNamesSelectable(t *testing.T) {
+	m := mapBrowserModel{ctx: context.Background(), width: 80, height: 12, names: []string{"aichi"}}
+	next, _ := m.Update(mapCountsMsg{err: errors.New("offline")})
+	m = next.(mapBrowserModel)
+	if m.err != nil || m.count() != 1 || !strings.Contains(m.View(), "?") || !strings.Contains(m.View(), "unavailable") {
+		t.Fatal(m.View())
+	}
+}

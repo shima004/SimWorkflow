@@ -210,6 +210,50 @@ func (c *Catalog) Names(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
+// VersionCounts counts published metadata keys, without downloading metadata
+// or map archives. Names can be displayed before this listing completes.
+func (c *Catalog) VersionCounts(ctx context.Context, names []string) (map[string]int, error) {
+	unique := []string{}
+	seenNames := map[string]bool{}
+	for _, name := range names {
+		if !experiment.ValidMapName(name) {
+			return nil, errors.New("invalid map name")
+		}
+		if !seenNames[name] {
+			unique = append(unique, name)
+			seenNames[name] = true
+		}
+	}
+	results := make([]int, len(unique))
+	if err := operation.For(ctx, "Count map versions", len(unique), func(ctx context.Context, i int) error {
+		name := unique[i]
+		keys, err := c.Store.ListKeys(ctx, "maps/"+name+"/", "/metadata.json")
+		if err != nil {
+			return err
+		}
+		seen := map[string]bool{}
+		for _, path := range keys {
+			parts := strings.Split(path, "/")
+			if len(parts) != 4 || parts[0] != "maps" || parts[1] != name || parts[3] != "metadata.json" || parts[2] == "latest" || seen[path] {
+				continue
+			}
+			if err := validateIdentity(parts[1], parts[2]); err != nil {
+				continue
+			}
+			seen[path] = true
+			results[i]++
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	counts := map[string]int{}
+	for i, name := range unique {
+		counts[name] = results[i]
+	}
+	return counts, nil
+}
+
 func (c *Catalog) List(ctx context.Context, name string) ([]Metadata, error) {
 	if name != "" && !experiment.ValidMapName(name) {
 		return nil, errors.New("invalid map name")

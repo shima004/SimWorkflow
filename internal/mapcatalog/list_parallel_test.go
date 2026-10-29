@@ -109,3 +109,44 @@ func TestListSelectedMapFetchesVersionsConcurrentlyAndSorts(t *testing.T) {
 		}
 	}
 }
+
+func TestVersionCountsListsKeysWithoutDownloadingMetadata(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		prefix := r.URL.Query().Get("prefix")
+		if r.Method != "GET" || r.URL.Query().Get("list-type") != "2" || !strings.HasPrefix(prefix, "maps/") || r.URL.Query().Get("delimiter") != "" {
+			t.Error("counts must only list keys")
+			w.WriteHeader(400)
+			return
+		}
+		keys := []string{}
+		truncated, token := "false", ""
+		switch prefix {
+		case "maps/aichi/":
+			keys = []string{"maps/aichi/v1/metadata.json", "maps/aichi/v1/map.zip", "maps/aichi/latest/metadata.json", "maps/aichi/nested/v1/metadata.json", "maps/aichi/INVALID/metadata.json"}
+			truncated, token = "true", "<NextContinuationToken>next</NextContinuationToken>"
+			if r.URL.Query().Get("continuation-token") == "next" {
+				keys = []string{"maps/aichi/v1/metadata.json", "maps/aichi/v2/metadata.json"}
+				truncated, token = "false", ""
+			}
+		case "maps/vc/":
+			keys = []string{"maps/vc/v1/metadata.json"}
+		case "maps/orphan/":
+			keys = []string{"maps/orphan/v1/map.zip"}
+		default:
+			t.Error("unexpected name", prefix)
+		}
+		fmt.Fprintf(w, "<ListBucketResult><IsTruncated>%s</IsTruncated>%s", truncated, token)
+		for _, key := range keys {
+			fmt.Fprintf(w, "<Contents><Key>%s</Key></Contents>", key)
+		}
+		fmt.Fprint(w, "</ListBucketResult>")
+	}))
+	defer server.Close()
+	c := &Catalog{Store: storage.New(config.Config{S3: config.S3{Endpoint: server.URL, Bucket: "results", Region: "us-east-1", AccessKeyID: "key", SecretAccessKey: "secret", ForcePathStyle: true}, HTTPTimeout: time.Second})}
+	counts, err := c.VersionCounts(context.Background(), []string{"aichi", "vc", "orphan", "aichi"})
+	if err != nil || len(counts) != 3 || counts["aichi"] != 2 || counts["vc"] != 1 || counts["orphan"] != 0 || calls.Load() != 4 {
+		t.Fatal(counts, err, calls.Load())
+	}
+}

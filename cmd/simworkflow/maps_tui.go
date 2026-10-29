@@ -16,6 +16,11 @@ type mapNamesMsg struct {
 	names   []string
 	err     error
 }
+type mapCountsMsg struct {
+	request int
+	counts  map[string]int
+	err     error
+}
 type mapVersionsMsg struct {
 	request int
 	name    string
@@ -25,6 +30,12 @@ type mapVersionsMsg struct {
 type mapBrowserModel struct {
 	ctx                             context.Context
 	cancelLoad                      context.CancelFunc
+	cancelCounts                    context.CancelFunc
+	loadCounts                      func(context.Context, []string) (map[string]int, error)
+	versionCounts                   map[string]int
+	countsLoaded                    bool
+	countsErr                       error
+	countRequest                    int
 	loadNames                       func(context.Context) ([]string, error)
 	loadVersions                    func(context.Context, string) ([]mapcatalog.Metadata, error)
 	names                           []string
@@ -40,7 +51,7 @@ type mapBrowserModel struct {
 func browseMaps(ctx context.Context, catalog *mapcatalog.Catalog, in io.Reader, out io.Writer) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	m := mapBrowserModel{ctx: ctx, loadNames: catalog.Names, loadVersions: catalog.List, width: 80, height: 24, loading: true}
+	m := mapBrowserModel{ctx: ctx, loadNames: catalog.Names, loadCounts: catalog.VersionCounts, loadVersions: catalog.List, width: 80, height: 24, loading: true}
 	_, err := tea.NewProgram(m, tea.WithContext(ctx), tea.WithInput(in), tea.WithOutput(out), tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
 	return err
 }
@@ -59,6 +70,11 @@ func (m *mapBrowserModel) fetch() tea.Cmd {
 	m.err = nil
 	request, name := m.request, m.selectedMap
 	if name == "" {
+		if m.cancelCounts != nil {
+			m.cancelCounts()
+		}
+		m.countRequest++
+		m.countsLoaded, m.countsErr, m.versionCounts = false, nil, nil
 		return m.fetchNames(ctx, request)
 	}
 	return func() tea.Msg {
@@ -105,11 +121,29 @@ func (m mapBrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.names, m.err, m.loading = msg.names, msg.err, false
+		if msg.err == nil && m.loadCounts != nil {
+			ctx, cancel := context.WithCancel(m.ctx)
+			m.cancelCounts = cancel
+			request := m.countRequest
+			names := m.names
+			cmd = func() tea.Msg { counts, err := m.loadCounts(ctx, names); return mapCountsMsg{request, counts, err} }
+		}
+	case mapCountsMsg:
+		if msg.request != m.countRequest {
+			return m, nil
+		}
+		m.versionCounts, m.countsErr, m.countsLoaded = msg.counts, msg.err, msg.err == nil
+		if m.countsLoaded && m.versionCounts == nil {
+			m.versionCounts = map[string]int{}
+		}
 	case mapVersionsMsg:
 		if msg.request != m.request || msg.name != m.selectedMap {
 			return m, nil
 		}
 		m.entries, m.err, m.loading = msg.entries, msg.err, false
+		if msg.err == nil && m.countsLoaded {
+			m.versionCounts[msg.name] = len(msg.entries)
+		}
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 	case tea.KeyMsg:
@@ -207,7 +241,7 @@ func (m mapBrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 func (m mapBrowserModel) View() string {
 	title := "Maps"
-	columns := "NAME"
+	columns := fmt.Sprintf("%-32s %8s", "NAME", "VERSIONS")
 	help := "↑/↓ select · Enter versions · / filter · r refresh · q quit"
 	if m.selectedMap != "" {
 		title = "Map: " + m.selectedMap
@@ -220,6 +254,13 @@ func (m mapBrowserModel) View() string {
 	}
 	if m.editing {
 		status += " | Enter apply / Esc clear"
+	}
+	if m.selectedMap == "" && !m.loading && !m.countsLoaded {
+		if m.countsErr != nil {
+			status += " | Version counts unavailable (r retry)"
+		} else {
+			status += " | Counting versions..."
+		}
 	}
 	if m.loading {
 		status = "Loading..."
@@ -234,7 +275,13 @@ func (m mapBrowserModel) View() string {
 		line := ""
 		if index < m.count() && !m.loading && m.err == nil {
 			if m.selectedMap == "" {
-				line = names[index]
+				count := "..."
+				if m.countsLoaded {
+					count = fmt.Sprint(m.versionCounts[names[index]])
+				} else if m.countsErr != nil {
+					count = "?"
+				}
+				line = fmt.Sprintf("%-32s %8s", names[index], count)
 			} else {
 				entry := m.entries[index]
 				line = fmt.Sprintf("%-16s %12d  %-20s  %s", entry.Version, entry.SizeBytes, entry.RegisteredAt.Format("2006-01-02T15:04:05Z"), entry.SHA256)
