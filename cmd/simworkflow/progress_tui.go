@@ -155,6 +155,15 @@ func (m progressModel) bodyHeight() int { return max(0, m.height-4-len(m.overvie
 
 func (m progressModel) bodyRows() []string {
 	if m.details != nil {
+		for _, row := range m.frame.progressRows {
+			if row.runID == m.detailRunID {
+				now := m.now
+				if now.IsZero() {
+					now = time.Now()
+				}
+				return append(memoryDetails(row, now), m.details...)
+			}
+		}
 		return m.details
 	}
 	return m.frame.rows

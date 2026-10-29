@@ -22,17 +22,18 @@ import (
 // Progress contains observations only, never the worker's signed capabilities.
 // CompletedSteps counts completed kernel timesteps, not elapsed wall time.
 type Progress struct {
-	Activity       string    `json:"activity,omitempty"`
-	PodIP          string    `json:"podIP,omitempty"`
-	ExecutionID    string    `json:"executionId"`
-	RunID          string    `json:"runId"`
-	Stage          string    `json:"stage"`
-	Phase          string    `json:"phase"`
-	CompletedSteps int       `json:"completedSteps"`
-	TotalSteps     int       `json:"totalSteps,omitempty"`
-	Score          *float64  `json:"score,omitempty"`
-	StartedAt      time.Time `json:"startedAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	Memory         map[string]MemoryUsage `json:"memory,omitempty"`
+	Activity       string                 `json:"activity,omitempty"`
+	PodIP          string                 `json:"podIP,omitempty"`
+	ExecutionID    string                 `json:"executionId"`
+	RunID          string                 `json:"runId"`
+	Stage          string                 `json:"stage"`
+	Phase          string                 `json:"phase"`
+	CompletedSteps int                    `json:"completedSteps"`
+	TotalSteps     int                    `json:"totalSteps,omitempty"`
+	Score          *float64               `json:"score,omitempty"`
+	StartedAt      time.Time              `json:"startedAt"`
+	UpdatedAt      time.Time              `json:"updatedAt"`
 }
 
 var completedStepPattern = regexp.MustCompile(`\bTimestep\s+(\d+)\s+complete\b`)
@@ -185,6 +186,7 @@ func (p *progressReporter) setActivity(activity string) {
 }
 
 func (p *progressReporter) publish(ctx context.Context) {
+	p.tail.value.Memory = readMemory(p.root, p.c)
 	p.tail.value.Activity, _ = p.activity.Load().(string)
 	if p.c.Stage == Simulation {
 		if p.tail.value.Activity != "" || p.tail.value.Phase != "Running" {

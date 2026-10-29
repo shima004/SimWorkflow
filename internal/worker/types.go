@@ -139,6 +139,8 @@ func Run(ctx context.Context, root, actor string) (err error) {
 			err = e
 		}
 	}()
+	stopMemory := startMemorySampling(ctx, root, c, actor)
+	defer stopMemory() // Publish the final sample before signalling actor completion.
 	if actor == "server" {
 		return runServer(ctx, root, c)
 	}
