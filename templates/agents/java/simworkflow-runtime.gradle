@@ -1,7 +1,31 @@
-// Resolve and download runtime-only/transitive dependencies during image build.
-// A sample without tests may otherwise resolve only its compile classpath.
+// Validate the base configuration before shipping an image that cannot start,
+// and resolve runtime-only/transitive dependencies for offline execution.
 allprojects {
+    tasks.register('validateSimworkflowModuleConfig') {
+        doLast {
+            def base = file('config/module.cfg')
+            if (!base.isFile()) {
+                throw new GradleException('Missing base module configuration: config/module.cfg')
+            }
+            def positions = [:]
+            base.readLines('UTF-8').eachWithIndex { line, index ->
+                def text = line.trim()
+                if (text && !text.startsWith('#')) {
+                    def separator = line.indexOf(':')
+                    def key = separator < 0 ? '' : line.substring(0, separator).trim()
+                    if (!key) {
+                        throw new GradleException("Invalid Java module assignment in config/module.cfg at line ${index + 1}")
+                    }
+                    if (positions.containsKey(key)) {
+                        throw new GradleException("Duplicate Java module key ${key} in config/module.cfg at lines ${positions[key]} and ${index + 1}")
+                    }
+                    positions[key] = index + 1
+                }
+            }
+        }
+    }
     tasks.register('resolveRuntimeDependencies') {
+        dependsOn 'validateSimworkflowModuleConfig'
         doLast {
             configurations.runtimeClasspath.resolve()
         }

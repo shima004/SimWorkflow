@@ -11,6 +11,6 @@ COPY simworkflow-runtime.gradle /tmp/simworkflow-runtime.gradle
 # Retain Gradle and its dependency cache: launch.sh invokes Gradle at runtime.
 RUN chmod +x gradlew launch.sh \
     && ./gradlew --no-daemon --init-script /tmp/simworkflow-runtime.gradle \
-      build resolveRuntimeDependencies
+      validateSimworkflowModuleConfig build resolveRuntimeDependencies
 
 ENTRYPOINT ["./launch.sh", "-all"]
