@@ -39,14 +39,34 @@ func ValidatePlan(p *experiment.Plan) error {
 			return fmt.Errorf("invalid reproduction run: %w", err)
 		}
 	}
-	duration, err := time.ParseDuration(p.Timeout)
+	return ValidateTransferBudget(p.TotalRuns, p.MaxParallelRuns, p.Timeout)
+}
+
+// ValidateTransferBudget needs only the expanded run count and can run before
+// catalog reads, image pinning and map snapshot transfers.
+func ValidateTransferBudget(totalRuns, parallelism int, timeout string) error {
+	if totalRuns <= 0 || parallelism <= 0 {
+		return errors.New("invalid execution size or parallelism")
+	}
+	duration, err := time.ParseDuration(timeout)
 	if err != nil || duration <= 0 {
 		return errors.New("invalid reproduction timeout")
 	}
-	waves := (len(p.Runs)-1)/p.MaxParallelRuns + 1
+	const allowance = 6 * time.Minute
+	const prefix = "reproduction duration exceeds signed transfer validity"
 	// Check before adding the per-wave allowance to avoid duration overflow.
-	if duration > storage.SignedTransferBudget || int64(waves) > int64(storage.SignedTransferBudget/(duration+360*time.Second)) {
-		return errors.New("reproduction duration exceeds signed transfer validity")
+	if duration > storage.SignedTransferBudget {
+		return fmt.Errorf("%s: timeout %s exceeds the %s execution budget (signed URLs expire after %s); reduce timeout or split the experiment", prefix, duration, storage.SignedTransferBudget, storage.SignedURLValidity)
+	}
+	waves := (totalRuns-1)/parallelism + 1
+	perWave := duration + allowance
+	maxWaves := int(storage.SignedTransferBudget / perWave)
+	if waves > maxWaves {
+		if maxWaves == 0 {
+			return fmt.Errorf("%s: timeout %s + %s transfer allowance exceeds the %s execution budget; reduce timeout", prefix, duration, allowance, storage.SignedTransferBudget)
+		}
+		minimumParallel := (totalRuns-1)/maxWaves + 1
+		return fmt.Errorf("%s: %d runs at parallelism %d require %d waves of (%s timeout + %s transfers), but only %d waves fit in the %s budget (signed URLs expire after %s); reduce timeout or split the experiment; calculated minimum parallelism is %d, subject to cluster capacity", prefix, totalRuns, parallelism, waves, duration, allowance, maxWaves, storage.SignedTransferBudget, storage.SignedURLValidity, minimumParallel)
 	}
 	return nil
 }

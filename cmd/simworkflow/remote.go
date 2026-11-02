@@ -198,6 +198,13 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	if err != nil {
 		return err
 	}
+	preview, err := experiment.BuildPlan(e)
+	if err != nil {
+		return err
+	}
+	if err := reproduction.ValidateTransferBudget(preview.TotalRuns, preview.MaxParallelRuns, preview.Timeout); err != nil {
+		return err
+	}
 	store := storage.New(c)
 	e, err = (&mapcatalog.Catalog{Store: store}).Resolve(ctx, e)
 	if err != nil {
