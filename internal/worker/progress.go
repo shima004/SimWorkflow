@@ -1,7 +1,6 @@
 package worker
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -56,24 +55,35 @@ func (t *progressTail) read(path string) {
 		return
 	}
 	if t.file != nil && (!os.SameFile(t.file, info) || info.Size() < t.offset) {
-		t.offset, t.value.CompletedSteps, t.value.Score = 0, 0, nil
+		t.offset, t.value.CompletedSteps, t.value.TotalSteps, t.value.Score = 0, 0, 0, nil
 	}
 	t.file = info
-	if _, err := f.Seek(t.offset, io.SeekStart); err != nil {
+	// Read the newest bounded window rather than draining a DEBUG-log backlog.
+	// Keep an incomplete final line for the next poll.
+	const window = int64(8 << 20)
+	start := max(t.offset, info.Size()-window)
+	data := make([]byte, info.Size()-start)
+	if _, err := f.ReadAt(data, start); err != nil {
 		return
 	}
-	reader := bufio.NewReader(io.LimitReader(f, 8<<20))
-	// Bound each pass so reporting remains responsive while the kernel logs.
-	for read := 0; read < 8<<20; {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			// Do not consume an incomplete final line; retry it on the next poll.
-			return
-		}
-		read += len(line)
-		t.offset += int64(len(line))
-		t.observe(line)
+	end := bytes.LastIndexByte(data, '\n')
+	if end < 0 {
+		return
 	}
+	if start > t.offset {
+		// The window may begin inside a line; never parse that fragment.
+		first := bytes.IndexByte(data, '\n')
+		data = data[first+1 : end+1]
+	} else {
+		data = data[:end+1]
+	}
+	if t.value.TotalSteps == 0 {
+		if match := totalStepPattern.FindSubmatch(data); match != nil {
+			t.value.TotalSteps, _ = strconv.Atoi(string(match[1]))
+		}
+	}
+	t.observeLatest(bytes.NewReader(data), int64(len(data)))
+	t.offset = start + int64(end) + 1
 }
 
 func (t *progressTail) observe(line string) {
@@ -94,8 +104,7 @@ func (t *progressTail) observe(line string) {
 	}
 }
 
-// Once execution finishes, observe the final lines rather than draining any
-// DEBUG-log backlog before publishing result-processing status.
+// Read the final observations even when shutdown messages exceed the live window.
 func (t *progressTail) readLatest(path string) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -110,9 +119,14 @@ func (t *progressTail) readLatest(path string) {
 		t.value.CompletedSteps, t.value.TotalSteps, t.value.Score = 0, 0, nil
 	}
 	t.file = info
+	t.observeLatest(f, info.Size())
+	t.offset = info.Size()
+}
+
+func (t *progressTail) observeLatest(r io.ReaderAt, size int64) {
 	var latest progressTail
 	foundStep, foundScore := false, false
-	scanLogBackwards(f, info.Size(), true, func(line []byte) bool {
+	scanLogBackwards(r, size, true, func(line []byte) bool {
 		// Observe each field only once: older scores must not overwrite the
 		// final score while searching for the last completed timestep.
 		latest.value = Progress{}

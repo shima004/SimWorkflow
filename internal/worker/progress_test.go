@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -59,6 +60,38 @@ func TestProgressTailAppendPartialAndReplacement(t *testing.T) {
 	tail.read(path)
 	if tail.value.CompletedSteps != 3 || tail.value.TotalSteps != 10 || *tail.value.Score != 0.002 {
 		t.Fatal(tail.value)
+	}
+}
+
+func TestRunningProgressSkipsBacklog(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "kernel.log")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString("Timestep 1 complete\nScore: 334\n"); err != nil {
+		t.Fatal(err)
+	}
+	tail := progressTail{value: Progress{TotalSteps: 300}}
+	tail.read(path)
+	for _, sample := range []struct {
+		step  int
+		score float64
+	}{{120, 200}, {240, 120}} {
+		// Each observation follows more than the old per-poll limit. A single
+		// live poll must reach the current step, without waiting for finish().
+		if _, err := f.WriteString(strings.Repeat("DEBUG padding\n", 800000) +
+			fmt.Sprintf("Timestep %d complete\nScore: %g\nTimestep 999 comp", sample.step, sample.score)); err != nil {
+			t.Fatal(err)
+		}
+		tail.read(path)
+		if tail.value.CompletedSteps != sample.step || tail.value.Score == nil || *tail.value.Score != sample.score {
+			t.Fatalf("live progress lagged: %+v", tail.value)
+		}
+		if _, err := f.WriteString("\n"); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
