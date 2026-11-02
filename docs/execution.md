@@ -91,6 +91,21 @@ reproduction/maps/<sha256>.zip
 エージェントログ・サーバーログは `outputs.collect` の指定に従って追加します。
 ワーカー開始後の失敗やタイムアウトでも結果保存を試みます。Pod自体の起動・イメージ取得・準備処理に失敗した場合や、強制削除・保存先への通信失敗では要約を保存できないため、Argoの状態を確認してください。
 
+## 成功Podの自動削除
+
+CLIが新しく生成するWorkflowには、次のPodGCを設定します。事前計算・本実行とも、Podが成功して削除待ちになってから10分後に削除します。失敗・ErrorのPodは調査用に残します。`submit`・`render`・`retry`・`reproduce`で共通の設定です。
+
+```yaml
+spec:
+  podGC:
+    strategy: OnPodSuccess
+    deleteDelayDuration: 10m
+```
+
+Pod削除後は `kubectl logs` での直接取得やPod内ファイルの取り出しはできません。`outputs.collect` で収集済みのS3ログ・スコア・事前計算データは残り、`experiment download` で取得できます。収集対象から外したログはS3へ保存されません。
+
+Workflow自体の `ttlStrategy` はCLIから設定しません。ステップの状態・参照情報を残すため、進捗確認・結果取得・再送信は引き続き利用できます。既存Workflowの設定は変更しません。クラスタの既定値でTTLを設定している場合は、その設定が適用されます。PodGCはPodオブジェクトの蓄積を抑えますが、Workflow内のステップ状態は削除しません。
+
 ## 生成YAMLの確認
 
 ```sh
