@@ -207,9 +207,9 @@ func Build(plan *experiment.Plan, configs []RunConfig, options Options) (map[str
 	waves := (len(configs)-1)/plan.MaxParallelRuns + 1
 	deadline := int64(waves) * (configs[0].Precompute.TimeoutSeconds + 360)
 	spec := map[string]any{"entrypoint": "experiment", "activeDeadlineSeconds": deadline, "serviceAccountName": options.ServiceAccount, "parallelism": plan.MaxParallelRuns, "nodeSelector": map[string]string{"kubernetes.io/arch": "amd64"}, "volumes": []any{map[string]any{"name": "work", "emptyDir": map[string]any{}}, map[string]any{"name": "tools", "emptyDir": map[string]any{}}}, "templates": templates}
-	// Successful Pods have already uploaded their results. Retain failed Pods
-	// for diagnosis and keep the Workflow available to status/download/retry.
-	spec["podGC"] = map[string]any{"strategy": "OnPodSuccess", "deleteDelayDuration": "10m"}
+	// Retain completed Pods briefly for diagnosis, regardless of success or
+	// failure, and keep the Workflow available to status/download/retry.
+	spec["podGC"] = map[string]any{"strategy": "OnPodCompletion", "deleteDelayDuration": "10m"}
 	if bundled {
 		spec["arguments"] = map[string]any{"parameters": []any{
 			map[string]any{"name": "precompute-bundle-url", "value": options.PrecomputeBundle.URL},

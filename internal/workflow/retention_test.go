@@ -9,7 +9,7 @@ import (
 	"simworkflow/internal/worker"
 )
 
-func TestGeneratedWorkflowsCollectSuccessfulPodsWithoutExpiringHistory(t *testing.T) {
+func TestGeneratedWorkflowsCollectCompletedPodsWithoutExpiringHistory(t *testing.T) {
 	e, err := experiment.ReadFile("../../examples/experiments/python-module-comparison.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -45,8 +45,8 @@ func TestGeneratedWorkflowsCollectSuccessfulPodsWithoutExpiringHistory(t *testin
 			}
 			spec := wf["spec"].(map[string]any)
 			gc, ok := spec["podGC"].(map[string]any)
-			if !ok || gc["strategy"] != "OnPodSuccess" || gc["deleteDelayDuration"] != "10m" {
-				t.Fatal("only successful Pods should be collected after the diagnosis window", gc)
+			if !ok || gc["strategy"] != "OnPodCompletion" || gc["deleteDelayDuration"] != "10m" {
+				t.Fatal("successful and failed Pods should be collected after ten minutes", gc)
 			}
 			if _, exists := spec["ttlStrategy"]; exists {
 				t.Fatal("Workflow history must remain available for status/download/retry/export")
