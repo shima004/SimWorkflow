@@ -1,0 +1,16 @@
+# Install into the existing Argo execution namespace. This chart only creates
+# SimWorkflow RBAC and its non-secret CLI ConfigMap in this mode.
+argo:
+  enabled: false
+  externalURL: https://argo.example.com
+postgresql:
+  enabled: false
+s3:
+  enabled: false
+  externalURL: https://s3.example.com
+  bucket: simworkflows
+  bucketInit:
+    enabled: false # Existing bucket, no S3 credentials needed by this chart.
+registry:
+  enabled: false
+  externalURL: https://registry.example.com

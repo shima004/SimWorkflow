@@ -1,0 +1,131 @@
+# Secrets must already exist in the Helm release namespace. No credentials are
+# generated or stored in Helm values. See README.md for the required keys.
+argo:
+  enabled: true
+  externalURL: ""
+  persistence:
+    enabled: true
+    archive: true
+    nodeStatusOffLoad: true
+    connectionPool: { maxIdleConns: 5, maxOpenConns: 20 }
+  # Extra workflow-controller configuration. persistence is managed above.
+  controllerConfig: {}
+
+workflow:
+  rbac:
+    create: true # false reuses existing executor/client Roles and bindings.
+  serviceAccount:
+    create: true
+    name: simworkflow
+  imagePullSecrets: []
+  # Independent identity for the CLI's Argo client-auth token.
+  clientServiceAccount:
+    create: true
+    name: simworkflow-client
+
+postgresql:
+  enabled: true
+  image: postgres:17.6-bookworm
+  database: argo
+  existingSecret: simworkflow-postgresql-credentials # username, password
+  # Used when enabled=false and argo.persistence.enabled=true.
+  externalHost: ""
+  externalPort: 5432
+  ssl: false
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "2", memory: 2Gi }
+  persistence:
+    existingClaim: ""
+    storageClass: ""
+    size: 20Gi
+    keep: true
+  nodeSelector: {}
+  tolerations: []
+
+s3:
+  enabled: true
+  image: rustfs/rustfs:1.0.4
+  existingSecret: simworkflow-s3-credentials # access-key, secret-key
+  # URL reachable from BOTH CLI and experiment Pods; no path prefix.
+  # Empty with enabled=true uses the in-cluster Service URL.
+  externalURL: ""
+  region: us-east-1
+  bucket: simworkflows
+  forcePathStyle: true
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits: { cpu: "2", memory: 4Gi }
+  persistence:
+    existingClaim: ""
+    storageClass: ""
+    size: 100Gi
+    keep: true
+  service: { type: ClusterIP, annotations: {} }
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    host: ""
+    tls: []
+  nodeSelector: {}
+  tolerations: []
+  # Regular install/upgrade Job, not a hook: it can run while Helm --wait waits
+  # for the RustFS workload. Disabling this never modifies an existing bucket.
+  bucketInit:
+    enabled: true
+    image: amazon/aws-cli:2.31.25
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 256Mi }
+
+registry:
+  enabled: true
+  image: registry:3.1.2
+  existingSecret: simworkflow-registry-auth # htpasswd (bcrypt), http-secret
+  # Must be reachable by CLI, Docker build host, and all Kubernetes nodes.
+  externalURL: ""
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: "1", memory: 512Mi }
+  persistence:
+    existingClaim: ""
+    storageClass: ""
+    size: 50Gi
+    keep: true
+  service: { type: ClusterIP, annotations: {} }
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    host: ""
+    tls: []
+  nodeSelector: {}
+  tolerations: []
+
+cli:
+  # Public Argo URL; empty uses the Argo Service URL when bundled.
+  argoURL: ""
+  simScopeURL: "" # Optional: SimScope itself is not installed by this chart.
+  helperImage: "" # Empty uses the helper embedded in the CLI release.
+  httpTimeout: 30s
+
+# Passed through to the pinned upstream Argo chart. The parent supplies its
+# controller ConfigMap to connect PostgreSQL using release-specific names.
+argo-workflows:
+  singleNamespace: true
+  createAggregateRoles: false
+  workflow:
+    serviceAccount: { create: false }
+    rbac: { create: false }
+  controller:
+    configMap: { create: false }
+    resources:
+      requests: { cpu: 500m, memory: 1Gi }
+      limits: { cpu: "2", memory: 4Gi }
+  server:
+    authModes: [client]
+    secure: false # Use TLS termination at an Ingress for external access.
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: "1", memory: 1Gi }

@@ -1,0 +1,71 @@
+{{- if .Values.registry.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "simworkflow.name" . }}-registry
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "simworkflow.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "simworkflow.name" . }}-registry
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name | quote }}
+      app.kubernetes.io/component: registry
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        app.kubernetes.io/component: registry
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 10000
+        runAsGroup: 10000
+        fsGroup: 10000
+        fsGroupChangePolicy: OnRootMismatch
+      {{- with .Values.registry.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.registry.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: registry
+          image: {{ .Values.registry.image | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          env:
+            - { name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY, value: /var/lib/registry }
+            - { name: REGISTRY_HTTP_ADDR, value: ":5000" }
+            - { name: REGISTRY_AUTH, value: htpasswd }
+            - { name: REGISTRY_AUTH_HTPASSWD_REALM, value: SimWorkflow }
+            - { name: REGISTRY_AUTH_HTPASSWD_PATH, value: /auth/htpasswd }
+            - name: REGISTRY_HTTP_SECRET
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.registry.existingSecret }}, key: http-secret }
+            - { name: OTEL_TRACES_EXPORTER, value: none }
+          ports:
+            - { name: registry, containerPort: 5000 }
+          startupProbe:
+            tcpSocket: { port: registry }
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket: { port: registry }
+            periodSeconds: 10
+          resources: {{- toYaml .Values.registry.resources | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/registry }
+            - { name: auth, mountPath: /auth, readOnly: true }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.registry.persistence.existingClaim | default (printf "%s-registry" (include "simworkflow.name" .)) }}
+        - name: auth
+          secret:
+            secretName: {{ .Values.registry.existingSecret }}
+            items:
+              - { key: htpasswd, path: htpasswd }
+{{- end }}

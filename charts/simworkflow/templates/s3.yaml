@@ -1,0 +1,67 @@
+{{- if .Values.s3.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "simworkflow.name" . }}-s3
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "simworkflow.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "simworkflow.name" . }}-s3
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name | quote }}
+      app.kubernetes.io/component: s3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        app.kubernetes.io/component: s3
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      {{- with .Values.s3.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.s3.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: rustfs
+          image: {{ .Values.s3.image | quote }}
+          args: [/data]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          env:
+            - name: RUSTFS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.s3.existingSecret }}, key: access-key }
+            - name: RUSTFS_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.s3.existingSecret }}, key: secret-key }
+            - { name: RUSTFS_ADDRESS, value: ":9000" }
+            - { name: RUSTFS_CONSOLE_ENABLE, value: "false" }
+            - { name: RUSTFS_OBS_LOG_DIRECTORY, value: /data/logs }
+          ports:
+            - name: s3
+              containerPort: 9000
+          startupProbe:
+            tcpSocket: { port: s3 }
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket: { port: s3 }
+            periodSeconds: 10
+          resources: {{- toYaml .Values.s3.resources | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.s3.persistence.existingClaim | default (printf "%s-s3" (include "simworkflow.name" .)) }}
+{{- end }}

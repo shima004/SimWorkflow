@@ -4,6 +4,8 @@
 
 ## 必要なサービス
 
+新規導入には [SimWorkflow Helm Chart](../charts/simworkflow/README.md) を利用できます。Argo Workflows・PostgreSQL・RustFS・レジストリと必要な権限をまとめて導入し、各サービスを既存環境へ切り替えることもできます。認証情報は事前作成したKubernetes Secretを参照します。
+
 | 対象 | 用意するもの |
 | --- | --- |
 | Kubernetes・Argo Workflows | ContainerSetを実行できる環境、対象名前空間、CLIと実行Podの権限 |

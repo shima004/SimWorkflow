@@ -1,0 +1,57 @@
+{{- if .Values.s3.bucketInit.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "simworkflow.name" . }}-bucket-init-{{ .Release.Revision }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "simworkflow.labels" . | nindent 4 }}
+spec:
+  ttlSecondsAfterFinished: 3600
+  activeDeadlineSeconds: 600
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        app.kubernetes.io/component: bucket-init
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: create-bucket
+          image: {{ .Values.s3.bucketInit.image | quote }}
+          command: [/bin/sh, -ec]
+          args:
+            - |
+              # Keep credentials in env, and never enable shell tracing.
+              for attempt in $(seq 1 60); do
+                if aws --endpoint-url "$S3_ENDPOINT" s3api head-bucket --bucket "$S3_BUCKET" >/dev/null 2>&1; then
+                  exit 0
+                fi
+                if [ "$AWS_DEFAULT_REGION" = us-east-1 ]; then
+                  aws --endpoint-url "$S3_ENDPOINT" s3api create-bucket --bucket "$S3_BUCKET" >/dev/null 2>&1 || true
+                else
+                  aws --endpoint-url "$S3_ENDPOINT" s3api create-bucket --bucket "$S3_BUCKET" --create-bucket-configuration "LocationConstraint=$AWS_DEFAULT_REGION" >/dev/null 2>&1 || true
+                fi
+                if aws --endpoint-url "$S3_ENDPOINT" s3api head-bucket --bucket "$S3_BUCKET" >/dev/null 2>&1; then
+                  exit 0
+                fi
+                sleep 5
+              done
+              echo "Could not access or create the experiment bucket; check the S3 endpoint and Secret." >&2
+              exit 1
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.s3.existingSecret }}, key: access-key }
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.s3.existingSecret }}, key: secret-key }
+            - { name: AWS_DEFAULT_REGION, value: {{ .Values.s3.region | quote }} }
+            - { name: AWS_EC2_METADATA_DISABLED, value: "true" }
+            - { name: AWS_MAX_ATTEMPTS, value: "2" }
+            - { name: AWS_PAGER, value: "" }
+            - { name: S3_ENDPOINT, value: {{ include "simworkflow.s3URL" . | quote }} }
+            - { name: S3_BUCKET, value: {{ .Values.s3.bucket | quote }} }
+          resources: {{- toYaml .Values.s3.bucketInit.resources | nindent 12 }}
+{{- end }}

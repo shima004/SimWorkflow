@@ -1,0 +1,26 @@
+{{- range $component := list "postgresql" "s3" "registry" }}
+{{- $v := index $.Values $component }}
+{{- if and $v.enabled (not $v.persistence.existingClaim) }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "simworkflow.name" $ }}-{{ $component }}
+  namespace: {{ $.Release.Namespace }}
+  labels: {{- include "simworkflow.labels" $ | nindent 4 }}
+  {{- if $v.persistence.keep }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if eq $v.persistence.storageClass "-" }}
+  storageClassName: ""
+  {{- else if $v.persistence.storageClass }}
+  storageClassName: {{ $v.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $v.persistence.size }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,29 @@
+SimWorkflow infrastructure is installed in {{ .Release.Namespace }}.
+
+Copy the non-secret CLI configuration:
+  kubectl -n {{ .Release.Namespace }} get configmap {{ include "simworkflow.name" . }}-cli-config -o jsonpath='{.data.config\.yaml}' > config.yaml
+  simworkflow --config ./config.yaml credentials set s3
+  simworkflow --config ./config.yaml credentials set argo
+  simworkflow --config ./config.yaml credentials set registry
+  simworkflow --config ./config.yaml config check --connect
+
+Issue a short-lived CLI token (paste it into `credentials set argo`):
+  kubectl -n {{ .Release.Namespace }} create token {{ .Values.workflow.clientServiceAccount.name }} --duration=1h
+
+Workflow ServiceAccount: {{ include "simworkflow.executor" . }}
+Use `experiment submit --service-account {{ include "simworkflow.executor" . }}`.
+
+Endpoints in the generated config:
+  Argo:     {{ include "simworkflow.argoURL" . }}
+  S3:       {{ include "simworkflow.s3URL" . }}
+  Registry: {{ include "simworkflow.registryURL" . }}
+
+ClusterIP / .svc URLs require cluster DNS and routing. For an outside CLI,
+set cli.argoURL, s3.externalURL and registry.externalURL to reachable endpoints.
+The S3 URL must work from BOTH the CLI and experiment Pods. Registry URLs must
+also work from Docker build hosts and Kubernetes nodes. A localhost port-forward
+is not sufficient for S3 presigned transfers or node image pulls.
+
+Provision registry pull credentials with workflow.imagePullSecrets. This chart
+does not configure Docker/containerd TLS trust or insecure registries on nodes.
+See charts/simworkflow/README.md for Secrets, HTTPS, existing services and storage.

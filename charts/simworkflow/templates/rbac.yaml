@@ -1,0 +1,83 @@
+{{- if .Values.workflow.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "simworkflow.executor" . }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "simworkflow.labels" . | nindent 4 }}
+{{- with .Values.workflow.imagePullSecrets }}
+imagePullSecrets: {{- toYaml . | nindent 2 }}
+{{- end }}
+---
+{{- end }}
+{{- if .Values.workflow.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "simworkflow.name" . }}-executor
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "simworkflow.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [workflowtaskresults]
+    verbs: [create, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "simworkflow.name" . }}-executor
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "simworkflow.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "simworkflow.executor" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "simworkflow.name" . }}-executor
+---
+{{- end }}
+{{- if .Values.workflow.clientServiceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ required "workflow.clientServiceAccount.name is required" .Values.workflow.clientServiceAccount.name }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "simworkflow.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+{{- end }}
+{{- if .Values.workflow.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "simworkflow.name" . }}-client
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "simworkflow.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [workflows]
+    verbs: [get, list, watch, create, patch]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "simworkflow.name" . }}-client
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "simworkflow.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ required "workflow.clientServiceAccount.name is required" .Values.workflow.clientServiceAccount.name }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "simworkflow.name" . }}-client
+{{- end }}

@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "simworkflow.name" . }}-cli-config
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "simworkflow.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    credentials:
+      store: keyring
+    argoWorkflow:
+      server: {{ include "simworkflow.argoURL" . | quote }}
+      namespace: {{ .Release.Namespace | quote }}
+    s3:
+      endpoint: {{ include "simworkflow.s3URL" . | quote }}
+      region: {{ .Values.s3.region | quote }}
+      bucket: {{ .Values.s3.bucket | quote }}
+      forcePathStyle: {{ .Values.s3.forcePathStyle }}
+    registry:
+      url: {{ include "simworkflow.registryURL" . | quote }}
+    simScope:
+      url: {{ .Values.cli.simScopeURL | quote }}
+    workflow:
+      helperImage: {{ .Values.cli.helperImage | quote }}
+    httpTimeout: {{ .Values.cli.httpTimeout | quote }}

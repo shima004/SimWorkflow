@@ -10,3 +10,6 @@ __pycache__/
 
 /dist/
 /smoke/
+
+# Recreated from charts/simworkflow/Chart.lock.
+/charts/simworkflow/charts/

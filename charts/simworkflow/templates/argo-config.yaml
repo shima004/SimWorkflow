@@ -1,0 +1,33 @@
+{{- if .Values.argo.enabled }}
+{{- $argo := index .Subcharts "argo-workflows" -}}
+{{- if and $argo.Values.namespaceOverride (ne $argo.Values.namespaceOverride .Release.Namespace) }}
+{{- fail "Argo and SimWorkflow resources must use the release namespace; do not set a different argo-workflows.namespaceOverride" }}
+{{- end }}
+{{- if not $argo.Values.singleNamespace }}
+{{- fail "this chart requires argo-workflows.singleNamespace=true; use argo.enabled=false for an existing cluster-wide Argo installation" }}
+{{- end }}
+{{- if $argo.Values.controller.configMap.create }}
+{{- fail "argo-workflows.controller.configMap.create must remain false; the parent chart manages this ConfigMap" }}
+{{- end }}
+{{- $config := deepCopy .Values.argo.controllerConfig -}}
+{{- if hasKey $config "persistence" }}
+{{- fail "configure persistence through argo.persistence and postgresql, not argo.controllerConfig.persistence" }}
+{{- end }}
+{{- $defaults := dict "spec" (dict "serviceAccountName" (include "simworkflow.executor" .) "podGC" (dict "strategy" "OnPodCompletion" "deleteDelayDuration" "10m")) -}}
+{{- if not (hasKey $config "workflowDefaults") }}
+{{- $_ := set $config "workflowDefaults" $defaults -}}
+{{- end }}
+{{- if .Values.argo.persistence.enabled -}}
+{{- $db := dict "host" (include "simworkflow.postgresHost" .) "port" (ternary 5432 (int .Values.postgresql.externalPort) .Values.postgresql.enabled) "database" .Values.postgresql.database "tableName" "argo_workflows" "ssl" .Values.postgresql.ssl "userNameSecret" (dict "name" .Values.postgresql.existingSecret "key" "username") "passwordSecret" (dict "name" .Values.postgresql.existingSecret "key" "password") -}}
+{{- $_ := set $config "persistence" (dict "archive" .Values.argo.persistence.archive "nodeStatusOffLoad" .Values.argo.persistence.nodeStatusOffLoad "connectionPool" .Values.argo.persistence.connectionPool "postgresql" $db) -}}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "argo-workflows.controller.config-map.name" $argo }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "simworkflow.labels" . | nindent 4 }}
+data:
+  config: |
+    {{- toYaml $config | nindent 4 }}
+{{- end }}

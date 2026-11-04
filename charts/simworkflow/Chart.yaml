@@ -1,0 +1,15 @@
+apiVersion: v2
+name: simworkflow
+description: Argo Workflows, S3 storage and a container registry for SimWorkflow experiments
+type: application
+version: 0.1.0
+appVersion: "0.3.0"
+kubeVersion: ">=1.28.0-0"
+home: https://github.com/shima004/SimWorkflow
+sources:
+  - https://github.com/shima004/SimWorkflow
+dependencies:
+  - name: argo-workflows
+    version: 2.0.16
+    repository: https://argoproj.github.io/argo-helm
+    condition: argo.enabled

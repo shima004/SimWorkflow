@@ -33,6 +33,8 @@ simworkflow config check --connect
 
 実験には、Argo Workflowsを導入したKubernetesクラスタ、S3互換サービス、実行ノードから取得できるコンテナイメージが必要です。クラスタの準備は [実行環境の準備](docs/distribution.md) を参照してください。CLIの起動にGoやDockerは不要です。`agent build` を使う場合はDockerが必要です。
 
+新しく実行基盤を用意する場合は、[Helm Chart](charts/simworkflow/README.md) でArgo Workflows・PostgreSQL・RustFS・レジストリを導入できます。既存サービスへ切り替える構成にも対応します。
+
 ## 実験の基本操作
 
 以下は、自分の環境に合わせた `experiment.yaml` を用意した後の操作です。`WORKFLOW_NAME` は送信時に表示された名前へ置き換えます。

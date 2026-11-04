@@ -1,0 +1,9 @@
+# Keep the bundled Argo but use your own database. The referenced Secret must
+# exist in the release namespace and contain username and password.
+postgresql:
+  enabled: false
+  externalHost: postgres.example.com
+  externalPort: 5432
+  database: argo
+  existingSecret: argo-database-credentials
+  ssl: true

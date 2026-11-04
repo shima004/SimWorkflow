@@ -1,0 +1,41 @@
+# Replace hosts, className and TLS Secret names. Supply certificates separately.
+# The example annotations target ingress-nginx; adapt for other controllers.
+cli:
+  argoURL: https://argo.example.com
+argo-workflows:
+  server:
+    ingress:
+      enabled: true
+      ingressClassName: nginx
+      hosts: [argo.example.com]
+      tls:
+        - secretName: argo-tls
+          hosts: [argo.example.com]
+s3:
+  externalURL: https://s3.example.com
+  ingress:
+    enabled: true
+    className: nginx
+    host: s3.example.com
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "0"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    tls:
+      - secretName: s3-tls
+        hosts: [s3.example.com]
+registry:
+  externalURL: https://registry.example.com
+  ingress:
+    enabled: true
+    className: nginx
+    host: registry.example.com
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "0"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    tls:
+      - secretName: registry-tls
+        hosts: [registry.example.com]

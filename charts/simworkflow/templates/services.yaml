@@ -1,0 +1,25 @@
+{{- range $component := list "s3" "registry" }}
+{{- $v := index $.Values $component }}
+{{- $port := ternary 9000 5000 (eq $component "s3") }}
+{{- if $v.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "simworkflow.name" $ }}-{{ $component }}
+  namespace: {{ $.Release.Namespace }}
+  labels: {{- include "simworkflow.labels" $ | nindent 4 }}
+  {{- with $v.service.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $v.service.type }}
+  selector:
+    app.kubernetes.io/instance: {{ $.Release.Name | quote }}
+    app.kubernetes.io/component: {{ $component }}
+  ports:
+    - name: {{ $component }}
+      port: {{ $port }}
+      targetPort: {{ $component }}
+{{- end }}
+{{- end }}
