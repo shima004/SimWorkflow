@@ -1,0 +1,138 @@
+package main
+
+import (
+	"fmt"
+	"io"
+	"math"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/term"
+
+	"simworkflow/internal/artifacts"
+)
+
+type downloadProgress struct {
+	out             io.Writer
+	enabled, tty    bool
+	closed, printed bool
+	lastPrint       time.Time
+	fileStarted     time.Time
+	path            string
+	lastPhase       string
+	now             func() time.Time
+}
+
+func newDownloadProgress(out io.Writer, enabled bool) *downloadProgress {
+	p := &downloadProgress{out: out, enabled: enabled, now: time.Now}
+	if f, ok := out.(*os.File); ok {
+		p.tty = term.IsTerminal(f.Fd()) && os.Getenv("TERM") != "dumb"
+	}
+	p.update(artifacts.Progress{Phase: "preparing", TotalBytes: -1})
+	return p
+}
+
+func (p *downloadProgress) update(event artifacts.Progress) {
+	if !p.enabled || p.closed {
+		return
+	}
+	now := p.now()
+	if event.Phase == "downloading" && (p.path != event.Path || event.Bytes == 0) {
+		p.path, p.fileStarted = event.Path, now
+	}
+	final := event.Phase == "finished" || event.Phase == "failed"
+	transition := (event.Phase == "extracting" && p.lastPhase != "extracting") ||
+		(event.Phase == "downloading" && p.lastPhase == "preparing")
+	interval := time.Second
+	if p.tty {
+		interval = 100 * time.Millisecond
+	}
+	if !final && !transition && !p.lastPrint.IsZero() && now.Sub(p.lastPrint) < interval {
+		return
+	}
+	if p.tty && strings.HasPrefix(event.Path, "run-") {
+		if _, suffix, ok := strings.Cut(event.Path, "/"); ok {
+			event.Path = suffix
+		}
+	}
+	line := downloadProgressLine(event, now.Sub(p.fileStarted))
+	if p.tty {
+		width := 100
+		if f, ok := p.out.(*os.File); ok {
+			if w, _, err := term.GetSize(f.Fd()); err == nil && w > 1 {
+				width = w
+			}
+		}
+		fmt.Fprintf(p.out, "\r\x1b[2K%s", ansi.Truncate(line, width-1, "…"))
+	} else {
+		fmt.Fprintln(p.out, line)
+	}
+	p.lastPrint, p.printed = now, true
+	p.lastPhase = event.Phase
+}
+
+func (p *downloadProgress) close() {
+	if p.closed {
+		return
+	}
+	if p.enabled && p.tty && p.printed {
+		fmt.Fprintln(p.out)
+	}
+	p.closed = true
+}
+
+func downloadProgressLine(event artifacts.Progress, elapsed time.Duration) string {
+	phase := map[string]string{"preparing": "Preparing", "checking": "Checking", "downloading": "Downloading", "extracting": "Extracting", "run-complete": "Processed", "finished": "Finished", "failed": "Failed"}[event.Phase]
+	if phase == "" {
+		phase = "Preparing"
+	}
+	runs := ""
+	if event.TotalRuns > 0 {
+		runs = fmt.Sprintf(" | runs %d/%d", event.CompletedRuns, event.TotalRuns)
+	}
+	if event.Phase == "downloading" {
+		var transfer string
+		if event.TotalBytes >= 0 {
+			fraction := float64(1)
+			if event.TotalBytes > 0 {
+				fraction = min(1, max(0, float64(event.Bytes)/float64(event.TotalBytes)))
+			}
+			transfer = fmt.Sprintf("%s %3.0f%% %s/%s", downloadBar(fraction), math.Floor(fraction*100), downloadBytes(event.Bytes), downloadBytes(event.TotalBytes))
+		} else {
+			transfer = fmt.Sprintf("[    ?     ] %s (size unknown)", downloadBytes(event.Bytes))
+		}
+		speed := ""
+		if event.Bytes > 0 && elapsed > 0 {
+			speed = fmt.Sprintf(" | %s/s", downloadBytes(int64(float64(event.Bytes)/elapsed.Seconds())))
+		}
+		return phase + " " + transfer + runs + speed + " | " + strings.ReplaceAll(screenText(event.Path), "\n", " ")
+	}
+	bar := ""
+	if event.TotalRuns > 0 {
+		bar = " " + downloadBar(float64(event.CompletedRuns)/float64(event.TotalRuns))
+	}
+	path := strings.ReplaceAll(screenText(event.Path), "\n", " ")
+	if path != "" {
+		path = " | " + path
+	}
+	return fmt.Sprintf("%s%s%s | transferred %s%s", phase, bar, runs, downloadBytes(event.TransferredBytes), path)
+}
+
+func downloadBar(fraction float64) string {
+	n := int(min(1, max(0, fraction)) * 10)
+	return "[" + strings.Repeat("#", n) + strings.Repeat("-", 10-n) + "]"
+}
+
+func downloadBytes(n int64) string {
+	for _, unit := range []struct {
+		size int64
+		name string
+	}{{1 << 40, "TiB"}, {1 << 30, "GiB"}, {1 << 20, "MiB"}, {1 << 10, "KiB"}} {
+		if n >= unit.size {
+			return fmt.Sprintf("%.1f%s", float64(n)/float64(unit.size), unit.name)
+		}
+	}
+	return fmt.Sprintf("%dB", n)
+}

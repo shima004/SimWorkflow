@@ -40,6 +40,7 @@ func runDownload(ctx context.Context, args []string, c config.Config, out, errOu
 	stage := flags.String("stage", "all", "precompute, simulation or all (precompute data.zip is selected independently)")
 	output := flags.String("output", "", "output directory; supports adding to this experiment; default: artifacts/WORKFLOW_NAME")
 	withRetries := flags.Bool("with-retries", false, "combine the original workflow and retries, preferring the latest successful attempt per run")
+	noProgress := flags.Bool("no-progress", false, "hide download progress on stderr")
 	var files bundleFiles
 	flags.Var(&files, "file", "exact file path inside a bundle, e.g. logs/simulation/rescue.log.7z; repeat to select multiple files")
 	flags.Usage = func() {
@@ -74,6 +75,8 @@ func runDownload(ctx context.Context, args []string, c config.Config, out, errOu
 	if len(files) > 0 && !explicitInclude {
 		*include = ""
 	}
+	progress := newDownloadProgress(errOut, !*noProgress)
+	defer progress.close()
 	var attempts map[string]artifacts.Attempt
 	var combinedPlan *experiment.Plan
 	var combinedSnapshot *argo.Snapshot
@@ -112,7 +115,8 @@ func runDownload(ctx context.Context, args []string, c config.Config, out, errOu
 	if *withRetries {
 		workflowName, phase = snapshot.Metadata.Name, combinedPhase(attempts)
 	}
-	report, err := artifacts.Download(ctx, store, &plan, prefix, artifacts.Options{Workflow: workflowName, Phase: phase, Output: *output, Include: csvOptions(*include), Runs: csvOptions(*runs), Stage: *stage, Files: files, WithRetries: *withRetries, Attempts: attempts})
+	report, err := artifacts.Download(ctx, store, &plan, prefix, artifacts.Options{Workflow: workflowName, Phase: phase, Output: *output, Include: csvOptions(*include), Runs: csvOptions(*runs), Stage: *stage, Files: files, WithRetries: *withRetries, Attempts: attempts, Progress: progress.update})
+	progress.close()
 	if report.Added > 0 || len(report.Skipped) > 0 {
 		if _, writeErr := fmt.Fprintf(out, "Downloaded %d files to %s (%s). Manifest: download.json\n", report.Added, *output, phase); writeErr != nil {
 			return errors.Join(err, writeErr)

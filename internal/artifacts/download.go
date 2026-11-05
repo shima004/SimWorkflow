@@ -37,6 +37,7 @@ type Options struct {
 	Stage                   string
 	WithRetries             bool
 	Attempts                map[string]Attempt
+	Progress                func(Progress)
 }
 
 // Attempt selects one execution for all stages and artifacts of a logical run.
@@ -82,6 +83,8 @@ type downloader struct {
 	selected        map[string]bool
 	report          *Report
 	requiredMissing bool
+	progress        Progress
+	onProgress      func(Progress)
 }
 
 func safePath(name string) bool {
@@ -184,6 +187,8 @@ func Download(ctx context.Context, source Source, plan *experiment.Plan, prefix 
 		return report, errors.New("selected retry attempts have changed; choose a new --output to keep results from different attempts separate")
 	}
 	d := downloader{source: source, ctx: ctx, output: o.Output, selected: selected, report: &report, root: root, existing: map[string]File{}}
+	d.progress.TotalRuns, d.onProgress = len(runs), o.Progress
+	d.emit("preparing", "", 0, -1)
 	if previous != nil {
 		report.Downloaded = append(report.Downloaded, previous.Downloaded...)
 		for _, file := range previous.Downloaded {
@@ -197,6 +202,11 @@ func Download(ctx context.Context, source Source, plan *experiment.Plan, prefix 
 		if e := saveManifest(root, o.Output, report); e != nil {
 			err = errors.Join(err, fmt.Errorf("save download manifest: %w", e))
 		}
+		phase := "finished"
+		if err != nil {
+			phase = "failed"
+		}
+		d.emit(phase, "", 0, -1)
 	}()
 	if selected["plan"] {
 		if err = d.object(prefix+"/plan.json", "plan.json"); err != nil {
@@ -204,6 +214,7 @@ func Download(ctx context.Context, source Source, plan *experiment.Plan, prefix 
 		}
 	}
 	for _, run := range runs {
+		d.emit("checking", run.ID, 0, -1)
 		runPrefix := prefix
 		if o.WithRetries {
 			runPrefix = o.Attempts[run.ID].ResultPrefix
@@ -243,6 +254,8 @@ func Download(ctx context.Context, source Source, plan *experiment.Plan, prefix 
 				}
 			}
 		}
+		d.progress.CompletedRuns++
+		d.emit("run-complete", run.ID, 0, -1)
 	}
 	if report.Added == 0 && len(report.Skipped) == 0 {
 		return report, errors.New("no requested artifacts are available yet; see download.json")
@@ -295,10 +308,11 @@ func (d *downloader) save(name, source string, body io.Reader) (err error) {
 }
 
 func (d *downloader) object(key, local string) error {
+	d.emit("checking", local, 0, -1)
 	if skipped, err := d.skipExisting(local, key); err != nil || skipped {
 		return err
 	}
-	r, err := d.source.Open(d.ctx, key)
+	r, err := d.open(key, local)
 	if storage.IsNotFound(err) {
 		d.report.Unavailable = append(d.report.Unavailable, key)
 		return nil
@@ -327,7 +341,7 @@ func (d *downloader) archive(key, local, stage string, files []string, extract b
 			return nil
 		}
 	}
-	r, err := d.source.Open(d.ctx, key)
+	r, err := d.open(key, local+"/bundle.tar.gz")
 	if storage.IsNotFound(err) {
 		d.requiredMissing = d.requiredMissing || len(files) > 0
 		d.report.Unavailable = append(d.report.Unavailable, key)
@@ -351,6 +365,7 @@ func (d *downloader) archive(key, local, stage string, files []string, extract b
 	if closeErr != nil {
 		return closeErr
 	}
+	d.emit("extracting", local+"/bundle.tar.gz", 0, -1)
 	f, err = os.Open(f.Name())
 	if err != nil {
 		return err

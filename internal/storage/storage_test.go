@@ -9,11 +9,50 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"simworkflow/internal/config"
 )
+
+func TestOpenExposesGETSizeWithoutHEAD(t *testing.T) {
+	for _, known := range []bool{true, false} {
+		t.Run(map[bool]string{true: "known", false: "chunked"}[known], func(t *testing.T) {
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests.Add(1)
+				if r.Method != http.MethodGet {
+					t.Error("progress must not introduce HEAD requests", r.Method)
+				}
+				if known {
+					w.Header().Set("Content-Length", "7")
+				} else {
+					w.(http.Flusher).Flush()
+				}
+				io.WriteString(w, "payload")
+			}))
+			defer server.Close()
+			store := New(config.Config{S3: config.S3{Endpoint: server.URL, Region: "us-east-1", Bucket: "results", AccessKeyID: "test", SecretAccessKey: "test", ForcePathStyle: true}, HTTPTimeout: time.Second})
+			r, err := store.Open(context.Background(), "object")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+			want := int64(-1)
+			if known {
+				want = 7
+			}
+			if r.(interface{ Size() int64 }).Size() != want {
+				t.Fatal("wrong response size")
+			}
+			body, err := io.ReadAll(r)
+			if err != nil || string(body) != "payload" || requests.Load() != 1 {
+				t.Fatal("streaming or request count changed", err, requests.Load())
+			}
+		})
+	}
+}
 
 func TestSignedTransfersAndJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

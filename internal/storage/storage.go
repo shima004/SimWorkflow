@@ -74,8 +74,17 @@ func (s *Store) Open(ctx context.Context, key string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	return response.Body, nil
+	return &objectBody{ReadCloser: response.Body, size: response.ContentLength}, nil
 }
+
+// Size exposes the GET response size without an additional HEAD request.
+// A negative value means the server did not supply a content length.
+type objectBody struct {
+	io.ReadCloser
+	size int64
+}
+
+func (r *objectBody) Size() int64 { return r.size }
 
 // Exists checks a private result object without exposing transport errors.
 func (s *Store) Exists(ctx context.Context, key string) (bool, error) {

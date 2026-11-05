@@ -54,13 +54,20 @@ func TestDownloadCommandAndFileSelection(t *testing.T) {
 	if !strings.Contains(out.String(), "Downloaded 1 files") {
 		t.Fatal(out.String())
 	}
+	if !strings.Contains(errOut.String(), "Finished") || !strings.Contains(errOut.String(), "runs 1/1") || strings.Contains(out.String(), "Preparing") {
+		t.Fatal("progress belongs on stderr and must report completion", errOut.String())
+	}
 	if _, err := os.Stat(filepath.Join(dest, id, "simulation/summary.json")); err != nil {
 		t.Fatal(err)
 	}
 	dest = filepath.Join(t.TempDir(), "rescue-only")
 	out.Reset()
-	if err := run([]string{"experiment", "download", "--include", "summary", "--stage", "simulation", "--output", dest, "test-workflow"}, lookup, &out, &errOut); err != nil {
+	errOut.Reset()
+	if err := run([]string{"experiment", "download", "--no-progress", "--include", "summary", "--stage", "simulation", "--output", dest, "test-workflow"}, lookup, &out, &errOut); err != nil {
 		t.Fatal(err)
+	}
+	if errOut.Len() != 0 {
+		t.Fatal("--no-progress must suppress progress", errOut.String())
 	}
 	out.Reset()
 	if err := run([]string{"experiment", "download", "--file", "logs/simulation/rescue.log.7z", "--run", id, "--output", dest, "test-workflow"}, lookup, &out, &errOut); err != nil {
