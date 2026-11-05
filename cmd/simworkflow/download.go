@@ -132,5 +132,10 @@ func runDownload(ctx context.Context, args []string, c config.Config, out, errOu
 			return errors.Join(err, writeErr)
 		}
 	}
+	if len(report.IndexFiles) > 0 {
+		if _, writeErr := fmt.Fprintln(out, "Run index: runs.csv (overview), runs.json (run details)."); writeErr != nil {
+			return errors.Join(err, writeErr)
+		}
+	}
 	return err
 }

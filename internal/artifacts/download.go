@@ -57,6 +57,7 @@ type File struct {
 	RunID       string `json:"runId,omitempty"`
 }
 type Report struct {
+	IndexFiles     []IndexFile        `json:"indexFiles,omitempty"`
 	Added          int                `json:"addedFiles"`
 	Skipped        []string           `json:"skipped,omitempty"`
 	Workflow       string             `json:"workflow"`
@@ -190,12 +191,16 @@ func Download(ctx context.Context, source Source, plan *experiment.Plan, prefix 
 	d.progress.TotalRuns, d.onProgress = len(runs), o.Progress
 	d.emit("preparing", "", 0, -1)
 	if previous != nil {
+		report.IndexFiles = append(report.IndexFiles, previous.IndexFiles...)
 		report.Downloaded = append(report.Downloaded, previous.Downloaded...)
 		for _, file := range previous.Downloaded {
 			d.existing[file.Path] = file
 		}
 	}
 	defer func() {
+		if e := d.writeRunIndexes(plan); e != nil {
+			err = errors.Join(err, fmt.Errorf("save run index: %w", e))
+		}
 		if err != nil {
 			report.Error = err.Error()
 		}

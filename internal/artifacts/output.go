@@ -66,6 +66,9 @@ func openOutput(path, workflow, prefix string) (*os.Root, *Report, error) {
 	if previous.Workflow != workflow || previous.ResultPrefix != prefix {
 		return failLocked(errors.New("output belongs to a different experiment; choose another --output"))
 	}
+	if err := checkIndexFiles(root, previous.IndexFiles); err != nil {
+		return failLocked(err)
+	}
 	if previous.WithRetries {
 		for id, attempt := range previous.Attempts {
 			if !runPattern.MatchString(id) || !validAttempt(attempt) {

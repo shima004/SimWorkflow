@@ -54,6 +54,9 @@ func TestDownloadCommandAndFileSelection(t *testing.T) {
 	if !strings.Contains(out.String(), "Downloaded 1 files") {
 		t.Fatal(out.String())
 	}
+	if !strings.Contains(out.String(), "Run index: runs.csv") {
+		t.Fatal("download should point to the run-condition index", out.String())
+	}
 	if !strings.Contains(errOut.String(), "Finished") || !strings.Contains(errOut.String(), "runs 1/1") || strings.Contains(out.String(), "Preparing") {
 		t.Fatal("progress belongs on stderr and must report completion", errOut.String())
 	}

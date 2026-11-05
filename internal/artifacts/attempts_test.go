@@ -31,6 +31,14 @@ func TestCombinedDownloadValidatesAttemptsAndProvenance(t *testing.T) {
 	if len(report.Downloaded) != 4 {
 		t.Fatal("wrong number of stage summaries")
 	}
+	indexData, err := os.ReadFile(filepath.Join(output, "runs.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var index RunIndex
+	if err := json.Unmarshal(indexData, &index); err != nil || len(index.Runs) != 2 || index.Runs[1].Source.Workflow != "retry" || index.Runs[1].Source.ResultPrefix != retryPrefix {
+		t.Fatal("run index must identify the selected retry", err, index)
+	}
 	for _, file := range report.Downloaded {
 		a := attempts[file.RunID]
 		if a.Workflow != file.Workflow || a.ExecutionID != file.ExecutionID || !strings.HasPrefix(file.Source, a.ResultPrefix+"/"+file.RunID+"/") {
