@@ -43,6 +43,8 @@ Release配布のCLIは、同じソースからビルド・公開・動作確認�
 
 CLIはhelperの能力ラベルに応じ、対応する場合はグループ別の連番展開と段階別の設定バンドルを選び、旧helperでは対応する設定方式へ自動的に戻します。バンドル対応helperは `io.simworkflow.config-bundle=v1`、連番展開にも対応するhelperは加えて `io.simworkflow.config-sequence=v1` を持ちます。このリポジトリのDockerfileとRelease用ワークフローは、そのラベルを含むhelperを作成します。詳細は [設定保存方式](execution.md#ワーカー設定とworkflowサイズ) を参照してください。
 
+`io.simworkflow.result-zip=v1` を持つhelperでは結果をZIPで保存し、CLIからログを部分取得できます。旧helperはtar.gzを使用します。新しい保存形式を利用するには、CLIとhelperを両方更新してください。
+
 ```sh
 simworkflow experiment submit -f experiment.yaml
 ```

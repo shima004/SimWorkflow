@@ -242,6 +242,11 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 		return errors.New("helper does not advertise configuration bundle v1 support; use an updated helper image or --config-storage s3")
 	}
 	meta.ConfigStorage = configStorage
+	bundleFormat, bundleName := "tar.gz", "bundle.tar.gz"
+	if meta.HelperResultZIP {
+		bundleFormat, bundleName = "zip", "bundle.zip"
+	}
+	operation.Report(ctx, operation.Event{Stage: "Result archive format", Detail: bundleFormat})
 	operation.Report(ctx, operation.Event{Stage: "Worker configuration storage", Detail: configStorage})
 	operation.Report(ctx, operation.Event{Stage: "Validate execution plan", Total: 1})
 	if err := reproduction.ValidatePlan(plan); err != nil {
@@ -288,7 +293,7 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 			if stage == worker.Precompute {
 				stagePrefix += "/precompute"
 			}
-			bundle, err := store.Upload(ctx, stagePrefix+"/bundle.tar.gz")
+			bundle, err := store.Upload(ctx, stagePrefix+"/"+bundleName)
 			if err != nil {
 				return err
 			}
@@ -300,7 +305,7 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 			if err != nil {
 				return err
 			}
-			c := worker.Config{ProgressUpload: &progress, Stage: stage, ExecutionID: executionID, Experiment: plan.Experiment.Name, Run: run, TimeoutSeconds: int64(timeout / time.Second), Map: mapTransfer, Bundle: bundle, Summary: summary, ResultPrefix: stagePrefix, Collect: plan.Collect}
+			c := worker.Config{ProgressUpload: &progress, Stage: stage, ExecutionID: executionID, Experiment: plan.Experiment.Name, Run: run, TimeoutSeconds: int64(timeout / time.Second), Map: mapTransfer, Bundle: bundle, BundleFormat: bundleFormat, Summary: summary, ResultPrefix: stagePrefix, Collect: plan.Collect}
 			key := resultPrefix + "/precompute/data.zip"
 			if stage == worker.Precompute {
 				transfer, err := store.Upload(ctx, key)

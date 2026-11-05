@@ -21,6 +21,7 @@ type downloadProgress struct {
 	lastPrint       time.Time
 	fileStarted     time.Time
 	path            string
+	filePhase       string
 	lastPhase       string
 	now             func() time.Time
 }
@@ -39,12 +40,13 @@ func (p *downloadProgress) update(event artifacts.Progress) {
 		return
 	}
 	now := p.now()
-	if event.Phase == "downloading" && (p.path != event.Path || event.Bytes == 0) {
-		p.path, p.fileStarted = event.Path, now
+	fileProgress := event.Phase == "downloading" || (event.Phase == "extracting" && event.TotalBytes >= 0)
+	if fileProgress && (p.path != event.Path || p.filePhase != event.Phase) {
+		p.path, p.filePhase, p.fileStarted = event.Path, event.Phase, now
 	}
 	final := event.Phase == "finished" || event.Phase == "failed"
 	transition := (event.Phase == "extracting" && p.lastPhase != "extracting") ||
-		(event.Phase == "downloading" && p.lastPhase == "preparing")
+		((event.Phase == "downloading" || event.Phase == "indexing") && p.lastPhase == "preparing")
 	interval := time.Second
 	if p.tty {
 		interval = 100 * time.Millisecond
@@ -84,7 +86,7 @@ func (p *downloadProgress) close() {
 }
 
 func downloadProgressLine(event artifacts.Progress, elapsed time.Duration) string {
-	phase := map[string]string{"preparing": "Preparing", "checking": "Checking", "downloading": "Downloading", "extracting": "Extracting", "run-complete": "Processed", "finished": "Finished", "failed": "Failed"}[event.Phase]
+	phase := map[string]string{"preparing": "Preparing", "checking": "Checking", "indexing": "Indexing ZIP", "downloading": "Downloading", "extracting": "Extracting", "run-complete": "Processed", "finished": "Finished", "failed": "Failed"}[event.Phase]
 	if phase == "" {
 		phase = "Preparing"
 	}
@@ -92,7 +94,7 @@ func downloadProgressLine(event artifacts.Progress, elapsed time.Duration) strin
 	if event.TotalRuns > 0 {
 		runs = fmt.Sprintf(" | runs %d/%d", event.CompletedRuns, event.TotalRuns)
 	}
-	if event.Phase == "downloading" {
+	if event.Phase == "downloading" || (event.Phase == "extracting" && event.TotalBytes >= 0) {
 		var transfer string
 		if event.TotalBytes >= 0 {
 			fraction := float64(1)

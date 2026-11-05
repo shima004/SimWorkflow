@@ -105,6 +105,25 @@ func tarBundle(t *testing.T) []byte {
 	g.Close()
 	return result.Bytes()
 }
+
+func zipResultBundle(t *testing.T) []byte {
+	t.Helper()
+	var result bytes.Buffer
+	z := zip.NewWriter(&result)
+	for path, value := range map[string]string{"modules/fireBrigade/module.yaml": "Move.PathPlanning: example.A1\n", "scenario/config/common.cfg": "random.seed: 1\n", "logs/simulation/kernel.log": "LOG_SENTINEL", "run.json": "SIGNED_URL_DO_NOT_EXPORT", "state/private.json": "STATE_DO_NOT_EXPORT"} {
+		w, err := z.Create(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.WriteString(w, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := z.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return result.Bytes()
+}
 func exported(t *testing.T, logs bool) (*testfixture.Environment, *experiment.Plan, reproduction.Metadata, string) {
 	t.Helper()
 	env := testfixture.New(t)
@@ -137,7 +156,11 @@ func exported(t *testing.T, logs bool) (*testfixture.Environment, *experiment.Pl
 			oldRun := run
 			oldRun.Configuration.Groups = nil
 			env.Objects.Set(key+"/summary.json", testfixture.JSON(t, worker.Summary{Run: oldRun, Stage: stage, ExecutionID: "fixture-execution", Phase: "Succeeded", Score: &score}))
-			env.Objects.Set(key+"/bundle.tar.gz", tarBundle(t))
+			if stage == worker.Simulation {
+				env.Objects.Set(key+"/bundle.zip", zipResultBundle(t))
+			} else {
+				env.Objects.Set(key+"/bundle.tar.gz", tarBundle(t))
+			}
 		}
 		var handoff bytes.Buffer
 		w := zip.NewWriter(&handoff)

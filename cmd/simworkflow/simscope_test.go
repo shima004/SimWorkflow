@@ -188,6 +188,8 @@ func TestSimScopePublishesOnlyRescueLogAndReusesCache(t *testing.T) {
 			} else if cached == nil {
 				w.WriteHeader(http.StatusNotFound)
 			}
+		case strings.HasSuffix(r.URL.Path, "/bundle.zip"):
+			w.WriteHeader(http.StatusNotFound) // Legacy run: no ZIP result.
 		case strings.HasSuffix(r.URL.Path, "/bundle.tar.gz"):
 			reads++
 			w.Write(archive.Bytes())

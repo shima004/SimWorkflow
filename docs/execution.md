@@ -81,14 +81,16 @@ experiments/<execution-id>/<run-id>/precompute/progress.json
 experiments/<execution-id>/<run-id>/progress.json
 experiments/<execution-id>/<run-id>/precompute/data.zip
 experiments/<execution-id>/<run-id>/precompute/summary.json
-experiments/<execution-id>/<run-id>/precompute/bundle.tar.gz
+experiments/<execution-id>/<run-id>/precompute/bundle.zip
 experiments/<execution-id>/<run-id>/summary.json
-experiments/<execution-id>/<run-id>/bundle.tar.gz
+experiments/<execution-id>/<run-id>/bundle.zip
 reproduction/maps/<sha256>.zip
 ```
 
 各段階のバンドルにはその段階の要約、事前計算データ、解決後のモジュール設定、シード反映後のサーバー設定、状態ファイルを保存します。
 エージェントログ・サーバーログは `outputs.collect` の指定に従って追加します。
+
+結果ZIP対応helperは `io.simworkflow.result-zip=v1` を持ち、新しく送信する実験では `bundle.zip` を保存します。テキストはファイルごとに圧縮し、`.zip`・`.gz`・`.7z` は再圧縮せず格納します。これにより、ダウンロード時に指定ログだけを部分取得できます。旧helperや旧設定では引き続き `bundle.tar.gz` を保存します。CLIの更新だけでは既存Podの保存形式は変わらないため、更新したhelperで新しくsubmitしてください。再送信・再現実行で元の旧helperを使用する場合も旧形式になります。
 ワーカー開始後の失敗やタイムアウトでも結果保存を試みます。Pod自体の起動・イメージ取得・準備処理に失敗した場合や、強制削除・保存先への通信失敗では要約を保存できないため、Argoの状態を確認してください。
 
 ## 完了Podの自動削除

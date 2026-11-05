@@ -27,6 +27,8 @@ simworkflow experiment export --include-logs --output experiment-with-logs.zip W
 
 同じマップはSHA-256で、イメージとレイヤーはdigestで重複を除きます。ログは `--include-logs` を指定し、元の実験で収集されている場合に保存します。失敗した実験などで要約・事前計算データがない場合は、`missingResults` に記録します。再実行に必要なマップやイメージが不足している場合はZIPを完成させず、エラーにします。
 
+参考結果は新しい `bundle.zip` と旧 `bundle.tar.gz` の両方から取得できます。ZIPでは目次と対象ファイルを部分取得し、`--include-logs` を指定しなければ不要な巨大ログを転送しません。復元先では同梱helperの能力に応じた形式で新しい結果を保存します。
+
 CLIの接続設定・認証情報、署名付きURLを含むワーカー設定、元のWorkflowは保存しません。イメージの内容と、選択したログ・結果はそのまま保存します。
 
 ## 別環境で再実行する

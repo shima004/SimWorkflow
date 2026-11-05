@@ -22,6 +22,7 @@ import (
 
 const ConfigBundleCapabilityLabel = "io.simworkflow.config-bundle"
 const ConfigSequenceCapabilityLabel = "io.simworkflow.config-sequence"
+const ResultZIPCapabilityLabel = "io.simworkflow.result-zip"
 const maxConfigBundleManifestBytes = 4 << 20
 const maxConfigBundleBytes = int64(64 << 20)
 const maxConfigBundleExpanded = int64(256 << 20)

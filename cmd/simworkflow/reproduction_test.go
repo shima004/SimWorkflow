@@ -117,7 +117,7 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 	if err := json.Unmarshal(source.Objects.Get("/fixture/"+prefix+"/reproduction.json"), &capture); err != nil || capture.PlanSHA256 != reproduction.PlanSHA256(&original) {
 		t.Fatal("submission did not save reproduction provenance")
 	}
-	if capture.ConfigStorage != "s3-sequence" || !capture.HelperConfigSequence || !capture.HelperConfigBundle {
+	if capture.ConfigStorage != "s3-sequence" || !capture.HelperConfigSequence || !capture.HelperConfigBundle || !capture.HelperResultZIP {
 		t.Fatal("compatible helper must automatically use stage bundles")
 	}
 	for _, stage := range []string{worker.Precompute, worker.Simulation} {
@@ -130,6 +130,9 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 		c, err := worker.ReadRunConfigSource(context.Background(), worker.RunConfigSource{BundleURL: source.S3.URL + key, BundleSHA256: hex.EncodeToString(sha[:]), Sequence: experiment.SequenceName(original.Runs[0]), Index: "0", Stage: stage, ExecutionID: snapshot.Metadata.Annotations["simworkflow.io/execution-id"]})
 		if err != nil || c.Run.ID != original.Runs[0].ID || len(c.Run.Configuration.Groups) != 2 {
 			t.Fatal("saved bundle was not usable by a worker", err)
+		}
+		if c.BundleFormat != "zip" || !strings.Contains(c.Bundle.URL, "/bundle.zip?") {
+			t.Fatal("new helper must upload ZIP results", c.BundleFormat)
 		}
 		if len(source.Objects.Get("/fixture/"+prefix+"/configs/"+original.Runs[0].ID+"/"+stage+".json")) != 0 {
 			t.Fatal("bundled mode must not create per-run configuration objects")

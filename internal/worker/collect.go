@@ -2,6 +2,7 @@ package worker
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"compress/gzip"
 	"context"
 	"encoding/json"
@@ -154,9 +155,15 @@ waiting:
 	if err := writeJSON(filepath.Join(root, "result.json"), summary); err != nil {
 		return err
 	}
-	archive := filepath.Join(root, "bundle.tar.gz")
+	archiveName := "bundle.tar.gz"
+	if c.BundleFormat == "zip" {
+		archiveName = "bundle.zip"
+	} else if c.BundleFormat != "" && c.BundleFormat != "tar.gz" {
+		return errors.New("unsupported result bundle format")
+	}
+	archive := filepath.Join(root, archiveName)
 	reporter.setActivity("compressing")
-	if err := bundle(root, archive, c.Collect); err != nil {
+	if err := bundleResult(root, archive, c.Collect, c.BundleFormat); err != nil {
 		return err
 	}
 	f, err := os.Open(archive)
@@ -186,16 +193,30 @@ waiting:
 	return nil
 }
 
-func bundle(root, destination string, collect []string) (err error) {
+func bundle(root, destination string, collect []string) error {
+	return bundleResult(root, destination, collect, "tar.gz")
+}
+
+func bundleResult(root, destination string, collect []string, format string) (err error) {
 	f, err := os.Create(destination)
 	if err != nil {
 		return err
 	}
-	gz := gzip.NewWriter(f)
-	tw := tar.NewWriter(gz)
+	var zw *zip.Writer
+	var tw *tar.Writer
+	closers := []io.Closer{}
+	if format == "zip" {
+		zw = zip.NewWriter(f)
+		closers = append(closers, zw)
+	} else {
+		gz := gzip.NewWriter(f)
+		tw = tar.NewWriter(gz)
+		closers = append(closers, tw, gz)
+	}
+	closers = append(closers, f)
 	defer func() {
-		for _, close := range []func() error{tw.Close, gz.Close, f.Close} {
-			if e := close(); err == nil && e != nil {
+		for _, closer := range closers {
+			if e := closer.Close(); err == nil && e != nil {
 				err = e
 			}
 		}
@@ -227,20 +248,42 @@ func bundle(root, destination string, collect []string) (err error) {
 			if !info.Mode().IsRegular() {
 				return errors.New("result artifacts must contain regular files")
 			}
-			header, err := tar.FileInfoHeader(info, "")
+			name, err := filepath.Rel(root, path)
 			if err != nil {
 				return err
 			}
-			header.Name, _ = filepath.Rel(root, path)
-			header.Name = filepath.ToSlash(header.Name)
-			if err := tw.WriteHeader(header); err != nil {
-				return err
+			name = filepath.ToSlash(name)
+			var target io.Writer
+			if zw != nil {
+				header, err := zip.FileInfoHeader(info)
+				if err != nil {
+					return err
+				}
+				header.Name, header.Method = name, zip.Deflate
+				switch strings.ToLower(filepath.Ext(name)) {
+				case ".zip", ".gz", ".7z":
+					header.Method = zip.Store
+				}
+				target, err = zw.CreateHeader(header)
+				if err != nil {
+					return err
+				}
+			} else {
+				header, err := tar.FileInfoHeader(info, "")
+				if err != nil {
+					return err
+				}
+				header.Name = name
+				if err := tw.WriteHeader(header); err != nil {
+					return err
+				}
+				target = tw
 			}
 			source, err := os.Open(path)
 			if err != nil {
 				return err
 			}
-			_, copyErr := io.Copy(tw, source)
+			_, copyErr := io.Copy(target, source)
 			closeErr := source.Close()
 			if copyErr != nil {
 				return copyErr

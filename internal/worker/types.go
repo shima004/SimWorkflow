@@ -31,6 +31,7 @@ type Config struct {
 	TimeoutSeconds     int64             `json:"timeoutSeconds"`
 	Map                storage.Transfer  `json:"map"`
 	Bundle             storage.Transfer  `json:"bundle"`
+	BundleFormat       string            `json:"bundleFormat,omitempty"`
 	Summary            storage.Transfer  `json:"summary"`
 	ResultPrefix       string            `json:"resultPrefix"`
 	Collect            []string          `json:"collect"`

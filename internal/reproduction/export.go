@@ -181,6 +181,13 @@ func Export(ctx context.Context, c config.Config, plan *experiment.Plan, meta Me
 					return err
 				}
 			}
+			zipFound, err := exportZIPReference(ctx, store, key+"/bundle.zip", filepath.Join(directory, filepath.FromSlash(local)), o.IncludeLogs)
+			if err != nil {
+				return err
+			}
+			if zipFound {
+				continue
+			}
 			body, err := store.Open(ctx, key+"/bundle.tar.gz")
 			if storage.IsNotFound(err) {
 				manifest.MissingResults = append(manifest.MissingResults, local+"/modules-and-config")

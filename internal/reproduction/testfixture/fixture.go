@@ -5,6 +5,7 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -54,10 +55,8 @@ func (o *Objects) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(404)
 			return
 		}
-		w.Header().Set("Content-Length", fmt.Sprint(len(value)))
-		if r.Method == "GET" {
-			w.Write(value)
-		}
+		w.Header().Set("ETag", fmt.Sprintf(`"%x"`, sha256.Sum256(value)))
+		http.ServeContent(w, r, "object", time.Time{}, bytes.NewReader(value))
 	default:
 		w.WriteHeader(405)
 	}
@@ -109,7 +108,7 @@ func New(t testing.TB) *Environment {
 		t.Fatal(err)
 	}
 	cfg.OS, cfg.Architecture = "linux", "amd64"
-	cfg.Config.Labels = map[string]string{"io.simworkflow.config-bundle": "v1", "io.simworkflow.config-sequence": "v1"}
+	cfg.Config.Labels = map[string]string{"io.simworkflow.config-bundle": "v1", "io.simworkflow.config-sequence": "v1", "io.simworkflow.result-zip": "v1"}
 	image, err = mutate.ConfigFile(image, cfg)
 	if err != nil {
 		t.Fatal(err)

@@ -41,6 +41,7 @@ type Metadata struct {
 	ConfigStorage        string                 `json:"configStorage,omitempty"`
 	HelperConfigBundle   bool                   `json:"helperConfigBundle,omitempty"`
 	HelperConfigSequence bool                   `json:"helperConfigSequence,omitempty"`
+	HelperResultZIP      bool                   `json:"helperResultZIP,omitempty"`
 	Images               map[string]string      `json:"images"`
 	Definition           *experiment.Experiment `json:"definition,omitempty"`
 }
@@ -77,6 +78,7 @@ func Capture(ctx context.Context, c config.Config, input *experiment.Experiment,
 	}
 	meta.HelperConfigBundle = helperConfig.Config.Labels[worker.ConfigBundleCapabilityLabel] == "v1"
 	meta.HelperConfigSequence = meta.HelperConfigBundle && helperConfig.Config.Labels[worker.ConfigSequenceCapabilityLabel] == "v1"
+	meta.HelperResultZIP = helperConfig.Config.Labels[worker.ResultZIPCapabilityLabel] == "v1"
 	mode := "s3"
 	if meta.HelperConfigBundle {
 		mode = "s3-bundle"

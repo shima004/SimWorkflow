@@ -324,7 +324,7 @@ func (d *downloader) object(key, local string) error {
 	return d.save(local, key, r)
 }
 
-func (d *downloader) archive(key, local, stage string, files []string, extract bool) error {
+func (d *downloader) tarArchive(key, local, stage string, files []string, extract bool) error {
 	if !extract {
 		return d.object(key, local+"/bundle.tar.gz")
 	}
