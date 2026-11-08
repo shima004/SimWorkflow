@@ -6,6 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/progress"
+	"github.com/muesli/termenv"
+
 	"simworkflow/internal/artifacts"
 )
 
@@ -14,12 +17,13 @@ func TestDownloadProgressSizesAndTerminalSafety(t *testing.T) {
 		event artifacts.Progress
 		want  []string
 	}{
-		{artifacts.Progress{Phase: "downloading", Bytes: 1 << 20, TotalBytes: 2 << 20, TotalRuns: 4, CompletedRuns: 1, Path: "logs/\x1b[31mkernel\n.log"}, []string{"[#####-----]", "50%", "1.0MiB/2.0MiB", "runs 1/4", "1.0MiB/s"}},
+		{artifacts.Progress{Phase: "downloading", Bytes: 1 << 20, TotalBytes: 2 << 20, TotalRuns: 4, CompletedRuns: 1, Path: "logs/\x1b[31mkernel\n.log"}, []string{"█████░░░░░", "50%", "1.0MiB/2.0MiB", "runs 1/4", "1.0MiB/s"}},
 		{artifacts.Progress{Phase: "downloading", Bytes: 123, TotalBytes: -1}, []string{"123B", "size unknown"}},
-		{artifacts.Progress{Phase: "finished", CompletedRuns: 4, TotalRuns: 4, TransferredBytes: 3 << 30}, []string{"Finished", "[##########]", "runs 4/4", "3.0GiB"}},
+		{artifacts.Progress{Phase: "finished", CompletedRuns: 4, TotalRuns: 4, TransferredBytes: 3 << 30}, []string{"Finished", "██████████", "runs 4/4", "3.0GiB"}},
 		{artifacts.Progress{Phase: "extracting", TotalRuns: 1}, []string{"Extracting", "runs 0/1"}},
 	} {
-		line := downloadProgressLine(tc.event, time.Second)
+		bar := progress.New(progress.WithWidth(10), progress.WithoutPercentage(), progress.WithColorProfile(termenv.Ascii))
+		line := downloadProgressLine(tc.event, time.Second, bar)
 		for _, want := range tc.want {
 			if !strings.Contains(line, want) {
 				t.Fatalf("%q missing %q", line, want)

@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/term"
+	"github.com/muesli/termenv"
 
 	"simworkflow/internal/artifacts"
 )
@@ -23,6 +25,7 @@ type downloadProgress struct {
 	path            string
 	filePhase       string
 	lastPhase       string
+	bar             *progress.Model
 	now             func() time.Time
 }
 
@@ -59,14 +62,24 @@ func (p *downloadProgress) update(event artifacts.Progress) {
 			event.Path = suffix
 		}
 	}
-	line := downloadProgressLine(event, now.Sub(p.fileStarted))
+	width := 100
 	if p.tty {
-		width := 100
 		if f, ok := p.out.(*os.File); ok {
 			if w, _, err := term.GetSize(f.Fd()); err == nil && w > 1 {
 				width = w
 			}
 		}
+	}
+	if p.bar == nil {
+		bar := progress.New(progress.WithDefaultGradient(), progress.WithoutPercentage())
+		if !p.tty {
+			bar = progress.New(progress.WithoutPercentage(), progress.WithColorProfile(termenv.Ascii))
+		}
+		p.bar = &bar
+	}
+	p.bar.Width = min(30, max(10, width/4))
+	line := downloadProgressLine(event, now.Sub(p.fileStarted), *p.bar)
+	if p.tty {
 		fmt.Fprintf(p.out, "\r\x1b[2K%s", ansi.Truncate(line, width-1, "…"))
 	} else {
 		fmt.Fprintln(p.out, line)
@@ -85,7 +98,7 @@ func (p *downloadProgress) close() {
 	p.closed = true
 }
 
-func downloadProgressLine(event artifacts.Progress, elapsed time.Duration) string {
+func downloadProgressLine(event artifacts.Progress, elapsed time.Duration, bar progress.Model) string {
 	phase := map[string]string{"preparing": "Preparing", "checking": "Checking", "indexing": "Indexing ZIP", "downloading": "Downloading", "extracting": "Extracting", "run-complete": "Processed", "finished": "Finished", "failed": "Failed"}[event.Phase]
 	if phase == "" {
 		phase = "Preparing"
@@ -101,7 +114,7 @@ func downloadProgressLine(event artifacts.Progress, elapsed time.Duration) strin
 			if event.TotalBytes > 0 {
 				fraction = min(1, max(0, float64(event.Bytes)/float64(event.TotalBytes)))
 			}
-			transfer = fmt.Sprintf("%s %3.0f%% %s/%s", downloadBar(fraction), math.Floor(fraction*100), downloadBytes(event.Bytes), downloadBytes(event.TotalBytes))
+			transfer = fmt.Sprintf("%s %3.0f%% %s/%s", bar.ViewAs(fraction), math.Floor(fraction*100), downloadBytes(event.Bytes), downloadBytes(event.TotalBytes))
 		} else {
 			transfer = fmt.Sprintf("[    ?     ] %s (size unknown)", downloadBytes(event.Bytes))
 		}
@@ -111,20 +124,15 @@ func downloadProgressLine(event artifacts.Progress, elapsed time.Duration) strin
 		}
 		return phase + " " + transfer + runs + speed + " | " + strings.ReplaceAll(screenText(event.Path), "\n", " ")
 	}
-	bar := ""
+	barView := ""
 	if event.TotalRuns > 0 {
-		bar = " " + downloadBar(float64(event.CompletedRuns)/float64(event.TotalRuns))
+		barView = " " + bar.ViewAs(float64(event.CompletedRuns)/float64(event.TotalRuns))
 	}
 	path := strings.ReplaceAll(screenText(event.Path), "\n", " ")
 	if path != "" {
 		path = " | " + path
 	}
-	return fmt.Sprintf("%s%s%s | transferred %s%s", phase, bar, runs, downloadBytes(event.TransferredBytes), path)
-}
-
-func downloadBar(fraction float64) string {
-	n := int(min(1, max(0, fraction)) * 10)
-	return "[" + strings.Repeat("#", n) + strings.Repeat("-", 10-n) + "]"
+	return fmt.Sprintf("%s%s%s | transferred %s%s", phase, barView, runs, downloadBytes(event.TransferredBytes), path)
 }
 
 func downloadBytes(n int64) string {
