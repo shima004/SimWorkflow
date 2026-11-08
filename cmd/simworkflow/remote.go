@@ -46,8 +46,10 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 	command := args[0]
-	if command == "render" || command == "submit" || command == "retry" {
-		ctx = operation.WithReporter(ctx, submissionReporter(errOut))
+	if command == "render" || command == "submit" || command == "retry" || command == "export" || command == "reproduce" {
+		report, closeProgress := operationReporter(errOut, time.Now)
+		defer closeProgress()
+		ctx = operation.WithReporter(ctx, report)
 	}
 	if command == "retry" {
 		return runRetry(ctx, args[1:], c, out, errOut)

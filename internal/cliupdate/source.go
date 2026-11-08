@@ -14,6 +14,7 @@ import (
 
 	selfupdate "github.com/creativeprojects/go-selfupdate"
 	"github.com/google/go-github/v30/github"
+	"simworkflow/internal/operation"
 )
 
 const Repository = "shima004/SimWorkflow"
@@ -52,7 +53,11 @@ func (s *PublicSource) get(ctx context.Context, address string, limit int64) (io
 		resp.Body.Close()
 		return nil, errors.New("release response exceeds size limit")
 	}
-	return http.MaxBytesReader(nil, resp.Body, limit), nil
+	body := http.MaxBytesReader(nil, resp.Body, limit)
+	if limit == 128<<20 {
+		body = operation.Body(ctx, "Download CLI release", body, resp.ContentLength)
+	}
+	return body, nil
 }
 
 func (s *PublicSource) ListReleases(ctx context.Context, repository selfupdate.Repository) ([]selfupdate.SourceRelease, error) {

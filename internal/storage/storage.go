@@ -19,6 +19,7 @@ import (
 
 	"simworkflow/internal/config"
 	"simworkflow/internal/connections"
+	"simworkflow/internal/operation"
 )
 
 // SignedURLValidity is the maximum S3 SigV4 presigned URL lifetime.
@@ -47,7 +48,7 @@ func (s *Store) PutJSON(ctx context.Context, key string, value any) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.Client.PutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(s.Bucket), Key: aws.String(key), Body: bytes.NewReader(data), ContentType: aws.String("application/json")})
+	_, err = s.Client.PutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(s.Bucket), Key: aws.String(key), Body: bytes.NewReader(data), ContentType: aws.String("application/json")}, progressOption)
 	return safeError(err)
 }
 
@@ -165,7 +166,7 @@ func Request(ctx context.Context, method string, transfer Transfer, body io.Read
 		}
 	}
 	client := &http.Client{Timeout: 10 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	resp, err := client.Do(req)
+	resp, err := operation.Client{Base: client}.Do(req)
 	if err != nil {
 		return nil, errors.New("object transfer failed")
 	}
@@ -178,3 +179,5 @@ func Request(ctx context.Context, method string, transfer Transfer, body io.Read
 	}
 	return resp, nil
 }
+
+func progressOption(o *s3.Options) { o.HTTPClient = operation.Client{Base: o.HTTPClient} }

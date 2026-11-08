@@ -1,7 +1,9 @@
 package storage
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +16,65 @@ import (
 	"time"
 
 	"simworkflow/internal/config"
+	"simworkflow/internal/operation"
 )
+
+func TestTransferProgressCountsHTTPBodyWithoutExtraRequests(t *testing.T) {
+	payload := bytes.Repeat([]byte("a"), 2<<20)
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		switch r.Method {
+		case http.MethodPut:
+			got, err := io.ReadAll(r.Body)
+			if err != nil || !bytes.Equal(got, payload) {
+				t.Error("upload body changed", err, len(got))
+			}
+			w.Header().Set("ETag", `"test"`)
+		case http.MethodGet:
+			w.Header().Set("Content-Length", fmt.Sprint(len(payload)))
+			w.Write(payload)
+		default:
+			t.Error("unexpected request", r.Method)
+		}
+	}))
+	defer server.Close()
+	store := New(config.Config{S3: config.S3{Endpoint: server.URL, Region: "us-east-1", Bucket: "results", AccessKeyID: "test", SecretAccessKey: "test", ForcePathStyle: true}, HTTPTimeout: time.Second})
+	for _, upload := range []bool{true, false} {
+		var events []operation.Event
+		ctx := operation.WithReporter(context.Background(), func(e operation.Event) { events = append(events, e) })
+		if upload {
+			if err := store.PutImmutable(ctx, "private-object", bytes.NewReader(payload), "application/zip", nil); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			body, err := store.Open(ctx, "private-object")
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = io.Copy(io.Discard, body)
+			body.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if len(events) < 2 {
+			t.Fatal("no transfer progress", events)
+		}
+		last := events[len(events)-1]
+		if last.Bytes != int64(len(payload)) || last.TotalBytes != int64(len(payload)) {
+			t.Fatal("counted hashing or changed total", last)
+		}
+		for _, e := range events {
+			if strings.Contains(fmt.Sprint(e), "private-object") || strings.Contains(fmt.Sprint(e), "X-Amz") {
+				t.Fatal("object location leaked", e)
+			}
+		}
+	}
+	if requests.Load() != 2 {
+		t.Fatal("progress introduced requests", requests.Load())
+	}
+}
 
 func TestOpenExposesGETSizeWithoutHEAD(t *testing.T) {
 	for _, known := range []bool{true, false} {

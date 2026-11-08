@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"simworkflow/internal/operation"
 	"simworkflow/internal/resultarchive"
 	"simworkflow/internal/storage"
 )
@@ -59,7 +60,7 @@ func exportZIPReference(ctx context.Context, store *storage.Store, key, destinat
 		if err != nil {
 			return true, err
 		}
-		err = copyFile(ctx, filepath.Join(destination, filepath.FromSlash(file.Name)), r, int64(file.UncompressedSize64))
+		err = copyFile(ctx, filepath.Join(destination, filepath.FromSlash(file.Name)), operation.Reader(ctx, "Export result file", int64(file.UncompressedSize64), r), int64(file.UncompressedSize64))
 		closeErr := r.Close()
 		if err != nil {
 			return true, err

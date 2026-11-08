@@ -21,7 +21,7 @@ type ObjectInfo struct {
 // PutImmutable requests create-only semantics using If-None-Match. Atomicity
 // across clients requires the S3 backend to implement conditional PUT correctly.
 func (s *Store) PutImmutable(ctx context.Context, key string, body io.ReadSeeker, contentType string, metadata map[string]string) error {
-	_, err := s.Client.PutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(s.Bucket), Key: aws.String(key), Body: body, ContentType: aws.String(contentType), Metadata: metadata, IfNoneMatch: aws.String("*")})
+	_, err := s.Client.PutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(s.Bucket), Key: aws.String(key), Body: body, ContentType: aws.String(contentType), Metadata: metadata, IfNoneMatch: aws.String("*")}, progressOption)
 	var response *smithyhttp.ResponseError
 	if errors.As(err, &response) && (response.HTTPStatusCode() == 412 || response.HTTPStatusCode() == 409) {
 		return ErrAlreadyExists

@@ -8,9 +8,11 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"time"
 
 	"simworkflow/internal/agentbuild"
 	"simworkflow/internal/config"
+	"simworkflow/internal/operation"
 )
 
 func runAgent(args []string, load func(bool) (config.Config, error), out, errOut io.Writer) error {
@@ -51,7 +53,11 @@ func runAgentWithBuilder(args []string, load func(bool) (config.Config, error), 
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
+	report, closeProgress := operationReporter(errOut, time.Now)
+	defer closeProgress()
+	ctx = operation.WithReporter(ctx, report)
 	result, err := builder.Build(ctx, o, c, errOut)
+	closeProgress()
 	if err != nil {
 		return err
 	}

@@ -17,6 +17,7 @@ import (
 
 	"simworkflow/internal/agentbuild"
 	"simworkflow/internal/config"
+	"simworkflow/internal/operation"
 )
 
 const Platform = "linux/amd64"
@@ -128,10 +129,16 @@ func (t *transport) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 	ctx, cancel := context.WithTimeout(request.Context(), timeout)
 	request = request.WithContext(ctx)
+	if request.Method == http.MethodPut || request.Method == http.MethodPatch {
+		request.Body = operation.Body(ctx, "Upload image layer", request.Body, request.ContentLength)
+	}
 	response, err := t.base.RoundTrip(request)
 	if err != nil {
 		cancel()
 		return nil, err
+	}
+	if request.Method == http.MethodGet && response.StatusCode >= 200 && response.StatusCode < 300 && strings.Contains(request.URL.Path, "/blobs/") {
+		response.Body = operation.Body(ctx, "Download image layer", response.Body, response.ContentLength)
 	}
 	response.Body = &body{ReadCloser: response.Body, cancel: cancel}
 	return response, nil

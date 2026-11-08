@@ -20,6 +20,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"simworkflow/internal/experiment"
 	"simworkflow/internal/maparchive"
+	"simworkflow/internal/operation"
 )
 
 const maxTotal = int64(1 << 40)
@@ -67,7 +68,11 @@ func hashFile(ctx context.Context, path string) (File, error) {
 	}
 	defer f.Close()
 	h := sha256.New()
-	n, err := io.Copy(h, contextReader{ctx, f})
+	info, err := f.Stat()
+	if err != nil {
+		return File{}, err
+	}
+	n, err := io.Copy(h, contextReader{ctx, operation.Reader(ctx, "Checksum export file", info.Size(), f)})
 	return File{Size: n, SHA256: hex.EncodeToString(h.Sum(nil))}, err
 }
 func jsonFile(path string, value any) error {
@@ -152,7 +157,14 @@ func WriteZIP(ctx context.Context, directory, destination string, manifest *Mani
 			tmp.Close()
 			return err
 		}
-		_, err = io.Copy(writer, contextReader{ctx, source})
+		info, statErr := source.Stat()
+		if statErr != nil {
+			source.Close()
+			z.Close()
+			tmp.Close()
+			return statErr
+		}
+		_, err = io.Copy(writer, contextReader{ctx, operation.Reader(ctx, "Write reproduction ZIP", info.Size(), source)})
 		source.Close()
 		if err != nil {
 			z.Close()
@@ -185,7 +197,14 @@ func WriteZIP(ctx context.Context, directory, destination string, manifest *Mani
 		os.Remove(destination)
 		return err
 	}
-	_, copyErr := io.Copy(out, contextReader{ctx, source})
+	info, statErr := source.Stat()
+	if statErr != nil {
+		source.Close()
+		out.Close()
+		os.Remove(destination)
+		return statErr
+	}
+	_, copyErr := io.Copy(out, contextReader{ctx, operation.Reader(ctx, "Publish reproduction ZIP", info.Size(), source)})
 	source.Close()
 	closeErr := out.Close()
 	if copyErr != nil || closeErr != nil {
@@ -264,7 +283,7 @@ func OpenContext(ctx context.Context, path string) (a *Archive, err error) {
 			return nil, e
 		}
 		h := sha256.New()
-		_, e = io.Copy(io.MultiWriter(out, h), contextReader{ctx, input})
+		_, e = io.Copy(io.MultiWriter(out, h), contextReader{ctx, operation.Reader(ctx, "Verify reproduction ZIP file", expected.Size, input)})
 		input.Close()
 		closeErr := out.Close()
 		if e != nil || closeErr != nil || hex.EncodeToString(h.Sum(nil)) != expected.SHA256 {
@@ -367,7 +386,7 @@ func ValidateImage(ctx context.Context, image v1.Image) error {
 			return errors.New("missing image layer blob")
 		}
 		h := sha256.New()
-		n, copyErr := io.Copy(h, io.LimitReader(contextReader{ctx, body}, maxFile+1))
+		n, copyErr := io.Copy(h, io.LimitReader(contextReader{ctx, operation.Reader(ctx, "Verify image layer", manifest.Layers[i].Size, body)}, maxFile+1))
 		body.Close()
 		if copyErr != nil || n > maxFile || n != manifest.Layers[i].Size || digest.Algorithm != "sha256" || hex.EncodeToString(h.Sum(nil)) != digest.Hex {
 			return errors.New("image layer digest mismatch")

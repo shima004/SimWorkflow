@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"path/filepath"
 
@@ -12,6 +11,7 @@ import (
 	"simworkflow/internal/config"
 	"simworkflow/internal/experiment"
 	"simworkflow/internal/imageio"
+	"simworkflow/internal/operation"
 	"simworkflow/internal/storage"
 	"simworkflow/internal/worker"
 )
@@ -67,6 +67,8 @@ func (a *Archive) ImportTo(ctx context.Context, c config.Config, name, repositor
 	client := imageio.New(c)
 	client.Repository = repository
 	byDigest := map[string]string{}
+	imageCount := 0
+	operation.Report(ctx, operation.Event{Stage: "Import container images", Total: len(required)})
 	for ref := range required {
 		image, err := a.Image(ref)
 		if err != nil {
@@ -78,7 +80,6 @@ func (a *Archive) ImportTo(ctx context.Context, c config.Config, name, repositor
 		}
 		destination, ok := byDigest[digest.String()]
 		if !ok {
-			fmt.Fprintln(log, "Importing image", digest.String())
 			destination, err = client.Push(ctx, image)
 			if err != nil {
 				return nil, meta, nil, err
@@ -86,16 +87,22 @@ func (a *Archive) ImportTo(ctx context.Context, c config.Config, name, repositor
 			byDigest[digest.String()] = destination
 		}
 		meta.Images[ref] = destination
+		imageCount++
+		operation.Report(ctx, operation.Event{Stage: "Import container images", Completed: imageCount, Total: len(required)})
 	}
 	meta.HelperImage = meta.Images[a.Manifest.Metadata.HelperImage]
 	store := storage.New(c)
 	mapLocations := map[string]string{}
+	mapCount := 0
+	operation.Report(ctx, operation.Event{Stage: "Import maps", Total: len(a.Manifest.Maps)})
 	for sha, file := range a.Manifest.Maps {
 		location, err := saveMap(ctx, store, filepath.Join(a.Directory, filepath.FromSlash(file)), sha)
 		if err != nil {
 			return nil, meta, nil, err
 		}
 		mapLocations[sha] = location
+		mapCount++
+		operation.Report(ctx, operation.Event{Stage: "Import maps", Completed: mapCount, Total: len(a.Manifest.Maps)})
 	}
 	plan.Experiment.Name = name
 	mapping := map[string]string{}

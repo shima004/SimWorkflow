@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"text/tabwriter"
+	"time"
 
 	"simworkflow/internal/config"
 	"simworkflow/internal/mapcatalog"
@@ -58,13 +59,16 @@ func runMap(args []string, c config.Config, out, errOut io.Writer) error {
 	catalog := &mapcatalog.Catalog{Store: storage.New(c)}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
+	if command == "list" && *name == "" && *format == "auto" && interactiveOutput(os.Stdin, out) {
+		return browseMaps(ctx, catalog, os.Stdin, out)
+	}
+	report, closeProgress := operationReporter(errOut, time.Now)
+	defer closeProgress()
+	ctx = operation.WithReporter(ctx, report)
 	encoder := json.NewEncoder(out)
 	encoder.SetIndent("", "  ")
 	if command == "list" {
 		if *name == "" {
-			if *format == "auto" && interactiveOutput(os.Stdin, out) {
-				return browseMaps(ctx, catalog, os.Stdin, out)
-			}
 			names, err := catalog.Names(ctx)
 			if err != nil {
 				return err
@@ -79,7 +83,6 @@ func runMap(args []string, c config.Config, out, errOut io.Writer) error {
 			}
 			return nil
 		}
-		ctx = operation.WithReporter(ctx, submissionReporter(errOut))
 		entries, err := catalog.List(ctx, *name)
 		if err != nil {
 			return err
@@ -108,6 +111,7 @@ func runMap(args []string, c config.Config, out, errOut io.Writer) error {
 		return errors.New("register requires --path DIRECTORY_OR_ZIP")
 	}
 	entry, err := catalog.Register(ctx, path, mapcatalog.RegisterOptions{Name: *name, Version: version, Description: description, Origin: origin})
+	closeProgress()
 	if err != nil {
 		return err
 	}

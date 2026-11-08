@@ -42,6 +42,8 @@ simworkflow experiment download --no-progress --include summary WORKFLOW_NAME
 
 通常のオブジェクト転送では総容量をGETレスポンスから取得します。ZIPの部分取得では対象バンドルのHEADでサイズとETagを確認し、目次と指定ファイルの範囲だけを取得します。全実行のファイル容量を事前に調べる処理は行いません。`Indexing ZIP` は目次の取得、ZIP内ファイルの `Extracting` バーは展開済み容量を示します。`transferred` には目次や先読みを含むS3からの取得量を加算し、ローカルでの展開量は加算しません。
 
+マップ登録、`agent build --push`、`experiment export`・`reproduce`、`self-update` にも進捗を表示します。submit時のマップ検証や設定アップロードも対象です。転送はオブジェクト・イメージのレイヤーごとに容量と割合を表示し、export・reproduceのZIP作成・検証はファイルごとに表示します。並列転送中は直近の転送が表示されるため、バーは操作全体の取得割合ではありません。総容量が不明な場合は処理済み容量のみ、マップ検証などは処理済み件数を表示します。細かな通信で表示が埋まらないよう、1MiB未満のHTTP転送は容量表示を省きます。これらの進捗も標準エラー出力へ送り、JSONなどの標準出力には混ぜません。
+
 ## 再送信分を含める
 
 ```sh

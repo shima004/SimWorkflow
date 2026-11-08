@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"simworkflow/internal/cliupdate"
+	"simworkflow/internal/operation"
 )
 
 func runSelfUpdate(args []string, out, errOut io.Writer) error {
@@ -44,7 +45,11 @@ func runSelfUpdate(args []string, out, errOut io.Writer) error {
 	defer cancel()
 	ctx, timeout := context.WithTimeout(ctx, 5*time.Minute)
 	defer timeout()
+	report, closeProgress := operationReporter(errOut, time.Now)
+	defer closeProgress()
+	ctx = operation.WithReporter(ctx, report)
 	result, err := cliupdate.New().Run(ctx, o, errOut)
+	closeProgress()
 	if err != nil {
 		return err
 	}

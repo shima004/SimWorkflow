@@ -19,6 +19,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
 	"simworkflow/internal/config"
+	"simworkflow/internal/operation"
 )
 
 var repositoryComponent = regexp.MustCompile(`^[a-z0-9]+(?:(?:[._]|__|[-]+)[a-z0-9]+)*$`)
@@ -157,6 +158,9 @@ func (t *registryTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	// The library normally guesses HTTP for private/loopback addresses. The
 	// user's scheme is authoritative, including explicit HTTPS on private IPs.
 	req.URL.Scheme = t.origin.Scheme
+	if req.Method == http.MethodPut || req.Method == http.MethodPatch {
+		req.Body = operation.Body(ctx, "Upload image layer", req.Body, req.ContentLength)
+	}
 	resp, err := t.inner.RoundTrip(req)
 	if err != nil {
 		cancel()

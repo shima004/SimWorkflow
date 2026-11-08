@@ -19,6 +19,7 @@ import (
 	"simworkflow/internal/experiment"
 	"simworkflow/internal/imageio"
 	"simworkflow/internal/maparchive"
+	"simworkflow/internal/operation"
 	"simworkflow/internal/storage"
 	"simworkflow/internal/worker"
 )
@@ -98,8 +99,9 @@ func Export(ctx context.Context, c config.Config, plan *experiment.Plan, meta Me
 	}
 	client := imageio.New(c)
 	saved := map[string]bool{}
+	imageCount := 0
+	operation.Report(ctx, operation.Event{Stage: "Archive container images", Total: len(required)})
 	for ref := range required {
-		fmt.Fprintln(log, "Archiving image", ref)
 		image, pinned, err := client.Fetch(ctx, ref)
 		if err != nil {
 			return err
@@ -125,6 +127,8 @@ func Export(ctx context.Context, c config.Config, plan *experiment.Plan, meta Me
 			}
 			saved[digest.String()] = true
 		}
+		imageCount++
+		operation.Report(ctx, operation.Event{Stage: "Archive container images", Completed: imageCount, Total: len(required)})
 	}
 	store := storage.New(c)
 	for _, run := range plan.Runs {
@@ -155,7 +159,8 @@ func Export(ctx context.Context, c config.Config, plan *experiment.Plan, meta Me
 	}
 	// Keep old run IDs in reference outputs even if an old index digest required
 	// a platform-specific ID in the canonical plan above.
-	for _, run := range plan.Runs {
+	for i, run := range plan.Runs {
+		operation.Report(ctx, operation.Event{Stage: "Archive reference results", Completed: i, Total: len(plan.Runs)})
 		for _, stage := range []string{worker.Precompute, worker.Simulation} {
 			key := o.Prefix + "/" + run.ID
 			if stage == worker.Precompute {
@@ -215,8 +220,9 @@ func Export(ctx context.Context, c config.Config, plan *experiment.Plan, meta Me
 			}
 		}
 	}
+	operation.Report(ctx, operation.Event{Stage: "Archive reference results", Completed: len(plan.Runs), Total: len(plan.Runs)})
 	if len(manifest.MissingResults) > 0 {
-		fmt.Fprintf(log, "%d reference artifacts unavailable; recorded in manifest.json.\n", len(manifest.MissingResults))
+		operation.Report(ctx, operation.Event{Stage: "Missing reference artifacts", Detail: fmt.Sprintf("%d; recorded in manifest.json", len(manifest.MissingResults))})
 	}
 	return WriteZIP(ctx, directory, o.Output, &manifest)
 }
@@ -272,7 +278,7 @@ func extractReference(ctx context.Context, reader io.Reader, destination string,
 		}
 		total += header.Size
 		if strings.HasPrefix(header.Name, "modules/") || strings.HasPrefix(header.Name, "scenario/config/") || logs && strings.HasPrefix(header.Name, "logs/") {
-			if err := copyFile(ctx, filepath.Join(destination, filepath.FromSlash(header.Name)), t, header.Size); err != nil {
+			if err := copyFile(ctx, filepath.Join(destination, filepath.FromSlash(header.Name)), operation.Reader(ctx, "Export result file", header.Size, t), header.Size); err != nil {
 				return err
 			}
 		}

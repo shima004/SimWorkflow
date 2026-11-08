@@ -7,10 +7,19 @@ import (
 	"sync"
 )
 
+// A nonzero TransferID identifies one byte stream. Otherwise Completed/Total
+// count items. Negative TotalBytes means that the stream size is unknown.
 type Event struct {
-	Stage            string
-	Completed, Total int
-	Detail           string
+	Stage             string
+	Completed, Total  int
+	Detail            string
+	TransferID        uint64
+	Bytes, TotalBytes int64
+}
+
+func HasReporter(ctx context.Context) bool {
+	r, ok := ctx.Value(reporterKey{}).(*reporter)
+	return ok && r.report != nil
 }
 
 type reporter struct {

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"simworkflow/internal/config"
+	"simworkflow/internal/operation"
 )
 
 type Options struct {
@@ -103,11 +104,12 @@ func (b *Builder) Build(ctx context.Context, o Options, c config.Config, logs io
 	}
 	// Save by immutable local ID so another build cannot change the tag's image
 	// between build and push. No registry credentials enter Docker's arguments.
-	saveErr := b.Command(ctx, []string{"image", "save", id}, f, logs)
+	saveErr := b.Command(ctx, []string{"image", "save", id}, operation.Writer(ctx, "Export built image", -1, f), logs)
 	closeErr := f.Close()
 	if saveErr != nil || closeErr != nil {
 		return result, errors.New("could not export the built image")
 	}
+	operation.Report(ctx, operation.Event{Stage: "Export built image", Detail: "complete"})
 	if err := CheckPlatform(archive, o.Platform); err != nil {
 		return result, err
 	}

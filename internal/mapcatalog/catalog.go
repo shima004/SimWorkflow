@@ -79,7 +79,11 @@ func (c *Catalog) Register(ctx context.Context, path string, options RegisterOpt
 		return result, err
 	}
 	if stat.IsDir() {
+		operation.Report(ctx, operation.Event{Stage: "Package map", Total: 1})
 		err = maparchive.PackageDirectory(path, snapshotPath)
+		if err == nil {
+			operation.Report(ctx, operation.Event{Stage: "Package map", Completed: 1, Total: 1})
+		}
 	} else {
 		source, e := os.Open(path)
 		if e != nil {
@@ -93,7 +97,7 @@ func (c *Catalog) Register(ctx context.Context, path string, options RegisterOpt
 		if e != nil {
 			return result, e
 		}
-		n, copyErr := io.Copy(destination, io.LimitReader(source, maparchive.MaxBytes+1))
+		n, copyErr := io.Copy(destination, io.LimitReader(operation.Reader(ctx, "Snapshot map ZIP", stat.Size(), source), maparchive.MaxBytes+1))
 		closeErr := destination.Close()
 		if copyErr != nil {
 			err = copyErr
@@ -106,10 +110,12 @@ func (c *Catalog) Register(ctx context.Context, path string, options RegisterOpt
 	if err != nil {
 		return result, err
 	}
+	operation.Report(ctx, operation.Event{Stage: "Validate map", Total: 1})
 	info, err := maparchive.Inspect(snapshotPath)
 	if err != nil {
 		return result, err
 	}
+	operation.Report(ctx, operation.Event{Stage: "Validate map", Completed: 1, Total: 1})
 	f, err := os.Open(snapshotPath)
 	if err != nil {
 		return result, err
