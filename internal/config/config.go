@@ -116,7 +116,7 @@ func parseHTTPTimeout(value string) (time.Duration, error) {
 }
 
 // LoadArgo permits operational list/stop commands even when storage credentials
-// are absent or unavailable. These commands never use S3 or the registry.
+// are absent or unavailable. Opening watch from the list loads its own config.
 func LoadArgo(lookup func(string) (string, bool)) (Config, error) {
 	get := func(key, fallback string) string {
 		if value, ok := lookup(key); ok {

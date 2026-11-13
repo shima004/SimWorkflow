@@ -72,3 +72,47 @@ func TestExperimentListDoesNotWrapOrRenderRemoteControlCharacters(t *testing.T) 
 		}
 	}
 }
+
+func TestExperimentListSelectsAcrossPagesAndOpensSelectedWorkflow(t *testing.T) {
+	items := make([]argo.Overview, 14)
+	for i := range items {
+		items[i] = argo.Overview{Name: fmt.Sprintf("workflow-%02d", i)}
+	}
+	m := newExperimentListModel(items)
+	m.resize(160, 8)
+	for range 5 {
+		m = experimentPageKey(m, tea.KeyDown)
+	}
+	if m.selected != 5 || m.pager.Page != 1 || !strings.Contains(m.View(), "> workflow-05") {
+		t.Fatal(m.View())
+	}
+	m = experimentPageKey(m, tea.KeyPgDown)
+	if m.selected != 10 || m.pager.Page != 2 {
+		t.Fatal(m.selected, m.pager)
+	}
+	m = experimentPageKey(m, tea.KeyUp)
+	if m.selected != 9 || m.pager.Page != 1 {
+		t.Fatal(m.selected, m.pager)
+	}
+	m.resize(160, 12)
+	if m.selected != 9 || m.pager.Page != 1 {
+		t.Fatal("resize lost selection", m.selected, m.pager)
+	}
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	opened := next.(experimentListModel)
+	if cmd == nil || opened.openName != "workflow-09" {
+		t.Fatal("enter did not open selected workflow", opened.openName)
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatal("list input must stop before starting watch")
+	}
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if next.(experimentListModel).openName != "" {
+		t.Fatal("exit opened a workflow")
+	}
+	empty := newExperimentListModel(nil)
+	next, cmd = empty.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil || next.(experimentListModel).openName != "" {
+		t.Fatal("empty list opened a workflow")
+	}
+}

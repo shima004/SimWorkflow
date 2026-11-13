@@ -181,7 +181,7 @@ func runWithCredentials(args []string, lookup func(string) (string, bool), out, 
 			if err != nil {
 				return err
 			}
-			return runRemote(flags.Args()[1:], c, out, errOut)
+			return runRemote(flags.Args()[1:], c, out, errOut, func() (config.Config, error) { return loadConfig("", true) })
 		}
 		return runExperiment(flags.Args()[1:], out, errOut)
 	}

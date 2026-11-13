@@ -16,7 +16,7 @@ import (
 	"simworkflow/internal/config"
 )
 
-func runLifecycle(ctx context.Context, args []string, c config.Config, out, errOut io.Writer) error {
+func runLifecycle(ctx context.Context, args []string, c config.Config, out, errOut io.Writer, loadWatch ...func() (config.Config, error)) error {
 	flags := flag.NewFlagSet("experiment "+args[0], flag.ContinueOnError)
 	flags.SetOutput(errOut)
 	if args[0] == "stop" {
@@ -88,7 +88,17 @@ func runLifecycle(ctx context.Context, args []string, c config.Config, out, errO
 		return err
 	}
 	if *format == "auto" && interactiveOutput(os.Stdin, out) {
-		return browseExperiments(ctx, selected, os.Stdin, out)
+		return browseExperiments(ctx, selected, os.Stdin, out, func(name string) error {
+			watchConfig := c
+			if len(loadWatch) > 0 {
+				var err error
+				watchConfig, err = loadWatch[0]()
+				if err != nil {
+					return err
+				}
+			}
+			return watchProgress(ctx, watchConfig, name, os.Stdin, out)
+		})
 	}
 	return writeExperimentList(out, selected)
 }
