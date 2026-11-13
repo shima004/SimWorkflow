@@ -52,6 +52,8 @@ func TestExperimentListAndStopWithOnlyArgoConfiguration(t *testing.T) {
 		want, absent string
 	}{
 		{[]string{"list"}, "new", "private"},
+		{[]string{"list", "--format", "text"}, "new", "private"},
+		{[]string{"list", "--format", "auto"}, "new", "private"},
 		{[]string{"list", "--phase", "Running", "--limit", "1"}, "new", "old"},
 		{[]string{"list", "--phase", "Pending"}, "No SimWorkflow experiments", "new"},
 		{[]string{"stop", "new"}, "Stop requested", "private"},

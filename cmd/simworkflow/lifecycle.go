@@ -7,6 +7,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -44,7 +46,7 @@ func runLifecycle(ctx context.Context, args []string, c config.Config, out, errO
 	}
 	phase := flags.String("phase", "", "filter by phase: Pending, Running, Succeeded, Failed or Error")
 	limit := flags.Int("limit", 0, "maximum displayed experiments (default: all)")
-	format := flags.String("format", "text", "output format: text or json")
+	format := flags.String("format", "auto", "output format: auto (terminal pager), text or json")
 	if err := flags.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -57,8 +59,8 @@ func runLifecycle(ctx context.Context, args []string, c config.Config, out, errO
 	if *limit < 0 {
 		return errors.New("limit must be zero or positive")
 	}
-	if *format != "text" && *format != "json" {
-		return errors.New("format must be text or json")
+	if *format != "auto" && *format != "text" && *format != "json" {
+		return errors.New("format must be auto, text or json")
 	}
 	if *phase != "" && *phase != "Pending" && *phase != "Running" && *phase != "Succeeded" && *phase != "Failed" && *phase != "Error" {
 		return errors.New("phase must be Pending, Running, Succeeded, Failed or Error")
@@ -85,9 +87,20 @@ func runLifecycle(ctx context.Context, args []string, c config.Config, out, errO
 		_, err = fmt.Fprintln(out, "No SimWorkflow experiments found in the configured namespace.")
 		return err
 	}
+	if *format == "auto" && interactiveOutput(os.Stdin, out) {
+		return browseExperiments(ctx, selected, os.Stdin, out)
+	}
+	return writeExperimentList(out, selected)
+}
+
+func experimentListCell(value string) string {
+	return strings.ReplaceAll(screenText(value), "\n", " ")
+}
+
+func writeExperimentList(out io.Writer, items []argo.Overview) error {
 	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(w, "WORKFLOW\tPHASE\tSHUTDOWN\tCREATED (UTC)\tFINISHED (UTC)")
-	for _, item := range selected {
+	for _, item := range items {
 		shutdown := item.Shutdown
 		if shutdown == "" {
 			shutdown = "-"
@@ -99,7 +112,7 @@ func runLifecycle(ctx context.Context, args []string, c config.Config, out, errO
 		if item.FinishedAt != nil && !item.FinishedAt.IsZero() {
 			finished = item.FinishedAt.UTC().Format(time.RFC3339)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", screenText(item.Name), screenText(item.Phase), screenText(shutdown), created, finished)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", experimentListCell(item.Name), experimentListCell(item.Phase), experimentListCell(shutdown), created, finished)
 	}
 	return w.Flush()
 }

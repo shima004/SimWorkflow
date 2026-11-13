@@ -17,14 +17,17 @@ simworkflow experiment list
 simworkflow experiment list --phase Running
 simworkflow experiment list --limit 20
 simworkflow experiment list --format json
+simworkflow experiment list --format text
 ```
 
-設定したArgoの名前空間で、SimWorkflowの管理ラベルが付いたWorkflowだけを表示します。デフォルトは全件で、作成日時の新しい順です。同じ日時ならWorkflow名で並べます。APIの複数ページは自動で取得します。
+設定したArgoの名前空間で、SimWorkflowの管理ラベルが付いたWorkflowだけを表示します。デフォルトは全件で、作成日時の新しい順です。同じ日時ならWorkflow名で並べます。APIの複数ページは自動で取得します。端末上ではページ切り替え式で表示し、1ページの件数を端末の高さから見出し・列名・操作案内の3行を除いて決めます。ウィンドウをリサイズすると件数とページ数を再計算します。左右キーまたはPageUp／PageDownで前後のページ、Home／Endで先頭・末尾へ移動し、`q`・Escで終了します。パイプ・リダイレクト時はページ切り替えを使わず、全件を出力します。
 
 | オプション | 動作 |
 | --- | --- |
 | `--phase PHASE` | `Pending`・`Running`・`Succeeded`・`Failed`・`Error` のいずれかで絞る |
 | `--limit N` | 絞り込み後に最新N件を表示。0は全件 |
+| `--format auto` | デフォルト。端末上ではページ表示、それ以外では通常の表 |
+| `--format text` | 端末上でもページ切り替えを使わず表を全件出力 |
 | `--format json` | 名前・名前空間・状態・停止要求・作成／開始／終了日時のJSON配列 |
 
 表の `SHUTDOWN` が `Stop` の場合は停止要求済みです。停止要求後もコントローラーの処理が終わるまで `Running` のままの場合があります。日時はUTCで表示します。`--limit` は表示件数を制限するための指定で、一覧の取得範囲を制限するものではありません。
