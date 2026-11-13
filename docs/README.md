@@ -1,44 +1,69 @@
-# ドキュメント
+# SimWorkflow 利用ガイド
 
-初めて使う場合は、インストール → 接続設定 → クイックスタートの順に進めてください。コマンド例はPATHに配置した `simworkflow` を使用します。ソースからの実行方法は開発ガイドに記載しています。
+SimWorkflowは、RoboCup Rescue Simulationの比較実験をYAMLで定義し、Argo Workflows上で実行するCLIです。エージェント構成・マップ・シードの組み合わせを作り、事前計算、本実行、進捗確認、結果取得まで扱います。
 
-## 利用する
+## 初めて使う
 
-| ガイド | 内容 |
+既存の実行環境を使う場合は、次の順に進めてください。
+
+1. [インストール](installation.md)：OS・CPUに合うCLIを配置する。
+2. [接続設定](configuration.md)：管理者から受け取ったArgo・S3・レジストリの接続先を設定する。
+3. [認証情報の管理](credentials.md)：OSの資格情報ストアへ認証情報を登録する。
+4. [最初の実験](quickstart.md)：1構成・1マップ・1シードで実行し、結果を取得する。
+
+実験にはKubernetes・Argo Workflows、S3互換サービス、コンテナイメージを取得できるレジストリが必要です。実行環境から用意する場合は、管理者向けの [実行環境の準備](distribution.md) を参照してください。CLIの起動にはGoやDockerは不要です。エージェントイメージを作る場合はDockerを使います。
+
+## 目的から探す
+
+| 目的 | ガイド |
 | --- | --- |
-| [インストール](installation.md) | OS・CPUに合う配布物の選択、チェックサム、PATH、self-update |
-| [接続設定](configuration.md) | 共通YAML、環境変数、.env、優先順位、設定項目一覧 |
-| [認証情報](credentials.md) | OSストアへの登録・削除、CI、既存ファイルからの移行 |
-| [クイックスタート](quickstart.md) | マップの登録から実験の送信・監視・結果取得まで |
-| [実験YAMLの仕様](experiment-yaml.md) | 単独モジュール・セットの組み合わせ、除外、マップ・シード、CPU・メモリ |
-| [モジュール切り替え](adf-module-settings.md) | ADFの設定キー、元設定への反映、ローカルでの設定生成 |
-| [マップ](maps.md) | ZIPの形式、名前・バージョン、登録、同時登録の条件 |
-| [実験の管理・進捗・スコア](progress.md) | 一覧・停止、TUIの操作、設定詳細、テキスト監視、結果要約 |
-| [失敗分の再送信](retry.md) | 対象の確認、再送信、試行を統合した結果取得 |
-| [ダウンロード](download.md) | 要素・実行・段階・ファイルを選んで取得、追加取得 |
-| [再現用ZIP](reproduction.md) | イメージ・マップ・計画の保存、別環境への復元・再実行 |
-| [SimScope連携（任意）](simscope.md) | URLの設定、実行中の接続、保存ログの再生 |
-| [接続トラブル](connections.md) | 接続確認の範囲、Argoの403、S3の404、レジストリへの到達性 |
+| CLIをインストール・更新する | [インストール](installation.md) |
+| 接続先や設定の優先順位を調べる | [接続設定](configuration.md) |
+| 認証情報を登録・変更する、CIから使う | [認証情報の管理](credentials.md) |
+| エージェントイメージを作って登録する | [ビルド・登録](agent-build.md)・[Java](../templates/agents/java/README.md)・[Python](../templates/agents/python/README.md) |
+| マップを登録・一覧表示する | [マップ](maps.md) |
+| 比較条件やCPU・メモリを指定する | [実験YAML](experiment-yaml.md) |
+| モジュールを切り替える、設定をローカルで確認する | [モジュール切り替え](adf-module-settings.md) |
+| 実験を一覧表示・停止する、進捗とスコアを見る | [実験の管理・進捗](progress.md) |
+| スコア・ログなど必要な結果を取得する | [ダウンロード](download.md) |
+| 失敗分を再送信し、結果をまとめる | [再送信と結果の統合](retry.md) |
+| 実験を別環境で再実行するために保存する | [再現用ZIP](reproduction.md) |
+| シミュレーションをブラウザで見る | [SimScope連携（任意）](simscope.md) |
+| 接続や実行の問題を調べる | [トラブル対応](connections.md) |
+| 実行順序・保存先・制限を調べる | [実行と結果保存](execution.md) |
 
-## エージェント・実行環境を準備する
+## このガイドの読み方
 
-| ガイド | 内容 |
+コマンド例は、PATHに配置した `simworkflow` を使います。`registry.example.com` などの接続先やイメージ名は、自分の環境の値へ置き換えてください。`examples/` を使う例は、このリポジトリのルートから実行します。
+
+```sh
+# 全体オプション → コマンド → コマンドのオプション → Workflow名
+simworkflow --config ./config.local.yaml experiment status --watch WORKFLOW_NAME
+```
+
+`--config`・`--env-file` はコマンドより前、`--watch` などのコマンド固有のオプションはWorkflow名などの位置引数より前に置きます。各コマンドの `--help` でオプションを確認できます。接続するコマンドは、ヘルプ表示時にも接続設定が必要です。
+
+| 用語・表記 | 意味 |
 | --- | --- |
-| [ビルド・登録](agent-build.md) | REGISTRY_URLを使ったagent build、認証、実験YAML用のimage出力 |
-| [Pythonエージェント](../templates/agents/python/README.md) | uv／pipでのイメージ作成、依存関係、設定ファイルの配置 |
-| [Javaエージェント](../templates/agents/java/README.md) | イメージ作成、Gradle依存の同梱、設定ファイルの配置 |
-| [実行環境の準備](distribution.md) | Argo・S3・レジストリ・RBAC、公開helper、独自helper |
-| [Helm Chart](../charts/simworkflow/README.md) | 実行基盤の一式導入、既存サービスへの切り替え、Secret・永続データ |
-| [実行の仕組み](execution.md) | 事前計算と本実行、S3保存、失敗・再試行、期限・サイズ制限 |
-| [カスタムシミュレーター](../templates/simulators/README.md) | 改造したサーバーのイメージ作成・登録、起動条件、実験への指定 |
-| [シミュレーターの仕様](simulator.md) | 対象イメージ、起動引数、接続先、JVMメモリ |
+| 実験 | YAMLに定義した比較条件全体 |
+| 構成 | エージェント定義に、固定モジュールと選択した候補を適用したもの |
+| 実行（run） | 1構成 × 1マップバージョン × 1シード。事前計算と本実行の2段階からなる |
+| `WORKFLOW_NAME` | 送信時に表示されるArgoのWorkflow名。監視・結果取得・停止に指定する |
+| `RUN_ID` / run ID | `run-...` 形式の実行計画上の識別子。`status`・`results` で確認し、結果の絞り込みに使う |
+| 実行ID（execution ID） | 送信ごとに発行する実験全体の識別子。再送信でも新しくなり、S3の保存先を分ける |
+| helper（ワーカー） | 実行Pod内で起動管理・データの受け渡し・結果保存を行うイメージ。通常はCLIの既定値を使う |
+| TUI | ターミナル内でキー操作できる画面 |
 
-## 開発・検証する
+`validate`・`plan`・`modules` は接続設定なしで使えます。`render` はArgoへ送信しませんが、イメージの取得やS3への保存を行います。送信前に条件だけを確認したい場合は `plan` を使ってください。
 
-| ガイド | 内容 |
+## 管理者・開発者向け
+
+| 目的 | ガイド |
 | --- | --- |
-| [開発ガイド](development.md) | ソースからのビルド、検証コマンド、実装の構成、Release公開 |
+| クラスタ・S3・レジストリ・権限を用意する | [実行環境の準備](distribution.md)・[Helm Chart](../charts/simworkflow/README.md) |
+| 改造したシミュレーターを使う | [カスタムシミュレーター](../templates/simulators/README.md)・[起動仕様](simulator.md) |
+| ソースからビルド・検証する、CLI・helperを公開する | [開発ガイド](development.md) |
 
-[`examples/experiments/`](../examples/experiments/) は定義を作るためのサンプルです。イメージ・マップ参照は自分の環境へ合わせて変更します。
+定義のサンプルは [`examples/experiments/`](../examples/experiments/) にあります。イメージ・マップ・独自モジュールの参照は、自分の環境に合わせて変更してください。
 
 [プロジェクトのREADMEへ戻る](../README.md)

@@ -2,6 +2,8 @@
 
 `experiment retry` は終了済みのWorkflowから失敗した実行を抽出し、新しいWorkflowへ送信します。各実行は「エージェント構成 × マップ × シード」の組み合わせです。
 
+`WORKFLOW_NAME` は対象のWorkflow名へ置き換えてください。これは本実行の自動再試行とは別の操作です。再送信では事前計算からやり直し、新しいWorkflow名が表示されます。以後の監視には、その新しい名前を使います。
+
 ```sh
 # 対象の確認のみ。S3への書き込みやArgoへの送信は行わない
 simworkflow experiment retry --dry-run WORKFLOW_NAME

@@ -1,6 +1,6 @@
-# 実行環境の準備と配布
+# 実行環境の準備（管理者向け）
 
-クラスタを準備する管理者と、CLI・helperを公開する開発者向けのガイドです。既存の実行環境を利用する場合は [インストール](installation.md) → [接続設定](configuration.md) → [最初の実験](quickstart.md) へ進んでください。
+クラスタ・ストレージ・レジストリを準備する管理者向けのガイドです。既存の実行環境を利用する場合は [インストール](installation.md) → [接続設定](configuration.md) → [最初の実験](quickstart.md) へ進んでください。
 
 ## 必要なサービス
 
@@ -30,8 +30,7 @@ CLIからArgo・S3・レジストリへ、実行PodからS3と各イメージへ
 
 シミュレーターは `ghcr.io/shima004/rcrs-server:v1.0.4` に対応します。エージェントは [Java](../templates/agents/java/README.md) または [Python](../templates/agents/python/README.md) のテンプレートで作成し、実行ノードから取得できるレジストリへ登録します。
 
-S3バケットを作成し、[マップ](maps.md) を登録します。同じマップバージョンへの並行登録にはS3の条件付きPUTが正しく動作することが必要です。検証環境で確認した制約はマップのガイドに記載しています。
-
+S3バケットを作成し、[マップ](maps.md) を登録します。同じマップバージョンへの並行登録にはS3の条件付きPUTが正しく動作することが必要です。利用するS3互換サービスの動作条件は [マップのガイド](maps.md#保存と同時登録の条件) を確認してください。
 
 ## 公開helperを利用する
 
@@ -41,7 +40,7 @@ Release配布のCLIは、同じソースからビルド・公開・動作確認�
 
 通常は追加オプションなしで送信できます。ワーカー設定の保存先はS3がデフォルトです。
 
-CLIはhelperの能力ラベルに応じ、対応する場合はグループ別の連番展開と段階別の設定バンドルを選び、旧helperでは対応する設定方式へ自動的に戻します。バンドル対応helperは `io.simworkflow.config-bundle=v1`、連番展開にも対応するhelperは加えて `io.simworkflow.config-sequence=v1` を持ちます。このリポジトリのDockerfileとRelease用ワークフローは、そのラベルを含むhelperを作成します。詳細は [設定保存方式](execution.md#ワーカー設定とworkflowサイズ) を参照してください。
+設定の保存形式はCLIがhelperに合わせて自動選択します。通常は既定の `--config-storage auto` を使用してください。大規模な実験や旧helperとの互換性は [設定保存方式](execution.md#ワーカー設定とworkflowサイズ) を参照してください。
 
 `io.simworkflow.result-zip=v1` を持つhelperでは結果をZIPで保存し、CLIからログを部分取得できます。旧helperはtar.gzを使用します。新しい保存形式を利用するには、CLIとhelperを両方更新してください。
 
@@ -72,38 +71,38 @@ crane push --insecure /tmp/simworkflow-worker.tar registry.example.com/simworkfl
 
 S3から設定を取得できない旧ワーカーを使う場合だけ `--config-storage inline` を指定します。[Workflowサイズと設定保存方式](execution.md#ワーカー設定とworkflowサイズ) を確認してください。
 
-## CLIをリリースする
+## 大規模な実験のための設定
 
-[release.yml](../.github/workflows/release.yml) は `v*` タグのpushでテスト・vet・依存検査を行い、同じコミットのhelperを公開して認証なしの取得・起動を確認します。成功したhelperのdigestを埋め込み、Linux／macOS／Windowsのamd64・arm64向けバイナリを作成します。helperの公開や確認に失敗した場合はCLIのReleaseを公開しません。Linux／macOSはtar.gz、Windowsはzipで配布し、各アーカイブには実行ファイルと利用手順を含めます。LICENSEが存在する場合は同梱します。SHA256の `checksums.txt` も添付します。
+Workflowの定義が小さくても、実行中のノード状態は実行数に応じて増えます。大規模な実験では、ArgoのSQL接続を設定し、ノード状態をDBへ退避する `nodeStatusOffLoad: true` を有効にします。Argo Helm Chartでは既存の `controller.persistence` に追加します。
 
-バイナリの `simworkflow --version` はタグとソースコミットを表示します。ビルドではCGOを無効にし、`.env` などの利用環境の設定は取り込みません。macOS・Windows向けバイナリの署名は行いません。
-
-新しいバージョンのタグを、リリースするコミットに作成してpushします。以下は `v0.1.0` の例です。既存のタグは再作成せず、pushだけを行います。
-
-```sh
-git push origin main
-git tag -a v0.1.0 -m "SimWorkflow v0.1.0"
-git push origin v0.1.0
+```yaml
+controller:
+  persistence:
+    nodeStatusOffLoad: true
+    # 既存のpostgresqlなどの接続設定は維持する
 ```
 
-`v0.*` と `-rc.1` などの接尾辞があるタグはプレリリース、それ以外は正式リリースになります。全ファイルをアップロードしてから公開し、途中で失敗した場合はドラフトが残ります。同じタグのActionsを再実行するとドラフトへのアップロードを再試行できます。公開済みReleaseは上書きせず、新しいタグを作成してください。helperの公開ワークフローはReleaseから再利用します。同じタグで独立した二重公開は行いません。
+SimWorkflow Helm Chartを使う場合の値は [ChartのREADME](../charts/simworkflow/README.md) を参照してください。これは終了したWorkflowを保存する `archive: true` とは別機能です。定義そのものは小さくならないため、CLIの900KiBのサイズ検査も適用されます。
 
-ローカルで配布物を作る手順は [開発ガイド](development.md) を参照してください。
+進捗確認には、退避したノード状態をArgo Server APIから取得できる必要があります。設定の詳細は [Argoの公式ガイド](https://argo-workflows.readthedocs.io/en/release-4.1/offloading-large-workflows/) を参照してください。
 
-## helperを継続公開する
+## 利用者へ渡す情報
 
-[helper-image.yml](../.github/workflows/helper-image.yml) は次の処理を行います。
+導入後は、次の情報を利用者へ案内してください。
 
-- Pull request：Goのraceテスト・vet・依存整合性検査
-- main更新：上記検査後、GHCRへ `latest` と `sha-<コミットSHA>` を公開
-- `v*` タグ：上記検査後、同名タグと `sha-<コミットSHA>` を公開
-- 手動実行：指定したrefのコミット固定タグを公開（mainならlatestも更新）
+| 情報 | 利用者側の指定先 |
+| --- | --- |
+| CLIから到達できるArgo ServerのURL・対象名前空間 | `argoWorkflow.server`・`argoWorkflow.namespace` |
+| S3のURL・リージョン・バケット名・パス形式の要否 | `s3` の各項目 |
+| CLIから到達できるレジストリのURL | `registry.url` |
+| 各サービスの認証方式と認証情報 | `credentials set` で登録。CIでは環境変数 |
+| 実行用ServiceAccount名 | `submit --service-account NAME`。既定は `simworkflow` |
+| 利用可能なイメージ・マップ名とバージョン | 実験YAML |
+| 1 Podあたりに要求できるCPU・メモリと並列数の目安 | 実験YAMLの `resources`・`maxParallelRuns` |
+| SimScopeのURLと接続可能な範囲（利用する場合） | `simScope.url` |
 
-公開にはActionsの `GITHUB_TOKEN` とジョブ単位の `packages: write` を使用します。個人用のS3キーやArgoトークンをActionsへ設定する必要はありません。Dockerfileは `cmd/` と `internal/` だけをコピーし、公開イメージへ `.env`・マップ・取得済みログを取り込みません。
+利用者の端末から `config check --connect` を実行し、続いて [最初の実験](quickstart.md) で送信・イメージ取得・S3への結果保存まで確認します。接続確認だけでは書き込み権限やノードからの到達性は確認できません。
 
-GHCRでは新しいパッケージの初期公開範囲はprivateです。初回登録後、パッケージ設定の **Change visibility → Public** を設定し、認証なしでpullできることを確認してください。リポジトリをPublicにする操作とは別です。既存の実験定義のイメージ参照は自動変更しません。
-
-参考：[GitHub公式のGHCR公開手順](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images)、[Container registryの公開範囲](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。
-
+CLI・helperの公開手順は [開発ガイド](development.md#cliをリリースする) にあります。
 
 [ドキュメント一覧へ](README.md)

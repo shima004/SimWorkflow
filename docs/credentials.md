@@ -63,11 +63,11 @@ simworkflow config check --connect
 | Windows | Windows Credential Manager |
 | Linux | D-BusのSecret Serviceと利用可能なloginコレクション（GNOME Keyringなど） |
 
-実装には [go-keyring](https://github.com/zalando/go-keyring/tree/v0.2.8) を使用します。CGOは不要ですが、OS側の資格情報ストアは必要です。ロックされている場合はOSの操作で解除してください。OSストアの解除やアクセス許可を求められる場合があります。
+OS側で資格情報ストアが利用できる必要があります。ロックされている場合はOSの操作で解除してください。OSストアの解除やアクセス許可を求められる場合があります。
 
 WSLではLinuxのストアを使用し、WindowsのCredential Managerへ自動接続しません。Secret Serviceを用意するか、Windows向けCLIを使うか、以下の環境変数方式を選んでください。利用できないOSストアの代わりに、平文ファイルへ自動で保存・読み込みすることはありません。
 
-保存するJSON一式は2400バイトまでです。これはWindowsの保存上限やmacOSのコマンド入力上限に収まるための制限です。大きな一時トークンなどで超える場合は環境変数方式を使用してください。
+1サービス分の登録データには2400バイトの上限があります。長い一時トークンなどで保存できない場合は、次の環境変数方式を使ってください。
 
 ## 環境変数とCI
 

@@ -1,6 +1,6 @@
 # 開発ガイド
 
-利用者向けバイナリの導入は [インストール](installation.md)、公開に使うタグとActionsは [リリース手順](distribution.md#cliをリリースする) を参照してください。このページのコマンドはリポジトリのルートから実行します。
+利用者向けバイナリの導入は [インストール](installation.md)、公開に使うタグとActionsは [このページのリリース手順](#cliをリリースする) を参照してください。このページのコマンドはリポジトリのルートから実行します。
 
 ## ソースから実行・ビルドする
 
@@ -72,5 +72,38 @@ SIMWORKFLOW_TEST_OS_KEYRING=1 go test ./internal/credentials -run TestSystemStor
 ## ドキュメントを更新する
 
 導入の入口は [README](../README.md)、目的別の案内は [ドキュメント一覧](README.md) にまとめます。設定項目は [接続設定](configuration.md)、実験項目は [実験YAML](experiment-yaml.md) を更新し、重複する仕様説明を増やさないようにします。個人的な実環境の検証記録は `examples/validation/`・`docs/validation.md` にローカルで保存します。これらはGit・Dockerの対象から除外し、公開ドキュメントや自動テストから参照しません。CIでもこれらが追跡されていないことを確認し、含まれている場合はイメージ・Releaseの公開を停止します。公開用のサンプルやテストデータには架空の接続先を使います。
+
+## CLIをリリースする
+
+[release.yml](../.github/workflows/release.yml) は `v*` タグのpushでテスト・vet・依存検査を行い、同じコミットのhelperを公開して認証なしの取得・起動を確認します。成功したhelperのdigestを埋め込み、Linux／macOS／Windowsのamd64・arm64向けバイナリを作成します。helperの公開や確認に失敗した場合はCLIのReleaseを公開しません。Linux／macOSはtar.gz、Windowsはzipで配布し、各アーカイブには実行ファイルと利用手順を含めます。LICENSEが存在する場合は同梱します。SHA256の `checksums.txt` も添付します。
+
+バイナリの `simworkflow --version` はタグとソースコミットを表示します。ビルドではCGOを無効にし、`.env` などの利用環境の設定は取り込みません。macOS・Windows向けバイナリの署名は行いません。
+
+新しいバージョンのタグを、リリースするコミットに作成してpushします。以下は `v0.1.0` の例です。既存のタグは再作成せず、pushだけを行います。
+
+```sh
+git push origin main
+git tag -a v0.1.0 -m "SimWorkflow v0.1.0"
+git push origin v0.1.0
+```
+
+`v0.*` と `-rc.1` などの接尾辞があるタグはプレリリース、それ以外は正式リリースになります。全ファイルをアップロードしてから公開し、途中で失敗した場合はドラフトが残ります。同じタグのActionsを再実行するとドラフトへのアップロードを再試行できます。公開済みReleaseは上書きせず、新しいタグを作成してください。helperの公開ワークフローはReleaseから再利用します。同じタグで独立した二重公開は行いません。
+
+ローカルで配布物を作る手順は [検証する](#検証する) を参照してください。
+
+## helperを継続公開する
+
+[helper-image.yml](../.github/workflows/helper-image.yml) は次の処理を行います。
+
+- Pull request：Goのraceテスト・vet・依存整合性検査
+- main更新：上記検査後、GHCRへ `latest` と `sha-<コミットSHA>` を公開
+- `v*` タグ：上記検査後、同名タグと `sha-<コミットSHA>` を公開
+- 手動実行：指定したrefのコミット固定タグを公開（mainならlatestも更新）
+
+公開にはActionsの `GITHUB_TOKEN` とジョブ単位の `packages: write` を使用します。個人用のS3キーやArgoトークンをActionsへ設定する必要はありません。Dockerfileは `cmd/` と `internal/` だけをコピーし、公開イメージへ `.env`・マップ・取得済みログを取り込みません。
+
+GHCRでは新しいパッケージの初期公開範囲はprivateです。初回登録後、パッケージ設定の **Change visibility → Public** を設定し、認証なしでpullできることを確認してください。リポジトリをPublicにする操作とは別です。既存の実験定義のイメージ参照は自動変更しません。
+
+参考：[GitHub公式のGHCR公開手順](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images)、[Container registryの公開範囲](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。
 
 [ドキュメント一覧へ](README.md)

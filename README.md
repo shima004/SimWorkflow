@@ -67,4 +67,4 @@ simworkflow experiment download --include summary --stage simulation WORKFLOW_NA
 | 実験をまとめて保存・再実行する | [再現用ZIP](docs/reproduction.md) |
 | 開発・リリースする | [開発ガイド](docs/development.md) |
 
-[ドキュメント一覧](docs/README.md) に、接続トラブル、実行の仕組み、SimScope連携、検証記録もまとめています。
+[利用ガイド一覧](docs/README.md) に、トラブル対応、実行と結果保存、SimScope連携、管理者・開発者向けの案内をまとめています。

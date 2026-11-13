@@ -4,6 +4,14 @@
 
 ## 初期設定
 
+既存の実行環境を使う場合は、管理者から次の情報を受け取ってください。サービスを自分で用意する場合は [実行環境の準備](distribution.md) を参照してください。
+
+| サービス | 必要な情報 |
+| --- | --- |
+| Argo | ServerのURL、名前空間、認証が必要ならトークン |
+| S3 | エンドポイントURL、バケット名、リージョン、アクセスキーIDとシークレットキー |
+| レジストリ | URL、認証が必要ならユーザー名・パスワードまたはトークン |
+
 ```sh
 simworkflow config init
 simworkflow config path
@@ -13,7 +21,7 @@ simworkflow credentials set s3
 simworkflow config check
 ```
 
-ソースから実行する場合は `simworkflow` の代わりに `go run ./cmd/simworkflow` を使用します。`config init` は既存ファイルを上書きしません。Unix系OSではディレクトリを0700、ファイルを0600で作成します。初期テンプレートは `credentials.store: keyring` を選択し、認証情報の項目を含みません。`config path` は読み込むYAMLのパスだけを表示し、認証情報は表示しません。
+`config init` は既存ファイルを上書きしません。既に設定があれば `config path` で場所を確認して編集します。Unix系OSではディレクトリを0700、ファイルを0600で作成します。初期テンプレートは `credentials.store: keyring` を選択し、認証情報の項目を含みません。`config path` は読み込むYAMLのパスだけを表示し、認証情報は表示しません。
 
 `XDG_CONFIG_HOME` が設定されていれば、その下の `simworkflow/config.yaml` を使用します。絶対パスを指定してください。未設定時はOSのユーザー設定ディレクトリを使います。
 
@@ -55,7 +63,7 @@ workflow:
 httpTimeout: 30s
 ```
 
-`argoWorkflow`・`s3`・`registry` は既存の `ARGO_WORKFLOW_*`・`S3_*`・`REGISTRY_*` と同じ設定です。`simScope.url` は `SIMSCOPE_URL`、`httpTimeout` は `HTTP_TIMEOUT` に対応します。`simScope.url` は任意設定で、利用するSimScopeのURLを入力してください。未設定の場合は `w` によるブラウザ表示時に設定方法を案内します。全項目の対応と必須条件は、このページの設定項目一覧を参照してください。
+URL・名前空間・バケット名は例です。自分の環境の値へ置き換えてください。環境変数との対応は次の設定項目一覧にあります。`simScope.url` は任意で、SimScopeを利用する場合だけ指定します。
 テンプレートには名前空間として `argo-workflows` を記載しています。接続先の名前空間へ変更してください。
 
 未知の項目・重複キー・型の不一致・複数のYAML文書はエラーになります。エラーに認証情報の値は含めません。設定ファイルは1MiBまでです。
@@ -115,7 +123,7 @@ simworkflow experiment submit -f experiment.yaml \
 
 タグまたはdigestを指定します。再現性が必要な場合は `@sha256:...` で固定してください。YAMLや環境変数の空文字はCLIの既定値へ戻す指定です。明示的な `--helper-image=''` はエラーです。選ばれたイメージ参照の形式は `render`／`submit` で検証し、認証情報を含むURLは受け付けません。設定の変更は次に生成・送信するWorkflowへ適用し、送信済みの実験には影響しません。
 
-ReleaseのhelperはCLIと同じソースから公開・動作確認し、そのdigestを配布バイナリへ埋め込みます。ソースから通常の `go run`／`go build` で実行した場合は、ソース内の既定digestを使います。[リリース手順](distribution.md#cliをリリースする) を参照してください。
+ReleaseのhelperはCLIと同じソースから公開・動作確認し、そのdigestを配布バイナリへ埋め込みます。独自helperの作成と公開は [実行環境の準備](distribution.md#独自helperをビルドする) と [開発ガイド](development.md#cliをリリースする) を参照してください。
 
 ## 読み込み方式と優先順位
 
@@ -154,7 +162,7 @@ CREDENTIALS_STORE=environment simworkflow --config='' --env-file='' config check
 
 互換モードで認証情報を入力した設定ファイルはGitへ追加しないでください。設定値はバイナリや実験の結果バンドルに埋め込みません。オフラインの `experiment validate`・`plan`・`modules` は接続設定を読みません。
 
-## 開発用の.env
+## 作業ディレクトリごとに.envを使う
 
 共通YAMLの代わりに、接続先をカレントディレクトリの `.env` に指定することもできます。新しいサンプルは `CREDENTIALS_STORE=keyring` を選び、認証情報の欄を含みません。
 

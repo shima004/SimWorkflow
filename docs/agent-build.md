@@ -11,7 +11,7 @@ registry:
   url: https://registry.example.com
 ```
 
-認証が必要なら `simworkflow credentials set registry` で登録します。環境変数での認証も従来と同じです。[認証情報の管理](credentials.md) を参照してください。このコマンドにArgo・S3の設定や認証情報は不要です。
+認証が必要なら `simworkflow credentials set registry` で登録します。環境変数から認証情報を渡すこともできます。[認証情報の管理](credentials.md) を参照してください。このコマンドにArgo・S3の設定や認証情報は不要です。
 
 ## ビルドして登録する
 
@@ -57,9 +57,9 @@ simworkflow agent build --repository my-team/agent-python --tag v1 \
 
 オプションはコンテキストの前に指定します。複数プラットフォームの同時ビルド、リモートGitコンテキスト、追加のDockerビルド引数は現時点では扱いません。必要な場合はDockerコマンドを直接使用してください。
 
-## 処理と認証
+## 認証と一時ディスク容量
 
-Dockerでビルドしてローカルに読み込み、作成されたイメージIDを指定してエクスポートします。`--push` 時はCLIがレジストリへ直接アップロードします。`docker login` やDocker認証ファイルへの書き込みは行いません。Dockerへの子プロセスにはSimWorkflowのサービス認証用環境変数を渡しません。既存のDocker側の設定やベースイメージ取得の認証はDockerが扱います。
+`--push` 時はCLIが設定済みレジストリへ直接アップロードします。登録先の認証情報は `credentials set registry` または環境変数で指定します。ベースイメージを取得するための認証はDocker側の設定で行ってください。SimWorkflowは `docker login` やDocker認証ファイルへの書き込みを行いません。
 
 HTTPレジストリには `REGISTRY_URL=http://...` で登録でき、Dockerデーモンのinsecure-registry設定はアップロードに不要です。HTTPSを指定した場合は証明書を検証します。認証用トークンの取得先やアップロード先が別ホストへ転送されるレジストリには対応していません。
 
