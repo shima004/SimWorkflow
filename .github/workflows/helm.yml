@@ -20,7 +20,10 @@ jobs:
       - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
         with:
           version: v3.19.0
-      - run: helm dependency build charts/simworkflow
+      - name: Build chart dependencies
+        run: |
+          helm repo add argo https://argoproj.github.io/argo-helm
+          helm dependency build charts/simworkflow
       - run: helm lint charts/simworkflow --strict
       - run: go test -v ./charts/simworkflow/tests
       - run: helm package charts/simworkflow --destination dist

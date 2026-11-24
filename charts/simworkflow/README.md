@@ -64,6 +64,7 @@ Kubernetes Secret自体の管理・暗号化・アクセス制限はクラスタ
 リポジトリのルートで実行します。
 
 ```sh
+helm repo add argo https://argoproj.github.io/argo-helm
 helm dependency build charts/simworkflow
 helm lint charts/simworkflow --strict
 
@@ -173,6 +174,7 @@ Argoは状態のオフロードとアーカイブを有効にします。Podは�
 ## 検証・パッケージ化
 
 ```sh
+helm repo add argo https://argoproj.github.io/argo-helm
 helm dependency build charts/simworkflow
 helm lint charts/simworkflow --strict
 go test -v ./charts/simworkflow/tests
