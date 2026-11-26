@@ -207,7 +207,7 @@ matrix:
 
 ワーカーはイメージ内のDevelopData用JSONを読み、指定したキーを上書きします。Javaでは `config/launch.cfg`、Pythonでは `config/launcher.yaml` の `adf.develop.filename` を参照します。参照先の指定がない場合は `config/develop.json` があれば読みます。Javaで `adf.develop.data` を設定している場合は、先に値をJSONファイルに移してください。
 
-確定した上書き値は実行計画・結果要約・再現用ZIPに残ります。事前計算と本実行の結果バンドルには、起動した種類ごとの最終JSONを `modules/<role>/develop.json` として保存します。実行にはDevelopData対応helperが必要です。標準のPython起動では、ADF Coreのデバッグ設定を変えずに生成したJSONを有効にします。
+確定した上書き値は実行計画・結果要約・再現用ZIPに残ります。事前計算と本実行の結果バンドルには、起動した種類ごとの最終JSONを `modules/<role>/develop.json` として保存します。実行にはDevelopData対応helperが必要です。Pythonエージェントでこの設定を使う場合は、ADF Core Python v0.2.18以降を使用してください。ワーカーは `adf.develop.flag` を有効にし、生成したJSONを `adf.develop.filename` で指定します。
 
 ## 組み合わせの除外
 

@@ -1,7 +1,6 @@
 package worker
 
 import (
-	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,13 +13,6 @@ import (
 )
 
 const DevelopDataCapabilityLabel = "io.simworkflow.develop-data"
-
-//go:embed develop_data_launcher.py
-var pythonDevelopLauncher []byte
-
-func pythonDevelopLauncherPath(root, role string) string {
-	return filepath.Join(root, role+"-develop-launcher.py")
-}
 
 const defaultDevelopFile = "config/develop.json"
 

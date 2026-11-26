@@ -9,5 +9,5 @@ dependencies = ["adf-core-python", "rcrscore"]
 package = false
 
 [tool.uv.sources]
-adf-core-python = { git = "https://github.com/adf-python/adf-core-python", rev = "0ab215a8a106a43c08fbc82cdf65e2519ed7b506" }
+adf-core-python = { git = "https://github.com/adf-python/adf-core-python", rev = "a2972bcfd3255c19c905de796ef79c96cf09f2ff" }
 rcrscore = { git = "https://github.com/adf-python/rcrs-core-python", rev = "582b22f2d0e6667f813d494a3b6110343e780c2c" }

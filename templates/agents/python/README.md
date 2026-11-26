@@ -1,7 +1,7 @@
 # Pythonエージェントのコンテナテンプレート
 
 ADF互換のPythonエージェント用です。uvテンプレートは [rescue-python](https://github.com/shima004/rescue-python) の実行確認済み構成を基準にしています。pipテンプレートは従来の [adf-sample-agent-python](https://github.com/adf-python/adf-sample-agent-python) 向けです。
-uvテンプレートは、Python 3.14・ADF Core v0.2.15を使用します。pipテンプレートは従来のPython 3.13向けです。
+uvテンプレートは、Python 3.14・ADF Core v0.2.18を使用します。pipテンプレートは従来のPython 3.13向けです。
 このテンプレート自体はエージェントのソースコードを含みません。Java連携を使わないPythonエージェントを対象とします。
 
 | 方式 | 対象 | Dockerfile |
@@ -33,7 +33,7 @@ simworkflow agent build --dockerfile Dockerfile.uv \
 テンプレートにはユーザーの依存構成に応じて作成する `uv.lock` を同梱していません。
 ロックファイルが存在しない場合や `pyproject.toml` と整合しない場合はDockerビルドが失敗します。
 
-テンプレートの `pyproject.uv.toml` は、ADF Core v0.2.15と `rcrscore` v0.2.3をコミットで固定しています。
+テンプレートの `pyproject.uv.toml` は、ADF Core v0.2.18と `rcrscore` v0.2.3をコミットで固定しています。
 Gitソースはエージェント側の `[tool.uv.sources]` に明示します。依存パッケージ自身のGitソース設定に頼らない形です。
 独自の追加依存も `pyproject.toml` で管理します。このDockerfileでは `requirements.txt` はインストールに使いません。
 
