@@ -53,6 +53,19 @@ Argoの終了ハンドラーは実行可能ですが、SimWorkflowの結果収�
 
 一覧と停止にはArgoの接続設定だけが必要です。S3・レジストリの設定や認証情報、SimScopeは不要です。キーストア方式でもArgoの登録だけを参照します。停止には `workflows` の `patch` 権限が必要です。[接続トラブル](connections.md#argoの403) を参照してください。
 
+## 組み合わせごとのスコアを比較する
+
+```sh
+simworkflow experiment compare --group threshold --baseline low WORKFLOW_NAME
+simworkflow experiment compare --group threshold --baseline low --with-retries --format csv WORKFLOW_NAME > comparison.csv
+```
+
+同じエージェント・マップ・バージョン・シードで、比較対象以外のモジュール、DevelopData、リソースなども等しい実行を1行にまとめます。`--group` には `matrix.groups` の名前を指定します。必要なら `--agent` で対象のエージェントを絞れます。
+
+`score.<候補>` は成功した本実行のスコア、`delta.<候補>` は基準候補を引いた差です。`--baseline` を省略すると、各エージェントで保存済み計画に最初に現れる候補を基準にします。スコアがなければ空欄になり、失敗・未計画・未取得などの内訳を `missing_reasons` に記録します。基準のスコアが欠けている行では差も空欄になります。CSVには候補ごとの実行IDと取得元Workflowを含みます。
+
+比較にはグループの定義が保存された実験が必要です。`--with-retries` を指定すると元の実験を基準に、最新の成功試行を選びます。再送信先のWorkflow名から比較する場合もこのオプションを使います。スコアを読むためにログや結果バンドルを取得する必要はありません。
+
 ## 失敗分の再送信と結果の統合
 
 ```sh

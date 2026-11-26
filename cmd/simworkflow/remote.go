@@ -40,7 +40,7 @@ func validHelperImage(image string) bool {
 }
 
 func remoteCommand(command string) bool {
-	return command == "render" || command == "submit" || command == "status" || command == "results" || command == "download" || command == "list" || command == "stop" || command == "export" || command == "reproduce" || command == "retry"
+	return command == "render" || command == "submit" || command == "status" || command == "results" || command == "compare" || command == "download" || command == "list" || command == "stop" || command == "export" || command == "reproduce" || command == "retry"
 }
 
 func runRemote(args []string, c config.Config, out, errOut io.Writer, loadWatch ...func() (config.Config, error)) error {
@@ -60,6 +60,9 @@ func runRemote(args []string, c config.Config, out, errOut io.Writer, loadWatch 
 	}
 	if command == "list" || command == "stop" {
 		return runLifecycle(ctx, args, c, out, errOut, loadWatch...)
+	}
+	if command == "compare" {
+		return runCompare(ctx, args[1:], c, out, errOut)
 	}
 	if command == "download" {
 		return runDownload(ctx, args[1:], c, out, errOut)
