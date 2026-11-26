@@ -68,7 +68,7 @@ func TestReadProgressMemoryRejectsPreviousAttempt(t *testing.T) {
 	snapshot.Status.Nodes = map[string]argo.Node{"sim": {Type: "Pod", TemplateName: run.ID + "-simulation", Phase: "Running", StartedAt: now}}
 	progress := worker.Progress{ExecutionID: snapshot.Metadata.Annotations["simworkflow.io/execution-id"], RunID: run.ID, Stage: worker.Simulation, UpdatedAt: now, Memory: map[string]worker.MemoryUsage{"server": {UsageBytes: 123, UpdatedAt: now}}}
 	store := progressTestStore(func(r *http.Request) (*http.Response, error) { return progressResponse(r, progress, 200), nil })
-	row := readRunProgress(context.Background(), store, snapshot, run)
+	row := readRunProgress(context.Background(), store, snapshot, run, nil)
 	if row.memory["server"].UsageBytes != 123 {
 		t.Fatal("valid memory missing")
 	}
@@ -77,7 +77,7 @@ func TestReadProgressMemoryRejectsPreviousAttempt(t *testing.T) {
 		progress.Memory = nil
 	}} {
 		mutate()
-		row = readRunProgress(context.Background(), store, snapshot, run)
+		row = readRunProgress(context.Background(), store, snapshot, run, nil)
 		if len(row.memory) != 0 {
 			t.Fatal("old or unavailable metrics accepted")
 		}

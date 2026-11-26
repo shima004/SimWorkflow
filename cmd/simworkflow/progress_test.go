@@ -78,7 +78,7 @@ func TestIndividualRunElapsedUsesCurrentStageAndAttempt(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			snapshot := progressSnapshot(plan)
 			snapshot.Status.Phase, snapshot.Status.Nodes = "Running", tc.nodes
-			row := readRunProgress(context.Background(), store, snapshot, run)
+			row := readRunProgress(context.Background(), store, snapshot, run, nil)
 			var out bytes.Buffer
 			if _, err := writeProgressRows(&out, []runProgressRow{row}, start.Add(5*time.Minute)); err != nil {
 				t.Fatal(err)
@@ -108,7 +108,7 @@ func TestSharedStageNodesKeepRunsAndRetryAttemptsSeparate(t *testing.T) {
 		"malformed":       {Name: "(9)", Type: "Pod", TemplateName: "shared-simulation-abc", DisplayName: "simulation(9)", Phase: "Succeeded"},
 	}
 	store := progressTestStore(func(r *http.Request) (*http.Response, error) { return progressResponse(r, nil, 404), nil })
-	row := readRunProgress(context.Background(), store, snapshot, run)
+	row := readRunProgress(context.Background(), store, snapshot, run, nil)
 	if row.stage != "simulation" || row.phase != "Running" || workflowElapsed(row.startedAt, row.finishedAt, start.Add(5*time.Minute), row.phase) != "1m0s" {
 		t.Fatal("shared templates must retain per-run, per-attempt elapsed time", row)
 	}

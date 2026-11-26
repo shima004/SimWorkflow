@@ -161,7 +161,8 @@ func (m progressModel) bodyRows() []string {
 				if now.IsZero() {
 					now = time.Now()
 				}
-				return append(memoryDetails(row, now), m.details...)
+				lines := append(failureDetails(row), memoryDetails(row, now)...)
+				return append(lines, m.details...)
 			}
 		}
 		return m.details

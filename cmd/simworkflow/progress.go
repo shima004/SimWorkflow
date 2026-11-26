@@ -25,7 +25,7 @@ func workflowElapsed(started, finished, now time.Time, phase string) string {
 	}
 	if !finished.IsZero() {
 		now = finished
-	} else if phase == "Succeeded" || phase == "Failed" || phase == "Error" {
+	} else if phase == "Succeeded" || failedRunPhase(phase) {
 		return "-"
 	}
 	return max(time.Duration(0), now.Sub(started)).Truncate(time.Second).String()
@@ -69,6 +69,12 @@ func writeEstimatedRunProgress(ctx context.Context, store *storage.Store, snapsh
 
 func readPlannedRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.Snapshot, plan *experiment.Plan) []runProgressRow {
 	attachSequenceNodes(snapshot, plan)
+	wrapperFailures := make(map[string]argo.Node)
+	for _, node := range snapshot.Status.Nodes {
+		if node.Type != "Pod" && failedRunPhase(node.Phase) {
+			wrapperFailures[node.Name] = node
+		}
+	}
 	// Each row has independent request deadlines. A slow object must not
 	// consume the budget of later runs; bound S3 concurrency and retain plan order.
 	rows := make([]runProgressRow, len(plan.Runs))
@@ -79,7 +85,7 @@ func readPlannedRunProgress(ctx context.Context, store *storage.Store, snapshot 
 		go func() {
 			defer wg.Done()
 			for i := range jobs {
-				rows[i] = readRunProgress(ctx, store, snapshot, plan.Runs[i])
+				rows[i] = readRunProgress(ctx, store, snapshot, plan.Runs[i], wrapperFailures)
 			}
 		}()
 	}
@@ -112,6 +118,7 @@ func writeProgressRows(out io.Writer, rows []runProgressRow, now time.Time) (boo
 }
 
 type runProgressRow struct {
+	failure                                                       []string
 	memory                                                        map[string]worker.MemoryUsage
 	runID, mapName, stage, phase, activity, steps, score, updated string
 	seed                                                          int64
@@ -128,17 +135,19 @@ func readProgressJSON(ctx context.Context, store *storage.Store, key string, val
 	return store.GetJSON(requestCtx, key, value)
 }
 
-func readRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.Snapshot, run experiment.Run) runProgressRow {
+func readRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.Snapshot, run experiment.Run, wrapperFailures map[string]argo.Node) runProgressRow {
 	prefix := snapshot.Metadata.Annotations["simworkflow.io/result-prefix"]
 	retry := false
 	stage, phase := "-", "Pending"
 	var started, finished time.Time
+	var selectedNode argo.Node
 	var preStarted, preFinished time.Time
 	// Prefer simulation once scheduled. Within a stage, choose the newest
 	// Pod so a failed first attempt does not hide the retry's state.
 	for _, candidate := range []string{worker.Precompute, worker.Simulation} {
 		if node, found := latestStageNode(snapshot, run.ID, candidate); found {
 			stage, phase, started, finished = candidate, node.Phase, node.StartedAt, node.FinishedAt
+			selectedNode = node
 			if candidate == worker.Precompute {
 				preStarted = node.StartedAt
 				if node.Phase == "Succeeded" {
@@ -146,6 +155,20 @@ func readRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.S
 				}
 			}
 		}
+	}
+	// A stage may fail while Argo is evaluating its template, before any Pod
+	// exists. Keep a live or completed simulation Pod authoritative.
+	if stage == "-" || (stage == worker.Precompute && phase == "Succeeded") {
+		if wrapperStage, node, ok := findRunWrapperFailure(snapshot, run.ID, wrapperFailures); ok {
+			if stage == "-" || wrapperStage != worker.Precompute {
+				stage, phase, started, finished = wrapperStage, node.Phase, node.StartedAt, node.FinishedAt
+				selectedNode = node
+			}
+		}
+	}
+	var failure []string
+	if failedRunPhase(phase) {
+		failure = appendFailureMessage(failure, "Argo", selectedNode.Message)
 	}
 	steps, score, updated := "-", "-", "-"
 	activity := "-"
@@ -203,15 +226,21 @@ func readRunProgress(ctx context.Context, store *storage.Store, snapshot *argo.S
 			if summaryErr != nil && !storage.IsNotFound(summaryErr) {
 				retry = true
 			}
-			if summaryErr == nil && summary.Run.ID == run.ID && summary.ExecutionID == snapshot.Metadata.Annotations["simworkflow.io/execution-id"] && summary.Stage == stage && summary.Score != nil {
-				score = fmt.Sprintf("%.6g", *summary.Score)
+			if summaryErr == nil && summary.Run.ID == run.ID && summary.ExecutionID == snapshot.Metadata.Annotations["simworkflow.io/execution-id"] && summary.Stage == stage {
+				if summary.Score != nil {
+					score = fmt.Sprintf("%.6g", *summary.Score)
+				}
+				// Retries write to the same S3 key. Ignore an earlier attempt's report.
+				if selectedNode.Type == "Pod" && failedRunPhase(phase) && failedRunPhase(summary.Phase) && !summary.FinishedAt.IsZero() && !summary.FinishedAt.Before(started) {
+					failure = appendSummaryFailures(failure, summary)
+				}
 			}
 		}
 	}
 	if (snapshot.Status.Phase == "Failed" || snapshot.Status.Phase == "Error") && phase == "Pending" {
 		phase = "Not run"
 	}
-	return runProgressRow{memory: memory, runID: run.ID, mapName: run.Map.DisplayName(), seed: run.Seed, stage: stage, phase: phase, activity: activity, steps: steps, score: score, updated: updated, startedAt: started, finishedAt: finished, retry: retry, completedSteps: completedSteps, totalSteps: totalSteps, progressStartedAt: progressStarted, progressUpdatedAt: progressUpdated, precomputeStartedAt: preStarted, precomputeFinishedAt: preFinished}
+	return runProgressRow{failure: failure, memory: memory, runID: run.ID, mapName: run.Map.DisplayName(), seed: run.Seed, stage: stage, phase: phase, activity: activity, steps: steps, score: score, updated: updated, startedAt: started, finishedAt: finished, retry: retry, completedSteps: completedSteps, totalSteps: totalSteps, progressStartedAt: progressStarted, progressUpdatedAt: progressUpdated, precomputeStartedAt: preStarted, precomputeFinishedAt: preFinished}
 }
 
 // Accept only known activities; never render arbitrary worker strings in a terminal.
