@@ -1,11 +1,13 @@
 package artifacts
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -42,6 +44,7 @@ func TestRunIndexesExplainCombinationsAndPreservePreviousDownloads(t *testing.T)
 		run.Configuration.ID = "config-test"
 		run.Configuration.Groups = map[string]string{"planning": []string{"astar", "dijkstra"}[i]}
 		run.Configuration.Modules = map[string]string{"Move.PathPlanning": "example.Class,With\"Quote"}
+		run.Configuration.DevelopData = experiment.DevelopData{"Threshold": json.RawMessage([]string{"10", "15"}[i])}
 		run.Configuration.Resources = experiment.Resources{CPU: "4", Memory: "8Gi"}
 		run.Map.Name, run.Map.Version, run.Seed = "america03", "type0", int64(i+1)
 	}
@@ -62,7 +65,7 @@ func TestRunIndexesExplainCombinationsAndPreservePreviousDownloads(t *testing.T)
 		t.Fatal(err)
 	}
 	rows = readRunCSV(t, output)
-	if len(rows) != 2 || rows[0]["run_id"] != firstRun || rows[1]["run_id"] != secondRun || rows[1]["group.planning"] != "dijkstra" {
+	if len(rows) != 2 || rows[0]["run_id"] != firstRun || rows[1]["run_id"] != secondRun || rows[1]["group.planning"] != "dijkstra" || rows[0]["developData.Threshold"] != "10" || rows[1]["developData.Threshold"] != "15" {
 		t.Fatal("append must retain conditions for previously downloaded runs", rows)
 	}
 	data, err := os.ReadFile(filepath.Join(output, "runs.json"))
@@ -112,5 +115,56 @@ func TestRunIndexesPreserveLocalEditsAndRejectLinks(t *testing.T) {
 				t.Fatal("local content was overwritten", err, string(data))
 			}
 		})
+	}
+}
+
+func TestRunCSVDevelopDataTypesAndAbsentValues(t *testing.T) {
+	entries := []RunIndexEntry{{Run: experiment.Run{Configuration: experiment.Configuration{DevelopData: experiment.DevelopData{
+		"Threshold": json.RawMessage("10"),
+		"Large":     json.RawMessage("9007199254740993"),
+		"Ratio":     json.RawMessage("1.0"),
+		"Enabled":   json.RawMessage("false"),
+		"Label":     json.RawMessage(`"true"`),
+		"Empty":     json.RawMessage(`""`),
+		"Options":   json.RawMessage("[\n true, \"true\", 2.5\n]"),
+		"Text":      json.RawMessage(`"comma, quote\" and newline\n"`),
+	}}}}, {Run: experiment.Run{Configuration: experiment.Configuration{DevelopData: experiment.DevelopData{"Threshold": json.RawMessage("15"), "OnlySecond": json.RawMessage("0")}}}}}
+	var out bytes.Buffer
+	if err := writeRunCSV(&out, entries); err != nil {
+		t.Fatal(err)
+	}
+	records, err := csv.NewReader(&out).ReadAll()
+	if err != nil || len(records) != 3 {
+		t.Fatal(err, records)
+	}
+	var developHeaders []string
+	columns := map[string]int{}
+	for i, header := range records[0] {
+		columns[header] = i
+		if strings.HasPrefix(header, "developData.") {
+			developHeaders = append(developHeaders, header)
+		}
+	}
+	if len(developHeaders) != 9 || !slices.IsSorted(developHeaders) {
+		t.Fatal("missing or unordered DevelopData columns", developHeaders)
+	}
+	for key, value := range map[string]string{
+		"Threshold": "10", "Large": "9007199254740993", "Ratio": "1.0", "Enabled": "false",
+		"Label": `"true"`, "Empty": `""`, "Options": `[true,"true",2.5]`,
+		"Text": `"comma, quote\" and newline\n"`, "OnlySecond": "",
+	} {
+		if got := records[1][columns["developData."+key]]; got != value {
+			t.Errorf("%s: got %q want %q", key, got, value)
+		}
+	}
+	if records[2][columns["developData.Empty"]] != "" || records[2][columns["developData.OnlySecond"]] != "0" || records[2][columns["developData.Threshold"]] != "15" {
+		t.Fatal("absent values and overrides were confused", records[2])
+	}
+	out.Reset()
+	if err := writeRunCSV(&out, []RunIndexEntry{{}}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "developData.") {
+		t.Fatal("unexpected columns without DevelopData", out.String())
 	}
 }

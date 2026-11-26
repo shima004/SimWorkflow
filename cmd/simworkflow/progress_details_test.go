@@ -32,6 +32,7 @@ func detailsPlan(t *testing.T) *experiment.Plan {
 func TestRunSelectionDetailsAndReturn(t *testing.T) {
 	p := detailsPlan(t)
 	m := testProgressModel()
+	p.Runs[7].Configuration.DevelopData = experiment.DevelopData{"Threshold": json.RawMessage("99")}
 	m.frame.plan, m.frame.runs = p, p.Runs
 	m.frame.rows = m.frame.rows[:len(p.Runs)]
 	for i := 0; i < 7; i++ {
@@ -47,7 +48,7 @@ func TestRunSelectionDetailsAndReturn(t *testing.T) {
 		t.Fatal("Enter must open selected run's settings")
 	}
 	content := strings.Join(m.details, "\n")
-	if !strings.Contains(content, p.Runs[7].Configuration.ID) {
+	if !strings.Contains(content, p.Runs[7].Configuration.ID) || !strings.Contains(content, "Threshold = 99") {
 		t.Fatal("details must describe the selected configuration")
 	}
 	m, _ = updateProgress(m, tea.KeyMsg{Type: tea.KeyPgDown})
@@ -142,5 +143,38 @@ func TestEnterWithoutAvailableSettingsIsSafe(t *testing.T) {
 	m, _ = updateProgress(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if m.details != nil {
 		t.Fatal("missing plan must not open incorrect details")
+	}
+}
+
+func TestRunDetailsShowTypedDevelopDataInKeyOrder(t *testing.T) {
+	plan := detailsPlan(t)
+	run := plan.Runs[0]
+	run.Configuration.DevelopData = experiment.DevelopData{
+		"Threshold": json.RawMessage("15"),
+		"Large":     json.RawMessage("9007199254740993"),
+		"Ratio":     json.RawMessage("1.0"),
+		"Enabled":   json.RawMessage("false"),
+		"Label":     json.RawMessage(`"true"`),
+		"Options":   json.RawMessage("[\n true, \"true\", 2.5\n]"),
+		"Text":      json.RawMessage(`"line\nquote\"\u001b"`),
+	}
+	content := strings.Join(runDetails(plan, run), "\n")
+	for _, want := range []string{
+		"DevelopData (expanded overrides)", "Threshold = 15",
+		"Large = 9007199254740993", "Ratio = 1.0", "Enabled = false",
+		`Label = "true"`, `Options = [true,"true",2.5]`,
+		`Text = "line\nquote\"\u001b"`,
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("missing %q in details:\n%s", want, content)
+		}
+	}
+	if strings.Contains(content, "\x1b") || strings.Index(content, "Enabled =") > strings.Index(content, "Threshold =") {
+		t.Fatal("unsafe or unordered DevelopData", content)
+	}
+	run.Configuration.DevelopData = nil
+	content = strings.Join(runDetails(plan, run), "\n")
+	if !strings.Contains(content, "DevelopData (expanded overrides)\n  No overrides (agent image defaults)") {
+		t.Fatal(content)
 	}
 }

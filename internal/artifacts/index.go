@@ -122,13 +122,16 @@ func (d *downloader) writeRunIndexes(plan *experiment.Plan) error {
 }
 
 func writeRunCSV(out io.Writer, entries []RunIndexEntry) error {
-	groups, modules := map[string]bool{}, map[string]bool{}
+	groups, modules, developData := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, entry := range entries {
 		for key := range entry.Configuration.Groups {
 			groups[key] = true
 		}
 		for key := range entry.Configuration.Modules {
 			modules[key] = true
+		}
+		for key := range entry.Configuration.DevelopData {
+			developData[key] = true
 		}
 	}
 	keys := func(values map[string]bool) []string {
@@ -139,13 +142,16 @@ func writeRunCSV(out io.Writer, entries []RunIndexEntry) error {
 		slices.Sort(result)
 		return result
 	}
-	groupKeys, moduleKeys := keys(groups), keys(modules)
+	groupKeys, moduleKeys, developKeys := keys(groups), keys(modules), keys(developData)
 	header := []string{"run_id", "directory", "agent", "map", "map_version", "seed", "configuration_id", "source_workflow", "source_execution_id"}
 	for _, key := range groupKeys {
 		header = append(header, "group."+key)
 	}
 	for _, key := range moduleKeys {
 		header = append(header, "module."+key)
+	}
+	for _, key := range developKeys {
+		header = append(header, "developData."+key)
 	}
 	header = append(header, "files")
 	w := csv.NewWriter(out)
@@ -168,6 +174,18 @@ func writeRunCSV(out io.Writer, entries []RunIndexEntry) error {
 		}
 		for _, key := range moduleKeys {
 			row = append(row, entry.Configuration.Modules[key])
+		}
+		for _, key := range developKeys {
+			value, exists := entry.Configuration.DevelopData[key]
+			if !exists {
+				row = append(row, "")
+				continue
+			}
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				return fmt.Errorf("encode developData %q for CSV: %w", key, err)
+			}
+			row = append(row, string(encoded))
 		}
 		paths, err := json.Marshal(entry.Files)
 		if err != nil {

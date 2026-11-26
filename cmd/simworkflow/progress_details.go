@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"simworkflow/internal/experiment"
@@ -42,6 +45,18 @@ func runDetails(plan *experiment.Plan, run experiment.Run) []string {
 	}
 	if len(c.Modules) == 0 {
 		fmt.Fprintln(&b, "  No overrides (agent image defaults)")
+	}
+	fmt.Fprintln(&b, "\nDevelopData (expanded overrides)")
+	if len(c.DevelopData) == 0 {
+		fmt.Fprintln(&b, "  No overrides (agent image defaults)")
+	}
+	for _, key := range slices.Sorted(maps.Keys(c.DevelopData)) {
+		value, err := json.Marshal(c.DevelopData[key])
+		if err != nil {
+			fmt.Fprintf(&b, "  %s = <invalid JSON>\n", key)
+			continue
+		}
+		fmt.Fprintf(&b, "  %s = %s\n", key, value)
 	}
 	return strings.Split(strings.TrimSuffix(screenText(b.String()), "\n"), "\n")
 }
