@@ -30,8 +30,9 @@ import (
 
 var prepareReproduction = reproduction.Capture
 
+// Source default: sha-fade4b98a9c767eb4e55b49e8d0ea1cb9f730732.
 // Release builds replace this with the tested helper digest from the same source.
-var defaultHelperImage = "ghcr.io/shima004/simworkflow-worker@sha256:2e204474aa5c348c0d2196cc83adde038170fd9885bb09c2e83b4a4fd31cc027"
+var defaultHelperImage = "ghcr.io/shima004/simworkflow-worker@sha256:924adb487ceb7892c29e0bb7e72a073a549e27c12bca693044942c4e3b2d5148"
 
 func validHelperImage(image string) bool {
 	_, err := name.ParseReference(image)
