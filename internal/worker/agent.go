@@ -66,6 +66,21 @@ func prepareAgent(root string, c Config, role string) (string, error) {
 		set([]string{"adf", "agent", "moduleconfig", "filename"}, output)
 		set([]string{"adf", "agent", "precompute", "dir_name"}, rolePrecompute(root, role))
 		set([]string{"team", "name"}, c.Run.Configuration.Agent)
+		if len(c.Run.Configuration.DevelopData) > 0 {
+			base, err := pythonDevelopFile(launcher)
+			if err != nil {
+				return "", err
+			}
+			path := developDataPath(root, role)
+			if err := writeDevelopData("/app", path, base, c.Run.Configuration.DevelopData); err != nil {
+				return "", err
+			}
+			if err := os.WriteFile(pythonDevelopLauncherPath(root, role), pythonDevelopLauncher, 0644); err != nil {
+				return "", err
+			}
+			set([]string{"adf", "develop", "flag"}, true)
+			set([]string{"adf", "develop", "filename"}, path)
+		}
 		encoded, err := yaml.Marshal(launcher)
 		if err != nil {
 			return "", err
@@ -74,6 +89,15 @@ func prepareAgent(root string, c Config, role string) (string, error) {
 			return "", err
 		}
 	} else {
+		if len(c.Run.Configuration.DevelopData) > 0 {
+			base, err := javaDevelopFile("/app")
+			if err != nil {
+				return "", err
+			}
+			if err := writeDevelopData("/app", developDataPath(root, role), base, c.Run.Configuration.DevelopData); err != nil {
+				return "", err
+			}
+		}
 		path := filepath.Join("/app", precompute)
 		if info, err := os.Lstat(path); err == nil {
 			if info.IsDir() {
@@ -104,6 +128,9 @@ func agentCommand(c Config, phase, module string, counts []int, root, role strin
 	}
 	if c.Run.Configuration.Runtime == "python" {
 		args := []string{"python", "main.py", "--host", "localhost", "--port", "27931", "-a", strconv.Itoa(counts[4]), "-f", strconv.Itoa(counts[0]), "-p", strconv.Itoa(counts[2]), "-ac", strconv.Itoa(counts[5]), "-fs", strconv.Itoa(counts[1]), "-po", strconv.Itoa(counts[3]), "--logger-file-name", filepath.Join(root, "logs", phase, AgentActor(role)+"-internal.log"), "--logger-file-level", "INFO", "--logger-stream-level", "INFO"}
+		if len(c.Run.Configuration.DevelopData) > 0 {
+			args = append([]string{"python", pythonDevelopLauncherPath(root, role), developDataPath(root, role)}, args[2:]...)
+		}
 		if phase == "precompute" {
 			args = append(args, "--precompute")
 		}
@@ -118,6 +145,9 @@ func agentCommand(c Config, phase, module string, counts []int, root, role strin
 		pre = "true"
 	}
 	arguments := []string{"adf.impl.DefaultLoader", "-t", strings.Join(parts, ","), "-s", "localhost:27931", "-mc", module, "-pre", pre, "-tn", c.Run.Configuration.Agent}
+	if len(c.Run.Configuration.DevelopData) > 0 {
+		arguments = append(arguments, "-dev", "true", "-df", developDataPath(root, role))
+	}
 	return []string{"./gradlew", "--offline", "--no-daemon", "launch", "--args=" + strings.Join(arguments, " ")}
 }
 

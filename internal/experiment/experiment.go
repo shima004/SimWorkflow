@@ -88,6 +88,7 @@ func (c CPU) MilliCores() (int64, error) {
 }
 
 type Agent struct {
+	DevelopData     DevelopData          `yaml:"developData,omitempty" json:"developData,omitempty"`
 	Name            string               `yaml:"name" json:"name"`
 	Runtime         string               `yaml:"runtime,omitempty" json:"runtime,omitempty"`
 	Image           string               `yaml:"image" json:"image"`
@@ -104,8 +105,9 @@ type Matrix struct {
 }
 
 type ModuleSet struct {
-	Name    string            `yaml:"name" json:"name"`
-	Modules map[string]string `yaml:"modules" json:"modules"`
+	DevelopData DevelopData       `yaml:"developData,omitempty" json:"developData,omitempty"`
+	Name        string            `yaml:"name" json:"name"`
+	Modules     map[string]string `yaml:"modules,omitempty" json:"modules,omitempty"`
 }
 
 type Exclusion struct {
@@ -252,6 +254,7 @@ func (e *Experiment) Validate() error {
 				add(path+".modules."+key, "key and implementation must be dot-separated identifiers")
 			}
 		}
+		validateDevelopData(a.DevelopData, path+".developData", add)
 		if a.Matrix == nil {
 			continue
 		}

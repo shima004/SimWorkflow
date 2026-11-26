@@ -175,8 +175,8 @@ matrix:
 この例は `A=a1/B=b1`、`A=a1/B=b2`、`A=a2/B=b1`、`A=a2/B=b2` の4構成です。a1のPathPlanningとa2のClusteringのように、セット内部の組み合わせが崩れることはありません。
 
 - グループ名・候補名は1～63文字のASCII英数字・アンダースコア・ハイフンで、先頭は英字です。大文字・小文字は区別します。
-- 各グループには1つ以上の候補が必要です。候補名はグループ内で一意とし、同一内容のセットの重複もエラーです。
-- 各候補は1つ以上のモジュールを持ち、同じグループの全候補でモジュールキーを揃えます。1つだけのモジュールを持つセットも指定できます。
+- 各グループには1つ以上の候補が必要です。候補名はグループ内で一意とし、モジュールとDevelopDataの値が両方同じセットの重複もエラーです。
+- 各候補には `modules` または `developData` を1項目以上指定し、同じグループの全候補でそれぞれのキーを揃えます。
 - 別グループ同士、固定の `modules`、単独の `matrix.modules` で同じモジュールキーは使えません。値が同じでも暗黙に上書きしません。
 - 固定設定・各グループの選択・単独のモジュール軸を統合した設定を、既存のJava／Pythonワーカーへ渡します。候補の実装はイメージに含めてください。
 
@@ -185,6 +185,29 @@ matrix:
 選択名は実行計画の `configuration.groups`、モジュール生成の `manifest.json`、TUI詳細、`experiment results` へ残します。新しいワーカーは結果要約にも保持します。旧helperの結果要約に選択名がない場合、CLIの `results` は実行ID・構成IDを照合して保存済み計画から補完します。ダウンロードする要約自体は元ファイルなので、旧helperの結果と選択名を一緒に保存するには `--include plan,summary` を指定してください。
 
 完全なPython向け定義と設定生成用の元設定は [grouped-modules.yaml](../examples/experiments/grouped-modules.yaml) と [grouped-python.yaml](../examples/module-configs/grouped-python.yaml) を参照してください。イメージ・マップを自分の環境へ合わせて変更します。
+
+## DevelopDataでパラメータを比較する
+
+ADFのモジュールが `DevelopData` から読み取るキーを指定します。固定値は `spec.agents[].developData` に、比較候補は `matrix.groups` の `developData` に記述します。候補には `modules` と `developData` を併記できます。
+
+```yaml
+# spec.agents[] の項目に追加
+matrix:
+  groups:
+    road-frequency:
+      - name: low
+        developData:
+          ImportantRoadExtractor.minFrequency: 10
+      - name: high
+        developData:
+          ImportantRoadExtractor.minFrequency: 15
+```
+
+この例では、1マップ・1シードにつき、同じイメージで閾値だけが異なる2実行を作ります。各値には文字列・真偽値・数値・それらの一次元配列を指定できます。同じキーを固定値と候補、または別グループに重複して指定できません。候補の除外は `matrix.exclude[].groups` で候補名を指定します。
+
+ワーカーはイメージ内のDevelopData用JSONを読み、指定したキーを上書きします。Javaでは `config/launch.cfg`、Pythonでは `config/launcher.yaml` の `adf.develop.filename` を参照します。参照先の指定がない場合は `config/develop.json` があれば読みます。Javaで `adf.develop.data` を設定している場合は、先に値をJSONファイルに移してください。
+
+確定した上書き値は実行計画・結果要約・再現用ZIPに残ります。事前計算と本実行の結果バンドルには、起動した種類ごとの最終JSONを `modules/<role>/develop.json` として保存します。実行にはDevelopData対応helperが必要です。標準のPython起動では、ADF Coreのデバッグ設定を変えずに生成したJSONを有効にします。
 
 ## 組み合わせの除外
 
@@ -305,6 +328,6 @@ ADFの設定キーは [モジュール切り替え](adf-module-settings.md)、�
 実行時にはイメージ内の元設定へ選択したモジュールだけを反映します。候補の実装はイメージに含めておきます。
 マップZIPの形式、事前計算の順序、スコア・ログの保存先は [実行手順](execution.md) に記載しています。
 
-モジュール固有のパラメータ指定、任意の起動コマンド、実験間の事前計算キャッシュ共有には対応していません。
+任意の起動コマンド、実験間の事前計算キャッシュ共有には対応していません。
 
 [ドキュメント一覧へ](README.md)

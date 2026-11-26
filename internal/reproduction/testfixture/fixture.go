@@ -108,7 +108,7 @@ func New(t testing.TB) *Environment {
 		t.Fatal(err)
 	}
 	cfg.OS, cfg.Architecture = "linux", "amd64"
-	cfg.Config.Labels = map[string]string{"io.simworkflow.config-bundle": "v1", "io.simworkflow.config-sequence": "v1", "io.simworkflow.result-zip": "v1"}
+	cfg.Config.Labels = map[string]string{"io.simworkflow.config-bundle": "v1", "io.simworkflow.config-sequence": "v1", "io.simworkflow.result-zip": "v1", "io.simworkflow.develop-data": "v1"}
 	image, err = mutate.ConfigFile(image, cfg)
 	if err != nil {
 		t.Fatal(err)

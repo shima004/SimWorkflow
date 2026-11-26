@@ -243,6 +243,13 @@ func submitPlan(ctx context.Context, c config.Config, plan *experiment.Plan, hel
 	if configStorage == "s3-bundle" && !meta.HelperConfigBundle {
 		return errors.New("helper does not advertise configuration bundle v1 support; use an updated helper image or --config-storage s3")
 	}
+	if !meta.HelperDevelopData {
+		for _, run := range plan.Runs {
+			if len(run.Configuration.DevelopData) > 0 {
+				return errors.New("helper does not support developData; use an updated helper image")
+			}
+		}
+	}
 	meta.ConfigStorage = configStorage
 	bundleFormat, bundleName := "tar.gz", "bundle.tar.gz"
 	if meta.HelperResultZIP {

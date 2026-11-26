@@ -80,6 +80,13 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 	}
 	input := source.Experiment()
 	input.Spec.Conditions.Maps = []experiment.Map{{Name: "fixture-map", Versions: []string{"v1", "v2"}}}
+	const threshold = "ImportantRoadExtractor.minFrequency"
+	group := input.Spec.Agents[0].Matrix.Groups["A"]
+	group[0].DevelopData = experiment.DevelopData{threshold: json.RawMessage("10")}
+	group[1].DevelopData = experiment.DevelopData{threshold: json.RawMessage("15")}
+	wantThreshold := func(run experiment.Run) string {
+		return map[string]string{"a1": "10", "a2": "15"}[run.Configuration.Groups["A"]]
+	}
 	definition, err := yaml.Marshal(input)
 	if err != nil {
 		t.Fatal(err)
@@ -106,6 +113,9 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 	versions := map[string]bool{}
 	for _, run := range original.Runs {
 		versions[run.Map.Version] = true
+		if string(run.Configuration.DevelopData[threshold]) != wantThreshold(run) {
+			t.Fatal("submission lost DevelopData values")
+		}
 		if run.Map.Name != "fixture-map" {
 			t.Fatal("version expansion changed the map name")
 		}
@@ -131,6 +141,9 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 		if err != nil || c.Run.ID != original.Runs[0].ID || len(c.Run.Configuration.Groups) != 2 {
 			t.Fatal("saved bundle was not usable by a worker", err)
 		}
+		if string(c.Run.Configuration.DevelopData[threshold]) != wantThreshold(c.Run) {
+			t.Fatal("stage bundle lost DevelopData values")
+		}
 		if c.BundleFormat != "zip" || !strings.Contains(c.Bundle.URL, "/bundle.zip?") {
 			t.Fatal("new helper must upload ZIP results", c.BundleFormat)
 		}
@@ -154,6 +167,11 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 	preview, err := experiment.BuildPlan(normalized)
 	if err != nil || preview.TotalRuns != 16 {
 		t.Fatal("exported YAML lost map versions", err)
+	}
+	for _, run := range preview.Runs {
+		if string(run.Configuration.DevelopData[threshold]) != wantThreshold(run) {
+			t.Fatal("exported YAML lost DevelopData values")
+		}
 	}
 	// Reproduction has no dependency on any original service.
 	source.Registry.Close()
@@ -186,6 +204,16 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 	if metadata.ConfigStorage != "s3-sequence" {
 		t.Fatal("reproduction lost configuration mode")
 	}
+	var restored experiment.Plan
+	restoredKey := "/fixture/" + after.Metadata.Annotations["simworkflow.io/result-prefix"] + "/plan.json"
+	if err := json.Unmarshal(target.Objects.Get(restoredKey), &restored); err != nil {
+		t.Fatal(err)
+	}
+	for _, run := range restored.Runs {
+		if string(run.Configuration.DevelopData[threshold]) != wantThreshold(run) {
+			t.Fatal("reproduction lost DevelopData values")
+		}
+	}
 	for _, template := range after.Spec.Templates {
 		for _, container := range template.InitContainers {
 			if !strings.Contains(container.Image, "/simworkflow/reproduced@sha256:") {
@@ -210,6 +238,16 @@ func TestReproductionCommandsRoundTripAfterSourceDisappears(t *testing.T) {
 func TestBundleModeRejectsLegacyHelperBeforeWriting(t *testing.T) {
 	err := submitPlan(context.Background(), config.Config{}, nil, "old-helper:v1", "simworkflow", "s3-bundle", "submit", "", reproduction.Metadata{}, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "helper does not advertise") {
+		t.Fatal("legacy helper must fail before configuration uploads", err)
+	}
+}
+
+func TestDevelopDataRejectsLegacyHelper(t *testing.T) {
+	plan := &experiment.Plan{Runs: []experiment.Run{{Configuration: experiment.Configuration{
+		DevelopData: experiment.DevelopData{"Threshold": json.RawMessage("10")},
+	}}}}
+	err := submitPlan(context.Background(), config.Config{}, plan, "old-helper:v1", "simworkflow", "s3", "submit", "", reproduction.Metadata{}, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "helper does not support developData") {
 		t.Fatal("legacy helper must fail before configuration uploads", err)
 	}
 }

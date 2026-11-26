@@ -29,6 +29,7 @@ type AgentSummary struct {
 }
 
 type Configuration struct {
+	DevelopData     DevelopData          `json:"developData,omitempty"`
 	ID              string               `json:"id"`
 	Agent           string               `json:"agent"`
 	Runtime         string               `json:"runtime"`
@@ -78,7 +79,7 @@ func BuildPlan(e *Experiment) (*Plan, error) {
 	}
 	for _, agent := range e.Spec.Agents {
 		count := 0
-		err := expand(agent, func(modules, groups map[string]string) error {
+		err := expand(agent, func(modules, groups map[string]string, developData DevelopData) error {
 			if len(plan.Runs) > maxInt-runsPerConfig {
 				return errors.New("experiment exceeds the addressable plan size")
 			}
@@ -86,7 +87,7 @@ func BuildPlan(e *Experiment) (*Plan, error) {
 			if runtime == "" {
 				runtime = "java"
 			}
-			configuration := Configuration{Agent: agent.Name, Runtime: runtime, Image: agent.Image, Resources: agent.Resources, ResourcesByRole: maps.Clone(agent.ResourcesByRole), Modules: maps.Clone(modules), Groups: maps.Clone(groups)}
+			configuration := Configuration{Agent: agent.Name, Runtime: runtime, Image: agent.Image, Resources: agent.Resources, ResourcesByRole: maps.Clone(agent.ResourcesByRole), Modules: maps.Clone(modules), Groups: maps.Clone(groups), DevelopData: cloneDevelopData(developData)}
 			configuration.ID = "config-" + digest(configuration)
 			count++
 			for _, m := range conditionMaps {
@@ -130,13 +131,13 @@ func RunIdentity(r Run) string {
 	return "run-" + digest(r)
 }
 
-func expand(agent Agent, emit func(map[string]string, map[string]string) error) error {
+func expand(agent Agent, emit func(map[string]string, map[string]string, DevelopData) error) error {
 	modules := maps.Clone(agent.Modules)
 	if modules == nil {
 		modules = map[string]string{}
 	}
 	if agent.Matrix == nil {
-		return emit(modules, nil)
+		return emit(modules, nil, agent.DevelopData)
 	}
 	type axis struct {
 		group   string
@@ -154,6 +155,8 @@ func expand(agent Agent, emit func(map[string]string, map[string]string) error) 
 		axes = append(axes, axis{options: options})
 	}
 	groups := map[string]string{}
+	developData := make(DevelopData)
+	maps.Copy(developData, agent.DevelopData)
 	var visit func(int) error
 	visit = func(index int) error {
 		// Prune a branch as soon as an exclusion fully matches the assigned
@@ -177,7 +180,7 @@ func expand(agent Agent, emit func(map[string]string, map[string]string) error) 
 			}
 		}
 		if index == len(axes) {
-			return emit(modules, groups)
+			return emit(modules, groups, developData)
 		}
 		current := axes[index]
 		for _, option := range current.options {
@@ -187,11 +190,15 @@ func expand(agent Agent, emit func(map[string]string, map[string]string) error) 
 			if current.group != "" {
 				groups[current.group] = option.Name
 			}
+			maps.Copy(developData, option.DevelopData)
 			if err := visit(index + 1); err != nil {
 				return err
 			}
 			for key := range option.Modules {
 				delete(modules, key)
+			}
+			for key := range option.DevelopData {
+				delete(developData, key)
 			}
 			delete(groups, current.group)
 		}

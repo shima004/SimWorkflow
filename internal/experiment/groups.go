@@ -16,6 +16,7 @@ func validateGroups(agent Agent, path string, add func(string, string)) map[stri
 		catalog[key] = slices.Clone(values)
 	}
 	owners := map[string]string{}
+	developOwners := map[string]string{}
 	for _, group := range sortedKeys(agent.Matrix.Groups) {
 		options := agent.Matrix.Groups[group]
 		groupPath := path + ".matrix.groups." + group
@@ -26,7 +27,7 @@ func validateGroups(agent Agent, path string, add func(string, string)) map[stri
 			add(groupPath, "at least one candidate is required")
 		}
 		seenNames, seenContents := map[string]bool{}, map[string]bool{}
-		var expected []string
+		var expected, expectedDevelop []string
 		for index, option := range options {
 			optionPath := fmt.Sprintf("%s[%d]", groupPath, index)
 			if !groupNamePattern.MatchString(option.Name) || seenNames[option.Name] {
@@ -34,19 +35,36 @@ func validateGroups(agent Agent, path string, add func(string, string)) map[stri
 			}
 			seenNames[option.Name] = true
 			keys := sortedKeys(option.Modules)
-			if len(keys) == 0 {
-				add(optionPath+".modules", "at least one module is required")
+			developKeys := sortedKeys(option.DevelopData)
+			validateDevelopData(option.DevelopData, optionPath+".developData", add)
+			if len(keys) == 0 && len(developKeys) == 0 {
+				add(optionPath, "at least one module or developData entry is required")
 			}
 			if index == 0 {
-				expected = keys
+				expected, expectedDevelop = keys, developKeys
 			} else if !slices.Equal(expected, keys) {
 				add(optionPath+".modules", "all candidates in a group must define the same module keys")
 			}
-			content := digest(option.Modules)
+			if index > 0 && !slices.Equal(expectedDevelop, developKeys) {
+				add(optionPath+".developData", "all candidates in a group must define the same developData keys")
+			}
+			content := digest(struct {
+				Modules     map[string]string `json:"modules,omitempty"`
+				DevelopData DevelopData       `json:"developData,omitempty"`
+			}{option.Modules, option.DevelopData})
 			if seenContents[content] {
-				add(optionPath+".modules", "candidates must define distinct module sets")
+				add(optionPath+".modules", "candidates must define distinct module sets or developData values")
 			}
 			seenContents[content] = true
+			for _, key := range developKeys {
+				if _, exists := agent.DevelopData[key]; exists {
+					add(optionPath+".developData."+key, "cannot also appear in fixed developData")
+				}
+				if owner, exists := developOwners[key]; exists && owner != group {
+					add(optionPath+".developData."+key, "cannot appear in more than one group")
+				}
+				developOwners[key] = group
+			}
 			for _, key := range keys {
 				value := option.Modules[key]
 				if !modulePattern.MatchString(key) || !modulePattern.MatchString(value) {
